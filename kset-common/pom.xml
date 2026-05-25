@@ -59,7 +59,7 @@
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
-        <!-- Logstash Encoder (结构化日�? -->
+        <!-- Logstash Encoder (结构化日�? -->
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
