@@ -15,7 +15,19 @@ kset-boot/
 ├── kset-spring-boot-starter-nacos/       # Nacos + Sentinel + 灰度 LoadBalancer
 ├── kset-spring-boot-starter-dubbo/       # Dubbo RPC + TraceId 透传 + 标签路由
 └── kset-spring-boot-starter-gateway/     # Spring Cloud Gateway + 动态路由 + Sentinel
+└── kset-demo/                            # 示例工程（user / order / gateway）
 ```
+
+## Starter 能力说明
+
+| Starter | KSet 定制能力 | 第三方默认行为 |
+|---------|--------------|----------------|
+| `kset-spring-boot-starter-web` | TraceId、全局异常、ApiResponse、OpLog AOP、可选 Knife4j/请求日志 | Spring MVC / Validation |
+| `kset-spring-boot-starter-mysql` | 逻辑删除约定、createTime/updateTime 自动填充、Flyway 默认路径 | JDBC / MyBatis-Plus / Flyway |
+| `kset-spring-boot-starter-redis` | JSON 序列化 RedisTemplate、Key 前缀、可选 Cache | Spring Data Redis |
+| `kset-spring-boot-starter-nacos` | Nacos 命名约定、Sentinel 三类规则、灰度 LB | SCA Nacos / Sentinel |
+| `kset-spring-boot-starter-dubbo` | Trace/灰度透传、标签路由、路由冷启动拉取 | Apache Dubbo |
+| `kset-spring-boot-starter-gateway` | 动态路由 diff、TraceId/灰度、可选鉴权、Gateway Sentinel | Spring Cloud Gateway |
 
 ## 版本矩阵
 
@@ -103,6 +115,22 @@ spring:
       port: 6379
 
 kset:
+  web:
+    oplog:
+      enabled: true
+    knife4j:
+      enabled: true
+    request-logging:
+      enabled: false
+  mysql:
+    enabled: true
+    auto-fill: true
+    flyway:
+      enabled: true
+  redis:
+    key-prefix: "myapp:"
+    cache:
+      enabled: false
   cloud:
     nacos:
       namespace: dev
@@ -216,6 +244,24 @@ public class OrderFlowRuleProvider implements CloudRuleProvider {
 Client → Gateway (X-Gray-Tag) → LoadBalancer (metadata 匹配) → 微服务 (TraceIdFilter) → Dubbo (TraceFilter)
 ```
 
+## kset-demo 本地启动
+
+前置：MySQL（库 `kset_demo`）、Redis、Nacos（可选，配置 `NACOS_ADDR`）。
+
+```bash
+mvn clean install
+# 终端 1
+mvn -pl kset-demo/demo-user-service spring-boot:run
+# 终端 2
+mvn -pl kset-demo/demo-order-service spring-boot:run
+# 终端 3
+mvn -pl kset-demo/demo-gateway spring-boot:run
+```
+
+- 用户服务：`http://localhost:8081/api/users/1`
+- 订单服务：`http://localhost:8082/api/orders/1`（Dubbo 查用户名 + Redis 缓存）
+- 网关：将 Nacos 中 `demo-gateway-gateway-routes` 配置为 [docs/nacos/demo-gateway-routes.json](docs/nacos/demo-gateway-routes.json) 内容
+
 ## 构建
 
 ```bash
@@ -224,4 +270,5 @@ mvn clean install
 
 ## 后续迭代
 
-- `@OpLog` 注解的 AOP 切面实现（当前仅注解定义，未实现切面）
+- 完整 JWT/OAuth2 Gateway 鉴权
+- Dubbo starter 依赖瘦身（纯 RPC 场景）

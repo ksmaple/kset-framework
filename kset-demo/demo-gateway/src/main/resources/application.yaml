@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: demo-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+  config:
+    import: optional:nacos:${spring.application.name}.yaml
+
+server:
+  port: 8080
+
+kset:
+  cloud:
+    gateway:
+      enabled: true
+      auth-enabled: false
+      cors-enabled: true

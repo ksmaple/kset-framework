@@ -1,4 +1,3 @@
 com.kset.cloud.nacos.autoconfigure.KsetNacosConventionAutoConfiguration
 com.kset.cloud.nacos.sentinel.KsetSentinelRuleAutoConfiguration
-com.kset.cloud.nacos.loadbalancer.KsetGrayLoadBalancerAutoConfiguration
 com.kset.cloud.nacos.registrar.KsetCloudRuleRegistrarAutoConfiguration

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.kset</groupId>
+        <artifactId>kset-spring-boot-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../kset-spring-boot-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>kset-demo</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>kset-demo</name>
+    <description>KSet framework demo applications</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.kset</groupId>
+                <artifactId>demo-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <modules>
+        <module>demo-api</module>
+        <module>demo-user-service</module>
+        <module>demo-order-service</module>
+        <module>demo-gateway</module>
+    </modules>
+</project>

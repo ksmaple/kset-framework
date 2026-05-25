@@ -25,6 +25,10 @@
             <artifactId>kset-common</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.kset</groupId>
+            <artifactId>kset-cloud</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>

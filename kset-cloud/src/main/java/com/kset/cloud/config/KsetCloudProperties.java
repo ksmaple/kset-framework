@@ -187,6 +187,7 @@ public class KsetCloudProperties {
         private boolean sentinelEnabled = true;
         private boolean authEnabled = false;
         private boolean corsEnabled = true;
+        private String authTokenHeader = "X-Auth-Token";
         private String traceHeader = "X-Trace-Id";
         private String grayHeader = "X-Gray-Tag";
 
@@ -228,6 +229,14 @@ public class KsetCloudProperties {
 
         public void setCorsEnabled(boolean corsEnabled) {
             this.corsEnabled = corsEnabled;
+        }
+
+        public String getAuthTokenHeader() {
+            return authTokenHeader;
+        }
+
+        public void setAuthTokenHeader(String authTokenHeader) {
+            this.authTokenHeader = authTokenHeader;
         }
 
         public String getTraceHeader() {

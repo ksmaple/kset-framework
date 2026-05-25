@@ -14,12 +14,15 @@ import reactor.core.publisher.Mono;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Gateway 动态路由规则处理器
+ * Gateway 动态路由规则处理器（diff 刷新，删除已下线路由）。
  */
 public class GatewayRouteRuleProvider implements CloudRuleProvider {
 
@@ -28,6 +31,7 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
     private final RouteDefinitionWriter routeDefinitionWriter;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Set<String> managedRouteIds = ConcurrentHashMap.newKeySet();
 
     public GatewayRouteRuleProvider(RouteDefinitionWriter routeDefinitionWriter,
                                     ApplicationEventPublisher eventPublisher) {
@@ -43,6 +47,7 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
     @Override
     public void onRuleChanged(String jsonContent) {
         if (jsonContent == null || jsonContent.isBlank()) {
+            removeManagedRoutes();
             return;
         }
         try {
@@ -52,15 +57,37 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
                 return;
             }
             List<RouteDefinition> definitions = new ArrayList<>();
+            Set<String> newIds = new HashSet<>();
             for (JsonNode node : root) {
-                definitions.add(parseRoute(node));
+                RouteDefinition def = parseRoute(node);
+                definitions.add(def);
+                newIds.add(def.getId());
             }
+            removeStaleRoutes(newIds);
             definitions.forEach(def -> routeDefinitionWriter.save(Mono.just(def)).subscribe());
+            managedRouteIds.clear();
+            managedRouteIds.addAll(newIds);
             eventPublisher.publishEvent(new RefreshRoutesEvent(this));
             log.info("Gateway routes refreshed, count={}", definitions.size());
         } catch (Exception e) {
             log.warn("Failed to refresh gateway routes: {}", e.getMessage());
         }
+    }
+
+    private void removeStaleRoutes(Set<String> newIds) {
+        Set<String> toRemove = new HashSet<>(managedRouteIds);
+        toRemove.removeAll(newIds);
+        for (String routeId : toRemove) {
+            routeDefinitionWriter.delete(Mono.just(routeId)).subscribe();
+        }
+    }
+
+    private void removeManagedRoutes() {
+        for (String routeId : new HashSet<>(managedRouteIds)) {
+            routeDefinitionWriter.delete(Mono.just(routeId)).subscribe();
+        }
+        managedRouteIds.clear();
+        eventPublisher.publishEvent(new RefreshRoutesEvent(this));
     }
 
     private RouteDefinition parseRoute(JsonNode node) {

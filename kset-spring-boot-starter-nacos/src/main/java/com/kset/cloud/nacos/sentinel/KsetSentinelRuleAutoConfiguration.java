@@ -6,6 +6,8 @@ import com.alibaba.csp.sentinel.slots.block.degrade.DegradeRule;
 import com.alibaba.csp.sentinel.slots.block.degrade.DegradeRuleManager;
 import com.alibaba.csp.sentinel.slots.block.flow.FlowRule;
 import com.alibaba.csp.sentinel.slots.block.flow.FlowRuleManager;
+import com.alibaba.csp.sentinel.slots.block.flow.param.ParamFlowRule;
+import com.alibaba.csp.sentinel.slots.block.flow.param.ParamFlowRuleManager;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.cloud.config.KsetCloudProperties;
@@ -56,6 +58,7 @@ public class KsetSentinelRuleAutoConfiguration {
 
             registerFlowRules(serverAddr, group, properties, providers, appName);
             registerDegradeRules(serverAddr, group, properties, providers, appName);
+            registerParamFlowRules(serverAddr, group, properties, providers, appName);
             log.info("KSet Sentinel Nacos rule datasource initialized for app={}", appName);
         }
 
@@ -74,6 +77,27 @@ public class KsetSentinelRuleAutoConfiguration {
                     });
             FlowRuleManager.register2Property(source.getProperty());
             notifyProviders(providers, CloudRuleType.SENTINEL_FLOW, dataId);
+        }
+
+        private void registerParamFlowRules(String serverAddr, String group, KsetCloudProperties properties,
+                                            List<CloudRuleProvider> providers, String appName) {
+            String dataId = firstNonBlank(properties.getSentinel().getParamFlowRuleDataId(),
+                    appName + "-param-flow-rules");
+            try {
+                ReadableDataSource<String, List<ParamFlowRule>> source = new NacosDataSource<>(
+                        serverAddr, group, dataId,
+                        json -> {
+                            try {
+                                return OBJECT_MAPPER.readValue(json, new TypeReference<List<ParamFlowRule>>() {});
+                            } catch (Exception e) {
+                                throw new IllegalStateException("Failed to parse param flow rules", e);
+                            }
+                        });
+                ParamFlowRuleManager.register2Property(source.getProperty());
+                notifyProviders(providers, CloudRuleType.SENTINEL_PARAM_FLOW, dataId);
+            } catch (Throwable t) {
+                log.warn("Param flow rules not loaded (optional): {}", t.getMessage());
+            }
         }
 
         private void registerDegradeRules(String serverAddr, String group, KsetCloudProperties properties,

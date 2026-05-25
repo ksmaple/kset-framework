@@ -11,8 +11,19 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public final class DubboRouteRuleHolder {
 
     private static final CopyOnWriteArrayList<RouteCondition> CONDITIONS = new CopyOnWriteArrayList<>();
+    private static volatile String metadataKey = "version";
 
     private DubboRouteRuleHolder() {
+    }
+
+    public static void setMetadataKey(String key) {
+        if (key != null && !key.isBlank()) {
+            metadataKey = key;
+        }
+    }
+
+    public static String getMetadataKey() {
+        return metadataKey;
     }
 
     public static void update(List<RouteCondition> conditions) {

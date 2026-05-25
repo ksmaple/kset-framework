@@ -2,22 +2,28 @@ package com.kset.cloud.gateway.autoconfigure;
 
 import com.alibaba.csp.sentinel.adapter.gateway.common.rule.GatewayFlowRule;
 import com.alibaba.csp.sentinel.adapter.gateway.common.rule.GatewayRuleManager;
+import com.alibaba.csp.sentinel.slots.block.degrade.DegradeRule;
+import com.alibaba.csp.sentinel.slots.block.degrade.DegradeRuleManager;
 import com.alibaba.csp.sentinel.datasource.ReadableDataSource;
 import com.alibaba.csp.sentinel.datasource.nacos.NacosDataSource;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.cloud.config.KsetCloudProperties;
+import com.kset.cloud.gateway.auth.HeaderTokenGatewayAuthProvider;
+import com.kset.cloud.gateway.auth.PassThroughGatewayAuthProvider;
 import com.kset.cloud.gateway.filter.AuthGatewayFilter;
+import com.kset.cloud.gateway.spi.GatewayAuthProvider;
 import com.kset.cloud.gateway.filter.GrayTagGatewayFilter;
 import com.kset.cloud.gateway.filter.TraceIdGatewayFilter;
 import com.kset.cloud.gateway.route.GatewayRouteRuleProvider;
 import com.kset.cloud.nacos.NacosConfigConvention;
-import com.kset.cloud.gateway.loadbalancer.KsetGrayLoadBalancerConfiguration;
+import com.kset.cloud.loadbalancer.KsetGrayLoadBalancerConfiguration;
 import com.kset.cloud.spi.GrayTagResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -64,8 +70,21 @@ public class KsetGatewayAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    public GatewayAuthProvider passThroughGatewayAuthProvider() {
+        return new PassThroughGatewayAuthProvider();
+    }
+
+    @Bean
     @ConditionalOnProperty(prefix = "kset.cloud.gateway", name = "auth-enabled", havingValue = "true")
-    public GlobalFilter authGatewayFilter(org.springframework.beans.factory.ObjectProvider<com.kset.cloud.gateway.spi.GatewayAuthProvider> providers) {
+    @ConditionalOnMissingBean(HeaderTokenGatewayAuthProvider.class)
+    public GatewayAuthProvider headerTokenGatewayAuthProvider(KsetCloudProperties properties) {
+        return new HeaderTokenGatewayAuthProvider(properties);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "kset.cloud.gateway", name = "auth-enabled", havingValue = "true")
+    public GlobalFilter authGatewayFilter(org.springframework.beans.factory.ObjectProvider<GatewayAuthProvider> providers) {
         return new AuthGatewayFilter(providers);
     }
 
@@ -144,7 +163,23 @@ public class KsetGatewayAutoConfiguration {
                         }
                     });
             GatewayRuleManager.register2Property(source.getProperty());
-            log.info("Gateway Sentinel rules loaded from Nacos dataId={}", dataId);
+            log.info("Gateway Sentinel flow rules loaded from Nacos dataId={}", dataId);
+
+            String degradeDataId = properties.getSentinel().getDegradeRuleDataId();
+            if (degradeDataId == null || degradeDataId.isBlank()) {
+                degradeDataId = appName + "-gateway-degrade-rules";
+            }
+            ReadableDataSource<String, List<DegradeRule>> degradeSource = new NacosDataSource<>(
+                    serverAddr, convention.group(), degradeDataId,
+                    json -> {
+                        try {
+                            return OBJECT_MAPPER.readValue(json, new TypeReference<List<DegradeRule>>() {});
+                        } catch (Exception e) {
+                            throw new IllegalStateException("Failed to parse gateway degrade rules", e);
+                        }
+                    });
+            DegradeRuleManager.register2Property(degradeSource.getProperty());
+            log.info("Gateway Sentinel degrade rules loaded from Nacos dataId={}", degradeDataId);
         }
     }
 }

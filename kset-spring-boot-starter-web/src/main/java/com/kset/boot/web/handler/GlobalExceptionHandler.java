@@ -4,10 +4,12 @@ import com.kset.core.exception.BusinessException;
 import com.kset.boot.web.response.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.BindException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
  * 全局异常处理
@@ -20,6 +22,18 @@ public class GlobalExceptionHandler {
     public ApiResponse<Void> handleBusinessException(BusinessException ex) {
         int code = ex.getErrorCode() != null ? parseErrorCode(ex.getErrorCode()) : -1;
         return ApiResponse.fail(code, ex.getMessage());
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return ApiResponse.fail("参数类型错误: " + ex.getName());
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
+    public ApiResponse<Void> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        return ApiResponse.fail(405, "请求方法不支持: " + ex.getMethod());
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})

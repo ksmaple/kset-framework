@@ -1,1 +1,2 @@
 com.kset.cloud.autoconfigure.KsetCloudCoreAutoConfiguration
+com.kset.cloud.loadbalancer.KsetGrayLoadBalancerAutoConfiguration

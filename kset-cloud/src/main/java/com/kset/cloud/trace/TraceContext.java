@@ -1,5 +1,6 @@
 package com.kset.cloud.trace;
 
+import com.kset.core.trace.TraceHeaders;
 import org.slf4j.MDC;
 import reactor.util.context.Context;
 import reactor.util.context.ContextView;
@@ -12,12 +13,12 @@ import java.util.UUID;
  */
 public final class TraceContext {
 
-    public static final String TRACE_ID_KEY = "traceId";
-    public static final String SPAN_ID_KEY = "spanId";
-    public static final String GRAY_TAG_KEY = "grayTag";
-    public static final String TRACE_ID_HEADER = "X-Trace-Id";
-    public static final String SPAN_ID_HEADER = "X-Span-Id";
-    public static final String GRAY_TAG_HEADER = "X-Gray-Tag";
+    public static final String TRACE_ID_KEY = TraceHeaders.TRACE_ID_KEY;
+    public static final String SPAN_ID_KEY = TraceHeaders.SPAN_ID_KEY;
+    public static final String GRAY_TAG_KEY = TraceHeaders.GRAY_TAG_KEY;
+    public static final String TRACE_ID_HEADER = TraceHeaders.TRACE_ID_HEADER;
+    public static final String SPAN_ID_HEADER = TraceHeaders.SPAN_ID_HEADER;
+    public static final String GRAY_TAG_HEADER = TraceHeaders.GRAY_TAG_HEADER;
 
     private TraceContext() {
     }

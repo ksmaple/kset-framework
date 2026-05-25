@@ -1,0 +1,16 @@
+[
+  {
+    "id": "demo-user-service",
+    "uri": "lb://demo-user-service",
+    "predicates": [
+      { "name": "Path", "args": { "pattern": "/api/users/**" } }
+    ]
+  },
+  {
+    "id": "demo-order-service",
+    "uri": "lb://demo-order-service",
+    "predicates": [
+      { "name": "Path", "args": { "pattern": "/api/orders/**" } }
+    ]
+  }
+]

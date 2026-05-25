@@ -41,7 +41,7 @@ public class KsetTagRouterFactory implements RouterFactory {
             }
 
             String grayTag = resolveGrayTag(invocation);
-            String metadataKey = url.getParameter("kset.gray.metadata.key", "version");
+            String metadataKey = url.getParameter("kset.gray.metadata.key", DubboRouteRuleHolder.getMetadataKey());
 
             List<Invoker<T>> matched = invokers.stream()
                     .filter(inv -> grayTag.equals(inv.getUrl().getParameter(metadataKey)))
@@ -75,8 +75,9 @@ public class KsetTagRouterFactory implements RouterFactory {
             }
 
             String tag = selectedTag;
+            String metadataKey = DubboRouteRuleHolder.getMetadataKey();
             return invokers.stream()
-                    .filter(inv -> tag.equals(inv.getUrl().getParameter("version")))
+                    .filter(inv -> tag.equals(inv.getUrl().getParameter(metadataKey)))
                     .collect(Collectors.toList());
         }
 
