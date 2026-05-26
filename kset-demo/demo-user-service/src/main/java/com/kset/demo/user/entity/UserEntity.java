@@ -4,14 +4,19 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
 
+@Schema(description = "用户")
 @TableName("demo_user")
 public class UserEntity {
 
+    @Schema(description = "用户 ID")
     @TableId(type = IdType.AUTO)
     private Long id;
+
+    @Schema(description = "用户名", example = "alice")
     private String name;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

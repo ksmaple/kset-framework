@@ -1,10 +1,13 @@
 package com.kset.demo.order.web;
 
-import com.kset.web.response.ApiResponse;
 import com.kset.common.annotation.OpLog;
 import com.kset.demo.api.UserQueryService;
 import com.kset.demo.order.entity.OrderEntity;
 import com.kset.demo.order.mapper.OrderMapper;
+import com.kset.web.response.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
 
+@Tag(name = "订单", description = "订单查询与创建（含 Dubbo、Redis 缓存）")
 @RestController
 @RequestMapping("/api/orders")
 public class OrderController {
@@ -31,6 +35,7 @@ public class OrderController {
         this.redisTemplate = redisTemplate;
     }
 
+    @Operation(summary = "按 ID 查询订单（含用户名）")
     @GetMapping("/{id}")
     public ApiResponse<OrderView> get(@PathVariable Long id) {
         String cacheKey = "order:" + id;
@@ -48,6 +53,7 @@ public class OrderController {
         return ApiResponse.success(view);
     }
 
+    @Operation(summary = "创建订单")
     @PostMapping
     @OpLog(type = "CREATE", target = "order", recordParams = true)
     public ApiResponse<OrderEntity> create(@RequestBody OrderEntity order) {
@@ -55,6 +61,11 @@ public class OrderController {
         return ApiResponse.success(order);
     }
 
-    public record OrderView(Long id, String productName, Long userId, String userName) {
+    @Schema(description = "订单视图（含 Dubbo 查询的用户名）")
+    public record OrderView(
+            @Schema(description = "订单 ID") Long id,
+            @Schema(description = "商品名称") String productName,
+            @Schema(description = "用户 ID") Long userId,
+            @Schema(description = "用户名称") String userName) {
     }
 }

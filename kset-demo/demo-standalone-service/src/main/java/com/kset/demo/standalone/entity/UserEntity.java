@@ -1,4 +1,4 @@
-package com.kset.demo.order.entity;
+package com.kset.demo.standalone.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -8,19 +8,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
 
-@Schema(description = "订单")
-@TableName("demo_order")
-public class OrderEntity {
+@Schema(description = "用户")
+@TableName("demo_user")
+public class UserEntity {
 
-    @Schema(description = "订单 ID")
+    @Schema(description = "用户 ID")
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Schema(description = "用户 ID")
-    private Long userId;
-
-    @Schema(description = "商品名称")
-    private String productName;
+    @Schema(description = "用户名")
+    private String name;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
     @TableLogic
@@ -34,20 +31,12 @@ public class OrderEntity {
         this.id = id;
     }
 
-    public Long getUserId() {
-        return userId;
+    public String getName() {
+        return name;
     }
 
-    public void setUserId(Long userId) {
-        this.userId = userId;
-    }
-
-    public String getProductName() {
-        return productName;
-    }
-
-    public void setProductName(String productName) {
-        this.productName = productName;
+    public void setName(String name) {
+        this.name = name;
     }
 
     public LocalDateTime getCreateTime() {

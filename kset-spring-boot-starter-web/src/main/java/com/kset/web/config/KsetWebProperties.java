@@ -44,6 +44,12 @@ public class KsetWebProperties {
 
     public static class Knife4j {
         private boolean enabled = true;
+        /** 文档标题，默认取 spring.application.name */
+        private String title;
+        private String description = "KSet API";
+        private String version = "1.0.0";
+        /** OpenAPI 分组路径，默认 /api/** */
+        private String pathPattern = "/api/**";
 
         public boolean isEnabled() {
             return enabled;
@@ -51,6 +57,38 @@ public class KsetWebProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
+
+        public String getVersion() {
+            return version;
+        }
+
+        public void setVersion(String version) {
+            this.version = version;
+        }
+
+        public String getPathPattern() {
+            return pathPattern;
+        }
+
+        public void setPathPattern(String pathPattern) {
+            this.pathPattern = pathPattern;
         }
     }
 

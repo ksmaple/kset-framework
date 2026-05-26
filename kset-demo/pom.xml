@@ -29,6 +29,7 @@
     </dependencyManagement>
 
     <modules>
+        <module>demo-standalone-service</module>
         <module>demo-api</module>
         <module>demo-user-service</module>
         <module>demo-order-service</module>

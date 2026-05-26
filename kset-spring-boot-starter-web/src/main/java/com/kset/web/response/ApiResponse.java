@@ -1,12 +1,20 @@
 package com.kset.web.response;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * 统一 API 响应体
  */
+@Schema(description = "统一 API 响应")
 public class ApiResponse<T> {
 
+    @Schema(description = "业务码，0 表示成功", example = "0")
     private int code;
+
+    @Schema(description = "提示信息", example = "success")
     private String message;
+
+    @Schema(description = "业务数据")
     private T data;
 
     public ApiResponse() {
