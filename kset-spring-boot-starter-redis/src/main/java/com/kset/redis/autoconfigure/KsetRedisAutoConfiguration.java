@@ -19,7 +19,8 @@ import org.springframework.context.annotation.Import;
         KsetRedisServiceAutoConfiguration.class,
         KsetRedisMultiSourceConfiguration.class,
         KsetRedissonAutoConfiguration.class,
-        KsetRedisLockAutoConfiguration.class
+        KsetRedisLockAutoConfiguration.class,
+        KsetRedisRankAutoConfiguration.class
 })
 public class KsetRedisAutoConfiguration {
 }

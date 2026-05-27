@@ -1,5 +1,6 @@
 package com.kset.redis.config;
 
+import com.kset.redis.key.KsetRedisKeys;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
@@ -32,11 +33,13 @@ public final class KsetRedisTemplateFactory {
         return new StringRedisSerializer() {
             @Override
             public byte[] serialize(String key) {
-                String prefix = keyPrefix;
-                if (prefix != null && !prefix.isBlank() && key != null && !key.startsWith(prefix)) {
-                    return super.serialize(prefix + key);
+                if (key == null) {
+                    return super.serialize(null);
                 }
-                return super.serialize(key);
+                if (keyPrefix == null || keyPrefix.isBlank()) {
+                    return super.serialize(key);
+                }
+                return super.serialize(KsetRedisKeys.joinPrefix(keyPrefix, key));
             }
         };
     }

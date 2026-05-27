@@ -6,7 +6,35 @@
 |----|------|
 | `com.kset.redis.core` | `KsetRedisOperations`、`KsetRedisService`、`KsetRedisRegistry`、`KsetRedis` |
 | `com.kset.redis.lock` | 分布式锁（Redisson） |
+| `com.kset.redis.rank` | 排行榜（ZSET 单榜 / 分组二级榜） |
+| `com.kset.redis.key` | Key 规范与生成（`:` 分隔） |
 | `com.kset.redis.autoconfigure` | Spring Boot 自动配置 |
+
+## Redis Key 规范（`:` 分隔）
+
+对齐 cache-spec **K001**：`{system}:{module}:{business}:{identifier}`。统一使用 [`KsetRedisKeys`](kset-spring-boot-starter-redis/src/main/java/com/kset/redis/key/KsetRedisKeys.java)：
+
+- 每段非空，**段内不得包含 `:`**（多段用 `join` / `builder`）
+- 与 `kset.redis.key-prefix` 组合：`KsetRedisKeys.joinPrefix(prefix, logicalKey)`（Template 序列化已内置）
+- 领域快捷：`cache` / `rank` / `lock`；常量段见 `KsetRedisKeyNamespace`
+
+```java
+// 缓存
+String userKey = KsetRedisKeys.cache("myapp", "user", "profile", userId);
+// myapp:cache:user:profile:1001
+
+// 流式 builder
+String key = KsetRedisKeys.builder("myapp")
+        .segment("order").segment("detail").id(orderId)
+        .build();
+
+// 排行榜榜根（boardId 为单段，不含 ':'）
+String boardKey = KsetRedisKeys.rank("myapp", "season-1");
+// boardId 需含 ':' 时：KsetRedisRankOptions.builder("arena:2025-w20") 由 joinPrefix 拼接，或 .redisKey("myapp:rank:arena:2025-w20")
+
+// 逻辑 key + 全局前缀（业务代码只写后缀时）
+redis.set("cache:user:" + id, value);  // Template 自动 joinPrefix
+```
 
 ## 强制 TTL（禁止永久 key）
 
@@ -221,6 +249,90 @@ public class CustomRedisRegistrar implements InitializingBean {
 - 命名源：`kset.redis.sources.{name}.cluster.enabled` + `nodes`
 - `mget` / 事务需注意 hash slot；大 key 请用流式 API。
 
+## 排行榜（`com.kset.redis.rank`）
+
+基于 Redis **ZSET**，注入 `KsetRedisRankService`；**榜单参数均在代码中设置**（无 `kset.redis.rank` YAML）。
+
+```java
+@Bean
+KsetRedisRankService rankService(RedisTemplate<String, Object> redisTemplate) {
+    return KsetRedisRankService.builder(redisTemplate)
+            .keyPrefix("myapp:rank:")   // 可选，默认 kset:rank:
+            .build();
+}
+```
+
+### 基础单榜
+
+| 能力 | API |
+|------|-----|
+| TopN（分值最高在前） | `board.top(n)` / `board.range(startRank, count)` |
+| 成员名次 | `board.rankOf(member)`（1-based） |
+| 累加分 | `board.increment(member, delta)` |
+| 排名变化通知 | `increment(..., listener)` 或 `board.addListener(...)` |
+| 覆盖分 / 移除 | `setScore`, `remove` |
+
+```java
+@Service
+public class ArenaRankService {
+    private final KsetRedisRankService rankService;
+
+    private KsetRedisRankBoard arenaBoard() {
+        return rankService.board(KsetRedisRankOptions.builder("arena:2025-w20")
+                .ttl(Duration.ofDays(7))
+                .order(KsetRedisRankOrder.HIGH_SCORE_FIRST)
+                .build());
+    }
+
+    public List<KsetRedisRankEntry> hallOfFame() {
+        return arenaBoard().top(100);
+    }
+
+    public void addScore(String userId, double points) {
+        arenaBoard().increment(userId, points, event -> {
+            if (event.rankChanged()) {
+                // 推送名次变化（建议异步）
+            }
+        });
+    }
+}
+```
+
+简写：`rankService.board("arena:2025-w20")` 或 `board(id, order, ttl)`（使用工厂 `keyPrefix`，无 TTL/排序时需传 Options）。
+
+### 分组二级榜
+
+一级：**分组总贡献**；二级：**组内成员贡献**。`contribute(groupId, memberId, delta)` 同时更新两层。
+
+```java
+KsetRedisGroupRankBoard guildBoard = rankService.groupBoard(
+        KsetRedisRankOptions.builder("guild-war:s1")
+                .redisKey("myapp:rank:guild-war:s1")  // 榜根 key；子 key 为 :groups、:g:{groupId}:members
+                .ttl(Duration.ofDays(14))
+                .build());
+guildBoard.contribute("guild-1", "player-9", 50, event -> {
+    if (event.changeType() == KsetRedisGroupRankChangeType.GROUP) {
+        // 公会总榜名次变化
+    } else {
+        // 组内个人名次变化
+    }
+});
+
+List<KsetRedisRankEntry> topGuilds = guildBoard.topGroups(10);
+List<KsetRedisRankEntry> mvpInGuild = guildBoard.topMembers("guild-1", 5);
+Optional<Integer> myRank = guildBoard.memberRankInGroup("guild-1", "player-9");
+```
+
+### 后续可扩展（当前未内置）
+
+| 方向 | 说明 |
+|------|------|
+| 多赛季/多榜 | 已支持 `board("不同 boardId")`，可按业务封装赛季枚举 |
+| 并列名次 | 当前为 Redis 连续名次；需「并列跳号」可在业务层二次计算 |
+| 异步通知 | 监听器内发 MQ / Redis Stream，避免阻塞写路径 |
+| Lua 原子排名 | 高并发下可用脚本合并「读旧名次 + 加分 + 读新名次」 |
+| 成员换组 | 需业务迁移分值（从旧组扣减、新组增加） |
+
 ## 常用 API
 
 | 分类 | 方法 |
@@ -230,4 +342,5 @@ public class CustomRedisRegistrar implements InitializingBean {
 | Hash 批量 | `hSetAll`, `hMGet` |
 | 流式 | `scanKeys`, `deleteByPattern`, `hScan`, `sScan`, `mgetChunked` |
 | 锁 | `KsetRedisLockExecutor` / `KsetRedisLocks` / `@KsetLocked`（仅 Redisson） |
+| 排行榜 | `KsetRedisRankService` → `board` / `groupBoard` |
 | 高级 | `template()` |
