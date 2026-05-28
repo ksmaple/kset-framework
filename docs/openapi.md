@@ -20,23 +20,31 @@ kset-demo：
 
 ## 配置
 
+优先使用 **Knife4j / springdoc 标准属性**；`kset.web.knife4j.*` 仅作 OpenAPI 元数据可选覆盖。
+
 ```yaml
+knife4j:
+  enable: true              # 标准开关（框架默认 true）
+  setting:
+    language: zh_cn
+
+springdoc:
+  group-configs:
+    - group: default
+      paths-to-match: /api/**
+
+# 可选：覆盖 OpenAPI 标题/描述（未设 title 时取 spring.application.name）
 kset:
   web:
     knife4j:
-      enabled: true          # 关闭则不同步 knife4j.enable，且不注册 OpenAPI Bean
-      title: my-service      # 可选，默认 spring.application.name
+      title: my-service
       description: KSet API
       version: 1.0.0
-      path-pattern: /api/**  # GroupedOpenApi 扫描路径
-
-knife4j:
-  enable: true
-  setting:
-    language: zh_cn
 ```
 
-生产环境建议：`kset.web.knife4j.enabled=false`，或通过网关/鉴权限制 `/doc.html` 访问。
+生产环境建议：`knife4j.enable=false`，或通过网关/鉴权限制 `/doc.html` 访问。
+
+> 兼容旧键 `kset.web.knife4j.enabled`：仅在未设置 `knife4j.enable` 时生效。
 
 ## 业务注解约定
 

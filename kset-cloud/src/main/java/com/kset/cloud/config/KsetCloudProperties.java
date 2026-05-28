@@ -35,7 +35,9 @@ public class KsetCloudProperties {
     }
 
     public static class Nacos {
+        /** 仅作缺省回退；业务请优先配置 {@code spring.cloud.nacos.config/discovery.namespace} */
         private String namespace = "dev";
+        /** 仅作缺省回退；业务请优先配置 {@code spring.cloud.nacos.config/discovery.group} */
         private String group = "KSET_GROUP";
         private String configPrefix = "kset";
         private String commonConfigDataId = "kset-common.yaml";

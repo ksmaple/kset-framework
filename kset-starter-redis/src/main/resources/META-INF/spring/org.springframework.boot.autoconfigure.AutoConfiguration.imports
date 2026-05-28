@@ -1,1 +1,2 @@
 com.kset.redis.autoconfigure.KsetRedisAutoConfiguration
+com.kset.redis.monitor.RedisMonitorPluginAutoConfiguration

@@ -35,6 +35,10 @@
         </dependency>
         <dependency>
             <groupId>com.kset</groupId>
+            <artifactId>kset-starter-monitor</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.kset</groupId>
             <artifactId>kset-starter-web</artifactId>
         </dependency>
         <dependency>

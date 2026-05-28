@@ -10,33 +10,33 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 将 {@code kset.web.knife4j.enabled} 同步到 Knife4j 原生开关 {@code knife4j.enable}。
+ * Knife4j / OpenAPI 标准配置补全。
+ *
+ * <ul>
+ *   <li>未设置 {@code knife4j.enable} 时默认 {@code true}</li>
+ *   <li>兼容旧键 {@code kset.web.knife4j.enabled}（仅当 {@code knife4j.enable} 未显式配置时同步）</li>
+ * </ul>
  */
 public class KsetKnife4jEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
-    private static final String KSET_ENABLED = "kset.web.knife4j.enabled";
+    private static final String LEGACY_ENABLED = "kset.web.knife4j.enabled";
     private static final String KNIFE4J_ENABLE = "knife4j.enable";
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        if (!environment.containsProperty(KSET_ENABLED)) {
-            return;
-        }
-        Boolean enabled = environment.getProperty(KSET_ENABLED, Boolean.class);
-        if (enabled == null) {
-            return;
-        }
         Map<String, Object> defaults = new LinkedHashMap<>();
-        putIfMissing(environment, defaults, KNIFE4J_ENABLE, enabled);
+        if (!environment.containsProperty(KNIFE4J_ENABLE)) {
+            if (environment.containsProperty(LEGACY_ENABLED)) {
+                Boolean legacy = environment.getProperty(LEGACY_ENABLED, Boolean.class);
+                if (legacy != null) {
+                    defaults.put(KNIFE4J_ENABLE, legacy);
+                }
+            } else {
+                defaults.put(KNIFE4J_ENABLE, true);
+            }
+        }
         if (!defaults.isEmpty()) {
             environment.getPropertySources().addLast(new MapPropertySource("ksetKnife4jDefaults", defaults));
-        }
-    }
-
-    private static void putIfMissing(ConfigurableEnvironment environment, Map<String, Object> target,
-                                     String key, Object value) {
-        if (!environment.containsProperty(key)) {
-            target.put(key, value);
         }
     }
 

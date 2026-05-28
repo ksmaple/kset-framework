@@ -32,6 +32,7 @@
         <module>kset-starter-mysql</module>
         <module>kset-starter-redis</module>
         <module>kset-starter-nacos</module>
+        <module>kset-starter-sentinel</module>
         <module>kset-starter-dubbo</module>
         <module>kset-starter-gateway</module>
         <module>kset-starter-monitor</module>

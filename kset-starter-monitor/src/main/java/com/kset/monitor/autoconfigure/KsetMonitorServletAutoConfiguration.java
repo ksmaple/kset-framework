@@ -1,10 +1,11 @@
 package com.kset.monitor.autoconfigure;
 
 import com.kset.cloud.config.KsetCloudProperties;
-import com.kset.monitor.web.TraceIdFilter;
-import com.kset.monitor.config.KsetMonitorProperties;
+import com.kset.monitor.interceptor.MvcMonitorInterceptor;
 import com.kset.monitor.web.GrayTagServletFilter;
+import com.kset.monitor.web.TraceIdFilter;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,13 +22,14 @@ public class KsetMonitorServletAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "kset.monitor.servlet", name = "trace-enabled", havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean({TraceIdFilter.class, MvcMonitorInterceptor.class})
     public TraceIdFilter traceIdFilter() {
         return new TraceIdFilter();
     }
 
     @Bean
     @ConditionalOnProperty(prefix = "kset.monitor.servlet", name = "trace-enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnBean(TraceIdFilter.class)
     @ConditionalOnMissingBean(name = "traceIdFilterRegistration")
     public FilterRegistrationBean<TraceIdFilter> traceIdFilterRegistration(TraceIdFilter traceIdFilter) {
         FilterRegistrationBean<TraceIdFilter> registration = new FilterRegistrationBean<>();

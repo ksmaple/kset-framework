@@ -1,3 +1,2 @@
 com.kset.nacos.autoconfigure.KsetNacosConventionAutoConfiguration
-com.kset.nacos.sentinel.KsetSentinelRuleAutoConfiguration
 com.kset.nacos.registrar.KsetCloudRuleRegistrarAutoConfiguration

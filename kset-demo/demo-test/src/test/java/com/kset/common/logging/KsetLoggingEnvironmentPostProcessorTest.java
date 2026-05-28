@@ -52,4 +52,12 @@ class KsetLoggingEnvironmentPostProcessorTest {
         processor.postProcessEnvironment(environment, new SpringApplication(Object.class));
         assertThat(environment.getProperty("logging.config")).isNull();
     }
+
+    @Test
+    void respectsCustomDefaultProfile() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setProperty("kset.logging.default-profile", "test");
+        processor.postProcessEnvironment(environment, new SpringApplication(Object.class));
+        assertThat(environment.getProperty("spring.profiles.default")).isEqualTo("test");
+    }
 }

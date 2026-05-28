@@ -25,11 +25,11 @@
         </dependency>
         <dependency>
             <groupId>com.kset</groupId>
-            <artifactId>kset-starter-nacos</artifactId>
+            <artifactId>kset-cloud</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.kset</groupId>
-            <artifactId>kset-cloud</artifactId>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.dubbo</groupId>

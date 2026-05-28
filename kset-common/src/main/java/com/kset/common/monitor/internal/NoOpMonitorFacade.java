@@ -5,6 +5,10 @@ import com.kset.common.monitor.GatewayTraceBinding;
 import com.kset.common.monitor.HttpTraceBinding;
 import com.kset.common.monitor.KsetMonitorFacade;
 import com.kset.common.monitor.TraceSnapshot;
+import com.kset.monitor.facade.MetricKind;
+import com.kset.monitor.facade.MonitorStatus;
+import com.kset.monitor.facade.MonitorTransaction;
+import com.kset.monitor.internal.NoOpMonitorTransaction;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -102,6 +106,23 @@ public final class NoOpMonitorFacade implements KsetMonitorFacade {
 
     @Override
     public void restore(TraceSnapshot snapshot) {
+    }
+
+    @Override
+    public MonitorTransaction newTransaction(String type, String name) {
+        return new NoOpMonitorTransaction(type, name);
+    }
+
+    @Override
+    public void logEvent(String type, String name, MonitorStatus status, String data) {
+    }
+
+    @Override
+    public void logMetric(String name, long value, MetricKind kind) {
+    }
+
+    @Override
+    public void logError(Throwable throwable, String message) {
     }
 
     @Override

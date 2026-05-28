@@ -5,6 +5,9 @@ import com.kset.common.monitor.GatewayTraceBinding;
 import com.kset.common.monitor.HttpTraceBinding;
 import com.kset.common.monitor.KsetMonitorFacade;
 import com.kset.common.monitor.TraceSnapshot;
+import com.kset.monitor.facade.MetricKind;
+import com.kset.monitor.facade.MonitorStatus;
+import com.kset.monitor.facade.MonitorTransaction;
 import com.kset.common.trace.TraceHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +20,10 @@ import java.util.UUID;
 
 /**
  * 基于 SLF4J MDC（及 Reactor Context）的默认监控门面实现。
+ *
+ * @deprecated 请使用 {@link com.kset.monitor.internal.DefaultMonitorFacade}。
  */
+@Deprecated
 public final class MdcMonitorFacade implements KsetMonitorFacade {
 
     private static final Logger log = LoggerFactory.getLogger(MdcMonitorFacade.class);
@@ -170,6 +176,27 @@ public final class MdcMonitorFacade implements KsetMonitorFacade {
         if (snapshot.getGrayTag() != null) {
             setGrayTag(snapshot.getGrayTag());
         }
+    }
+
+    @Override
+    public MonitorTransaction newTransaction(String type, String name) {
+        return new NoOpMonitorTransaction(type, name);
+    }
+
+    @Override
+    public void logEvent(String type, String name, MonitorStatus status, String data) {
+        if (status == MonitorStatus.FAIL) {
+            log.warn("monitor-event type={} name={} data={}", type, name, data);
+        }
+    }
+
+    @Override
+    public void logMetric(String name, long value, MetricKind kind) {
+    }
+
+    @Override
+    public void logError(Throwable throwable, String message) {
+        log.error("monitor-error message={}", message, throwable);
     }
 
     @Override

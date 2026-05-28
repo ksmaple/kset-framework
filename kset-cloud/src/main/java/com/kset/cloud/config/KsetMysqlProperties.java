@@ -3,17 +3,16 @@ package com.kset.cloud.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * MySQL / MyBatis-Plus 约定配置（由 starter-mysql 消费）。
+ * MySQL / MyBatis-Plus 框架开关（逻辑删除、Flyway 等请用标准 {@code mybatis-plus.*} / {@code spring.flyway.*}）。
+ *
+ * <p>默认约定见 starter-mysql 的 {@code application-kset-mysql.yml}。</p>
  */
 @ConfigurationProperties(prefix = "kset.mysql")
 public class KsetMysqlProperties {
 
     private boolean enabled = true;
+    /** 是否注册 createTime / updateTime 自动填充 */
     private boolean autoFill = true;
-    private String logicDeleteField = "deleted";
-    private int logicDeleteValue = 1;
-    private int logicNotDeleteValue = 0;
-    private final Flyway flyway = new Flyway();
 
     public boolean isEnabled() {
         return enabled;
@@ -29,54 +28,5 @@ public class KsetMysqlProperties {
 
     public void setAutoFill(boolean autoFill) {
         this.autoFill = autoFill;
-    }
-
-    public String getLogicDeleteField() {
-        return logicDeleteField;
-    }
-
-    public void setLogicDeleteField(String logicDeleteField) {
-        this.logicDeleteField = logicDeleteField;
-    }
-
-    public int getLogicDeleteValue() {
-        return logicDeleteValue;
-    }
-
-    public void setLogicDeleteValue(int logicDeleteValue) {
-        this.logicDeleteValue = logicDeleteValue;
-    }
-
-    public int getLogicNotDeleteValue() {
-        return logicNotDeleteValue;
-    }
-
-    public void setLogicNotDeleteValue(int logicNotDeleteValue) {
-        this.logicNotDeleteValue = logicNotDeleteValue;
-    }
-
-    public Flyway getFlyway() {
-        return flyway;
-    }
-
-    public static class Flyway {
-        private boolean enabled = true;
-        private String locations = "classpath:db/migration";
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-
-        public String getLocations() {
-            return locations;
-        }
-
-        public void setLocations(String locations) {
-            this.locations = locations;
-        }
     }
 }

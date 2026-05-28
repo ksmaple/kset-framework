@@ -1,111 +1,129 @@
 package com.kset.common.monitor;
 
-import com.kset.common.monitor.internal.NoOpMonitorFacade;
+import com.kset.monitor.Monitor;
+import com.kset.monitor.facade.MetricKind;
+import com.kset.monitor.facade.MonitorStatus;
+import com.kset.monitor.facade.MonitorTransaction;
 
-import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 全链路监控统一静态入口；框架组件与业务代码均通过本类访问链路上下文。
+ * 全链路监控统一静态入口（兼容层，委托 {@link Monitor}）。
+ *
+ * @deprecated 请使用 {@link Monitor}，本类保留兼容。
  */
+@Deprecated
 public final class KsetMonitor {
-
-    private static volatile KsetMonitorFacade facade = new NoOpMonitorFacade();
 
     private KsetMonitor() {
     }
 
     public static void install(KsetMonitorFacade newFacade) {
-        facade = Objects.requireNonNull(newFacade, "facade");
+        Monitor.install(newFacade);
     }
 
     public static KsetMonitorFacade facade() {
-        return facade;
+        return (KsetMonitorFacade) Monitor.facade();
     }
 
     public static Optional<String> currentTraceId() {
-        return facade.currentTraceId();
+        return Monitor.currentTraceId();
     }
 
     public static Optional<String> currentSpanId() {
-        return facade.currentSpanId();
+        return Monitor.currentSpanId();
     }
 
     public static Optional<String> currentGrayTag() {
-        return facade.currentGrayTag();
+        return Monitor.currentGrayTag();
     }
 
     public static String generateTraceId() {
-        return facade.generateTraceId();
+        return Monitor.generateTraceId();
     }
 
     public static String generateSpanId() {
-        return facade.generateSpanId();
+        return Monitor.generateSpanId();
     }
 
     public static HttpTraceBinding bindHttpIncoming(String incomingTraceId) {
-        return facade.bindHttpIncoming(incomingTraceId);
+        return Monitor.bindHttpIncoming(incomingTraceId);
     }
 
     public static void bindHttpGrayTag(String incomingGrayTag, String defaultGray) {
-        facade.bindHttpGrayTag(incomingGrayTag, defaultGray);
+        Monitor.bindHttpGrayTag(incomingGrayTag, defaultGray);
     }
 
     public static void clearHttpGrayTag() {
-        facade.clearHttpGrayTag();
+        Monitor.clearHttpGrayTag();
     }
 
     public static void bindDubboConsumer(DubboAttachmentAccessor attachments, String defaultGray) {
-        facade.bindDubboConsumer(attachments, defaultGray);
+        Monitor.bindDubboConsumer(attachments, defaultGray);
     }
 
     public static void bindDubboProvider(DubboAttachmentAccessor attachments, String defaultGray) {
-        facade.bindDubboProvider(attachments, defaultGray);
+        Monitor.bindDubboProvider(attachments, defaultGray);
     }
 
     public static GatewayTraceBinding resolveGatewayTrace(String incomingTraceId, String traceHeaderName) {
-        return facade.resolveGatewayTrace(incomingTraceId, traceHeaderName);
+        return Monitor.resolveGatewayTrace(incomingTraceId, traceHeaderName);
     }
 
     public static Object putReactorContext(Object context, String traceId, String grayTag) {
-        return facade.putReactorContext(context, traceId, grayTag);
+        return Monitor.putReactorContext(context, traceId, grayTag);
     }
 
     public static Optional<String> getFromReactor(Object contextView, String key) {
-        return facade.getFromReactor(contextView, key);
+        return Monitor.getFromReactor(contextView, key);
     }
 
     public static void setTraceId(String traceId) {
-        facade.setTraceId(traceId);
+        Monitor.setTraceId(traceId);
     }
 
     public static void setSpanId(String spanId) {
-        facade.setSpanId(spanId);
+        Monitor.setSpanId(spanId);
     }
 
     public static void setGrayTag(String grayTag) {
-        facade.setGrayTag(grayTag);
+        Monitor.setGrayTag(grayTag);
     }
 
     public static void clear() {
-        facade.clear();
+        Monitor.clear();
     }
 
     public static TraceSnapshot capture() {
-        return facade.capture();
+        return Monitor.capture();
     }
 
     public static void restore(TraceSnapshot snapshot) {
-        facade.restore(snapshot);
+        Monitor.restore(snapshot);
     }
 
     public static MonitorScope openScope(TraceSnapshot snapshot) {
-        TraceSnapshot previous = capture();
-        restore(snapshot);
-        return new MonitorScope(previous);
+        return Monitor.openScope(snapshot);
     }
 
+    public static MonitorTransaction newTransaction(String type, String name) {
+        return Monitor.newTransaction(type, name);
+    }
+
+    public static void logEvent(String type, String name, MonitorStatus status, String data) {
+        Monitor.logEvent(type, name, status, data);
+    }
+
+    public static void logMetric(String name, long value, MetricKind kind) {
+        Monitor.logMetric(name, value, kind);
+    }
+
+    public static void logError(Throwable throwable, String message) {
+        Monitor.logError(throwable, message);
+    }
+
+    @Deprecated
     public static void recordSlowEvent(String type, long costMs, String message) {
-        facade.recordSlowEvent(type, costMs, message);
+        Monitor.recordSlowEvent(type, costMs, message);
     }
 }

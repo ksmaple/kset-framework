@@ -118,6 +118,11 @@
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
+                <artifactId>kset-starter-sentinel</artifactId>
+                <version>${kset-starter.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.kset</groupId>
                 <artifactId>kset-starter-dubbo</artifactId>
                 <version>${kset-starter.version}</version>
             </dependency>

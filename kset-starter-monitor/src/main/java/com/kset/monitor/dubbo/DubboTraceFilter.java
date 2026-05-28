@@ -1,7 +1,12 @@
 package com.kset.monitor.dubbo;
 
 import com.kset.cloud.config.KsetCloudProperties;
-import com.kset.common.monitor.KsetMonitor;
+import com.kset.monitor.Monitor;
+import com.kset.monitor.facade.MonitorStatus;
+import com.kset.monitor.facade.MonitorTransaction;
+import com.kset.monitor.facade.MonitorTypes;
+import com.kset.monitor.interceptor.InvocationContext;
+import com.kset.monitor.interceptor.MonitorInterceptorRegistry;
 import org.apache.dubbo.rpc.Filter;
 import org.apache.dubbo.rpc.Invocation;
 import org.apache.dubbo.rpc.Invoker;
@@ -10,7 +15,7 @@ import org.apache.dubbo.rpc.RpcContext;
 import org.apache.dubbo.rpc.RpcException;
 
 /**
- * Dubbo TraceId / 灰度标签透传 Filter（经 {@link KsetMonitor} 门面）。
+ * Dubbo TraceId / 灰度标签透传 + RPC Transaction Filter。
  */
 public class DubboTraceFilter implements Filter {
 
@@ -29,16 +34,31 @@ public class DubboTraceFilter implements Filter {
         RpcContext context = RpcContext.getServiceContext();
         String defaultGray = properties.getDubbo().getDefaultGrayTag();
         if (context.isConsumerSide()) {
-            KsetMonitor.bindDubboConsumer(new DubboInvocationAttachments(invocation, false), defaultGray);
+            Monitor.bindDubboConsumer(new DubboInvocationAttachments(invocation, false), defaultGray);
         } else if (context.isProviderSide()) {
-            KsetMonitor.bindDubboProvider(new DubboInvocationAttachments(invocation, true), defaultGray);
+            Monitor.bindDubboProvider(new DubboInvocationAttachments(invocation, true), defaultGray);
         }
 
-        try {
-            return invoker.invoke(invocation);
+        String serviceName = invoker.getInterface().getSimpleName();
+        String txName = serviceName + "." + invocation.getMethodName();
+        InvocationContext ctx = new InvocationContext("Dubbo", MonitorTypes.RPC, txName);
+        MonitorInterceptorRegistry.notifyBefore(ctx);
+        try (MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.RPC, txName)) {
+            Result result = invoker.invoke(invocation);
+            if (result.hasException()) {
+                tx.setStatus(result.getException());
+                Monitor.logError(result.getException(), txName);
+            } else {
+                tx.setStatus(MonitorStatus.SUCCESS);
+            }
+            MonitorInterceptorRegistry.notifyAfter(ctx, result.hasException() ? result.getException() : null);
+            return result;
+        } catch (RpcException e) {
+            MonitorInterceptorRegistry.notifyAfter(ctx, e);
+            throw e;
         } finally {
             if (context.isProviderSide()) {
-                KsetMonitor.clear();
+                Monitor.clear();
             }
         }
     }

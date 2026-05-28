@@ -7,16 +7,16 @@ public final class MonitorScope implements AutoCloseable {
 
     private final TraceSnapshot previous;
 
-    MonitorScope(TraceSnapshot previous) {
+    public MonitorScope(TraceSnapshot previous) {
         this.previous = previous;
     }
 
     @Override
     public void close() {
         if (previous != null) {
-            KsetMonitor.restore(previous);
+            com.kset.monitor.Monitor.restore(previous);
         } else {
-            KsetMonitor.clear();
+            com.kset.monitor.Monitor.clear();
         }
     }
 }

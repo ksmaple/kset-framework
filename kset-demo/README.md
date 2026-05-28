@@ -21,8 +21,8 @@
 | 模块 | 端口 | 说明 |
 |------|------|------|
 | `demo-api` | — | Dubbo 接口定义 |
-| `demo-user-service` | 8081 | 用户服务 + Dubbo Provider |
-| `demo-order-service` | 8082 | 订单服务，Dubbo 消费用户 + Redis |
+| `demo-user-service` | 8081 | 用户服务 + Dubbo Provider（nacos + sentinel） |
+| `demo-order-service` | 8082 | 订单服务，Dubbo 消费用户 + Redis（nacos + sentinel） |
 | `demo-gateway` | 见 application.yaml | 网关（仅 starter-gateway） |
 
 中间件：MySQL、Redis、Nacos（`NACOS_ADDR` 默认 `127.0.0.1:8848`）。

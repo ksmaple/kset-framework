@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 
 @AutoConfiguration(before = FlywayAutoConfiguration.class)
 @ConditionalOnClass(name = "org.flywaydb.core.Flyway")
-@ConditionalOnProperty(prefix = "kset.mysql.flyway", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "spring.flyway", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(KsetMysqlProperties.class)
 public class KsetFlywayAutoConfiguration {
 }

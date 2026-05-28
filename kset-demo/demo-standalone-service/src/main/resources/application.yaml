@@ -14,14 +14,9 @@ server:
   port: 8080
 
 kset:
-  web:
-    knife4j:
-      enabled: true
   mysql:
     enabled: true
     auto-fill: true
-    flyway:
-      enabled: true
   redis:
     key-prefix: "demo-standalone:"
     default-ttl: 30m

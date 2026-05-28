@@ -1,0 +1,23 @@
+{
+  "groups": [
+    {
+      "name": "kset.logging",
+      "type": "com.kset.common.logging.config.KsetLoggingProperties",
+      "description": "KSet 框架专属日志开关。文件路径、级别、滚动策略请使用 Spring Boot 标准 logging.* 属性。"
+    }
+  ],
+  "properties": [
+    {
+      "name": "kset.logging.auto-config",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "是否自动注入 logging.config 与默认 profile；false 时使用 Spring Boot 默认 logback 发现逻辑。"
+    },
+    {
+      "name": "kset.logging.default-profile",
+      "type": "java.lang.String",
+      "defaultValue": "dev",
+      "description": "未设置 spring.profiles.active/default 时使用的默认 profile。"
+    }
+  ]
+}

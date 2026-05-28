@@ -5,9 +5,10 @@
     <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="application"/>
     <springProperty scope="context" name="KSET_ENV" source="spring.profiles.active" defaultValue="dev"/>
     <springProperty scope="context" name="ROOT_LEVEL" source="logging.level.root" defaultValue="INFO"/>
-    <springProperty scope="context" name="LOG_BASE" source="kset.logging.file.base-dir" defaultValue="tmp/logs"/>
-    <springProperty scope="context" name="LOG_MAX_SIZE" source="kset.logging.file.max-size" defaultValue="100MB"/>
-    <springProperty scope="context" name="LOG_MAX_HISTORY" source="kset.logging.file.max-history" defaultValue="7"/>
+    <!-- 对齐 Spring Boot 标准：logging.file.path / logging.logback.rollingpolicy.* -->
+    <springProperty scope="context" name="LOG_BASE" source="logging.file.path" defaultValue="tmp/logs"/>
+    <springProperty scope="context" name="LOG_MAX_SIZE" source="logging.logback.rollingpolicy.max-file-size" defaultValue="100MB"/>
+    <springProperty scope="context" name="LOG_MAX_HISTORY" source="logging.logback.rollingpolicy.max-history" defaultValue="7"/>
 
     <property name="LOG_PATH" value="${LOG_BASE}/${APP_NAME}"/>
 

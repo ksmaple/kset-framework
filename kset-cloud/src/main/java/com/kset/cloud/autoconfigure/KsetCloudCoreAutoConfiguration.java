@@ -14,8 +14,9 @@ import org.springframework.context.annotation.Bean;
 public class KsetCloudCoreAutoConfiguration {
 
     @Bean
-    public NacosConfigConvention nacosConfigConvention(KsetCloudProperties properties) {
-        return new NacosConfigConvention(properties);
+    public NacosConfigConvention nacosConfigConvention(KsetCloudProperties properties,
+                                                       org.springframework.core.env.Environment environment) {
+        return new NacosConfigConvention(properties, environment);
     }
 
     @Bean

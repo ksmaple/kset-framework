@@ -2,7 +2,8 @@ package com.kset.monitor.autoconfigure;
 
 import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.monitor.config.KsetMonitorProperties;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,15 +19,16 @@ import org.springframework.context.annotation.Import;
 @EnableConfigurationProperties({KsetMonitorProperties.class, KsetCloudProperties.class})
 @Import({
         KsetMonitorFacadeAutoConfiguration.class,
+        MonitorAutoConfiguration.class,
         KsetMonitorServletAutoConfiguration.class,
         KsetMonitorDubboAutoConfiguration.class,
         KsetMonitorGatewayAutoConfiguration.class,
         KsetMonitorThreadPoolAutoConfiguration.class,
-        KsetMonitorAsyncAutoConfiguration.class,
-        KsetMonitorSlowLogAutoConfiguration.class
+        KsetMonitorAsyncAutoConfiguration.class
 })
-@Slf4j
 public class KsetMonitorAutoConfiguration {
+
+    private static final Logger log = LoggerFactory.getLogger(KsetMonitorAutoConfiguration.class);
 
     @Bean
     ApplicationRunner ksetMonitorStartupLogger(KsetMonitorProperties properties) {

@@ -13,8 +13,12 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: dev
+        group: KSET_GROUP
       config:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: dev
+        group: KSET_GROUP
   config:
     import: optional:nacos:${spring.application.name}.yaml
 
@@ -31,17 +35,8 @@ dubbo:
     address: nacos://${NACOS_ADDR:127.0.0.1:8848}
 
 kset:
-  web:
-    knife4j:
-      enabled: true
-  cloud:
-    nacos:
-      namespace: dev
-      group: KSET_GROUP
   redis:
     key-prefix: "demo-order:"
 
 knife4j:
   enable: true
-  setting:
-    language: zh_cn

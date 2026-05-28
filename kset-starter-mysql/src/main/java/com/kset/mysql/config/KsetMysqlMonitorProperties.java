@@ -2,6 +2,9 @@ package com.kset.mysql.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * SQL 慢查询监控（无 Spring Boot 标准等价项，KSet 扩展）。
+ */
 @ConfigurationProperties(prefix = "kset.mysql.slow-sql")
 public class KsetMysqlMonitorProperties {
 

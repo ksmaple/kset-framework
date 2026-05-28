@@ -1,4 +1,4 @@
-package com.kset.nacos.sentinel;
+package com.kset.sentinel.autoconfigure;
 
 import com.alibaba.csp.sentinel.datasource.ReadableDataSource;
 import com.alibaba.csp.sentinel.datasource.nacos.NacosDataSource;

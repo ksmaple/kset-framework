@@ -39,10 +39,14 @@ kset-framework 提供两类典型接入方式，对应 **两个示例工程**：
         <groupId>com.kset</groupId>
         <artifactId>kset-starter-redis</artifactId>
     </dependency>
+    <dependency>
+        <groupId>com.kset</groupId>
+        <artifactId>kset-starter-monitor</artifactId>
+    </dependency>
 </dependencies>
 ```
 
-**不要** 引入 `starter-nacos`、`starter-dubbo`、`starter-gateway`。
+**不要** 引入 `starter-nacos`、`starter-dubbo`、`starter-gateway`（单机不会写入 Nacos 默认 `spring.config.import`）。
 
 ### 最小配置 `application.yaml`
 
@@ -58,16 +62,16 @@ spring:
     redis:
       host: localhost
       port: 6379
+  flyway:
+    enabled: true
+
+knife4j:
+  enable: true
 
 kset:
-  web:
-    knife4j:
-      enabled: true
   mysql:
     enabled: true
     auto-fill: true
-    flyway:
-      enabled: true
   redis:
     key-prefix: "myapp:"
     default-ttl: 30m
@@ -136,6 +140,13 @@ logging:
   level:
     root: INFO
     com.kset: DEBUG
+  # test / prod 文件日志（Spring Boot 标准属性，KSet logback 模板直接消费）
+  file:
+    path: tmp/logs          # 实际目录：path/${spring.application.name}
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 7
 ```
 
 ### 运行示例工程
@@ -175,7 +186,15 @@ mvn -pl kset-demo/demo-standalone-service spring-boot:run
     </dependency>
     <dependency>
         <groupId>com.kset</groupId>
+        <artifactId>kset-starter-monitor</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.kset</groupId>
         <artifactId>kset-starter-nacos</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.kset</groupId>
+        <artifactId>kset-starter-sentinel</artifactId>
     </dependency>
     <dependency>
         <groupId>com.kset</groupId>
@@ -183,6 +202,8 @@ mvn -pl kset-demo/demo-standalone-service spring-boot:run
     </dependency>
 </dependencies>
 ```
+
+> `starter-nacos` **不传递** `starter-web` / `starter-sentinel`；HTTP 与限流熔断须按需显式引入。仅 Dubbo Provider、无 REST、无 Sentinel 时可只加 `starter-dubbo`（自带 Nacos Config）。
 
 ### API Gateway（独立进程）
 
@@ -205,8 +226,12 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: dev
+        group: KSET_GROUP
       config:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        namespace: dev
+        group: KSET_GROUP
   config:
     import: optional:nacos:${spring.application.name}.yaml
   datasource:
@@ -218,14 +243,11 @@ spring:
       host: localhost
       port: 6379
 
+knife4j:
+  enable: true
+
 kset:
-  web:
-    knife4j:
-      enabled: true
   cloud:
-    nacos:
-      namespace: dev
-      group: KSET_GROUP
     sentinel:
       enabled: true
     dubbo:

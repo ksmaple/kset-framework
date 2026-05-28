@@ -9,47 +9,82 @@
 </dependency>
 ```
 
-引入后 `kset.monitor.enabled=true`（默认）自动装配链路透传；门面由 `KsetMonitorFacadeAutoConfiguration` 注册。
+引入后 `kset.monitor.enabled=true`（默认）自动装配链路透传与 CAT 风格埋点；门面由 `KsetMonitorFacadeAutoConfiguration` 注册。
 
-## 统一门面 `KsetMonitor`
+## 目录对照（monitor-facade 参考实现）
+
+| 参考目录 | KSet 落地 |
+|----------|-----------|
+| `monitor-facade/facade` | `kset-common` → `com.kset.monitor.facade.*` |
+| `monitor-facade/backend` | SPI 在 common；`LogBackend` 等在 `kset-starter-monitor` |
+| `monitor-facade/interceptor` | `com.kset.monitor.interceptor.*` |
+| `monitor-facade/reporter` | `com.kset.monitor.reporter.*` |
+| `monitor-spring-boot-starter` | `kset-starter-monitor` |
+| `monitor-plugin-dubbo` | `kset-starter-monitor` Dubbo Filter |
+| `monitor-plugin-redis` | `kset-starter-redis` `RedisMonitorPluginAutoConfiguration` |
+| `monitor-plugin-okhttp` | `kset-common` `OkHttpMonitorPlugin` |
+
+## 统一门面
 
 | API | 用途 |
 |-----|------|
-| `KsetMonitor.currentTraceId()` | 业务代码获取当前 traceId |
-| `KsetMonitor.bindHttpIncoming(headerValue)` | Servlet 入站（Filter 内部） |
-| `KsetMonitor.bindDubboConsumer/Provider(...)` | Dubbo Filter |
-| `KsetMonitor.resolveGatewayTrace(...)` | Gateway Filter |
-| `KsetMonitor.capture()` / `restore()` / `openScope()` | 异步/线程池传递 |
-| `KsetMonitor.recordSlowEvent(type, costMs, message)` | 慢调用上报 |
+| `Monitor.currentTraceId()` | 业务代码获取当前 traceId（推荐） |
+| `Monitor.newTransaction(type, name)` | CAT 风格 Transaction |
+| `Monitor.logEvent(type, name, status, data)` | 点状事件 |
+| `Monitor.logMetric(name, value, kind)` | 指标 |
+| `Monitor.logError(t, message)` | 异常上报 |
+| `Monitor.bindHttpIncoming(...)` | Servlet 入站 |
+| `Monitor.capture()` / `openScope()` | 异步/线程池传递 |
 
-**禁止**在业务或新组件中直接使用 `MDC.put("traceId", ...)` 或已废弃的 `TraceContext`（兼容层仍可用）。
+`KsetMonitor` 为兼容别名（`@Deprecated`），委托 `Monitor`。
+
+### CAT 对照
+
+| CAT | KSet |
+|-----|------|
+| `Cat.newTransaction(type, name)` | `Monitor.newTransaction(type, name)` |
+| `transaction.complete()` | `try-with-resources` / `tx.close()` |
+| `Cat.logEvent` | `Monitor.logEvent` |
+| `Cat.logMetricForCount/Duration` | `Monitor.logMetric(..., COUNT/DURATION)` |
+| `Cat.logError` | `Monitor.logError` |
+
+标准 type：`URL`、`SQL`、`RPC`、`Cache`、`MQ`、`Biz`（见 `MonitorTypes`）。
+
+### 业务埋点示例
+
+```java
+try (var tx = Monitor.newTransaction(MonitorTypes.BIZ, "createOrder")) {
+    // ...
+    tx.setStatus(MonitorStatus.SUCCESS);
+} catch (Exception e) {
+    tx.setStatus(e);
+    Monitor.logError(e, "createOrder failed");
+    throw e;
+}
+```
+
+或使用注解 `@Monitored`（避免与 `Monitor` 门面类同名）：
+
+```java
+@Monitored(type = "Biz", name = "createOrder")
+public void createOrder(...) { }
+```
 
 ## 无感知能力矩阵
 
 | 能力 | 条件 | 说明 |
 |------|------|------|
-| Servlet TraceId | monitor + Servlet | `TraceIdFilter`，响应头 `X-Trace-Id` |
+| Servlet TraceId + URL Transaction | monitor + Servlet | `MvcMonitorInterceptor`（无 MVC 时回退 `TraceIdFilter`） |
 | Servlet 灰度 MDC | monitor + Servlet | `GrayTagServletFilter` |
-| Dubbo 透传 | monitor + Dubbo | `DubboTraceFilter` |
+| Dubbo 透传 + RPC Transaction | monitor + Dubbo | `DubboTraceFilter` |
 | Gateway TraceId | monitor + Gateway | `TraceIdGatewayFilter` |
-| Gateway 灰度 | starter-gateway | `GrayTagGatewayFilter` |
+| MyBatis SQL Transaction | monitor + MyBatis | `MybatisMonitorInterceptor` |
+| `@Monitored` AOP | monitor + AOP | `MonitorAspect` |
 | 日志 traceId | KSet Logback | `%X{traceId}` |
-| 线程池 MDC | monitor | `KsetThreadPoolFactory` + `MdcThreadPoolTraceAdapter` |
-| `@Async` 传播 | monitor，`kset.monitor.async.enabled=true` | `ThreadPoolTaskExecutorCustomizer` |
-| HTTP 慢请求 WARN | monitor，`kset.monitor.slow-log.http-enabled=true` | 默认阈值 500ms |
-| SQL 慢查询 WARN | starter-mysql，`kset.mysql.slow-sql.enabled=true` | 默认阈值 200ms，经门面 `recordSlowEvent` |
-| ApiResponse.traceId | starter-web，`kset.web.response.trace-id-enabled=true` | `TraceIdResponseBodyAdvice` |
+| 线程池 MDC | monitor | `MdcThreadPoolTraceAdapter` |
+| Redis 插件 | monitor + redis starter | `RedisMonitorPluginAutoConfiguration` |
 
-## 需手动埋点
-
-| 能力 | 做法 |
-|------|------|
-| 操作审计 | starter-web：方法上 `com.kset.web.annotation.OpLog` |
-| 结构化字段 | `StructLog.of(X.class)` |
-| 线程池指标 | 实现 `ThreadPoolReporter` 并 `setGlobalReporter` |
-| 自定义灰度 | 实现 `GrayTagResolver` |
-| 自建线程池 | `KsetMonitor.capture()` + `openScope()` |
-| 定时任务 | 自行生成/绑定 traceId |
+HTTP 慢请求由 URL Transaction + `LogBackend` 超阈值 WARN 统一处理（不再默认注册 `SlowHttpMonitorFilter`）。
 
 ## 配置示例
 
@@ -57,30 +92,23 @@
 kset:
   monitor:
     enabled: true
+    backend: log          # log | cat | skywalking | prometheus（后三者 Phase 2）
+    sampler:
+      rate: 1.0
+    reporter:
+      async-enabled: true
+      queue-capacity: 2048
+    slow-log:
+      transaction-warn-ms: 500
     servlet:
       trace-enabled: true
-      gray-tag-enabled: true
-    dubbo:
+    mybatis:
       enabled: true
-    gateway:
-      trace-enabled: true
-    thread-pool:
-      trace-propagation-enabled: true
-    async:
+    aop:
       enabled: true
-    slow-log:
-      http-enabled: true
-      http-threshold-ms: 500
-  web:
-    response:
-      trace-id-enabled: true
-  cloud:
-    dubbo:
-      trace-propagation-enabled: true
-  mysql:
-    slow-sql:
-      enabled: true
-      threshold-ms: 200
+    plugin:
+      redis:
+        enabled: true
 ```
 
 ## 扩展自定义门面
@@ -93,4 +121,8 @@ public KsetMonitorFacade customMonitorFacade() {
 }
 ```
 
-Spring 启动时 `KsetMonitor.install(facade)` 会替换默认占位实现，注册 `com.kset.monitor.internal.MdcMonitorFacade`。
+Spring 启动时 `Monitor.install(facade)` 会替换默认占位实现。
+
+## 框架插件
+
+通过 `MonitorInterceptorRegistry.register(FrameworkInterceptor)` 注册；OkHttp 可调用 `OkHttpMonitorPlugin.register()`。
