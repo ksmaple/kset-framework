@@ -1,6 +1,6 @@
 # Naming 域规范
 
-N001: 本域 N001-N027 为字段语义唯一真理源  
+N001: 本域 N001-N028 为字段语义唯一真理源  
 N002: 设计阶段使用语言无关驼峰语义名  
 N003: 实现阶段仅做机械格式转换，禁止重新评估业务含义  
 N004: 布尔使用形容词或过去分词，禁止 is 前缀（Entity/API/H5/JSON）  
@@ -27,3 +27,4 @@ N024: init 将 naming 探测写入 project-spec
 N025: 时间字段 createdAt、updatedAt 映射 SQL created_at、updated_at；审计人 createdBy、updatedBy 映射 created_by、updated_by  
 N026: URL 路径连字符小写；Command 命名 {Action}Command；DTO 命名 {Entity}DTO 或 {Entity}{Action}DTO  
 N027: 枚举语义 {Entity}{Attr}Enum 或 statusCode 整型；禁止裸 Enum 类名作字段语义  
+N028: 方法名、API 操作名及入参/出参字段须采用业务人员可读的动词或名词短语，优先日常用语（如 findOrderByCode 优于 queryOrdByCd），避免非行业通用缩写与晦涩简写堆砌  

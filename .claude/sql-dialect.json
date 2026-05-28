@@ -1,9 +1,9 @@
-﻿{
-    "version":  "8.0",
-    "source":  "auto",
-    "dialect":  "mysql",
-    "commonSpecRelPath":  "skills/kaka-coder-designer/references/naming-spec.md",
-    "detectedFrom":  "no signal -\u003e default mysql (WARN)",
-    "profileRelPath":  "skills/kaka-coder-designer/references/sql-spec.md",
-    "selectedAt":  "2026-05-26T21:52:36+08:00"
+{
+  "dialect": "mysql",
+  "version": "8.0",
+  "profileRelPath": "skills/kaka-coder-designer/references/sql-spec.md",
+  "commonSpecRelPath": "skills/kaka-coder-designer/references/naming-spec.md",
+  "detectedFrom": "no signal -> default mysql (WARN)",
+  "selectedAt": "2026-05-28T13:25:13+08:00",
+  "source": "auto"
 }

@@ -30,3 +30,6 @@ C027: 禁止硬编码密码、密钥、token 进源码或提交仓库
 C028: 禁止魔法数字表达业务状态，须命名常量或枚举  
 C029: 业务线程禁止 Thread.sleep 作流程编排，须调度、消息或异步框架  
 C030: 不产出 design/coding 文档；落地以代码与审查清单为准  
+C031: 禁止在业务代码体内使用类型或成员的全称限定引用（如 Java `com.foo.Bar`、Python `pkg.module.func`），须在文件头 import/using/from 引入后使用简单名  
+C031a: 简单名冲突时优先 import 别名（Java `import … as`、TypeScript `import { X as Y }` 等），仅当无法别名化时对其中一个类型保留全称并加行内注释说明  
+C031b: 本约束不适用于代码生成模板、单行注释中的文档链接、以及框架要求的注解全限定名（如 `@org.springframework…` 若项目惯例允许可保留，新增代码优先短名 + import）  
