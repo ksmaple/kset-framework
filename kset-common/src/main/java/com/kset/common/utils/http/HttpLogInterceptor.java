@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.charset.UnsupportedCharsetException;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -106,6 +107,14 @@ public class HttpLogInterceptor implements Interceptor {
             Monitor.setSpanId(generated);
             return generated;
         });
+        if (traceId == null || traceId.isBlank()) {
+            traceId = UUID.randomUUID().toString().replace("-", "");
+            Monitor.setTraceId(traceId);
+        }
+        if (spanId == null || spanId.isBlank()) {
+            spanId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+            Monitor.setSpanId(spanId);
+        }
         Request.Builder builder = request.newBuilder()
                 .header(TraceHeaders.TRACE_ID_HEADER, traceId)
                 .header(TraceHeaders.SPAN_ID_HEADER, spanId);

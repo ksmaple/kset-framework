@@ -22,8 +22,12 @@ public class MvcMonitorInterceptor implements HandlerInterceptor {
         if (Monitor.currentTraceId().isEmpty()) {
             String incomingTraceId = request.getHeader(TraceHeaders.TRACE_ID_HEADER);
             HttpTraceBinding binding = Monitor.bindHttpIncoming(incomingTraceId);
-            response.setHeader(binding.getTraceIdHeaderName(), binding.getTraceId());
-            response.setHeader(binding.getSpanIdHeaderName(), binding.getSpanId());
+            if (binding.getTraceId() != null && !binding.getTraceId().isBlank()) {
+                response.setHeader(binding.getTraceIdHeaderName(), binding.getTraceId());
+            }
+            if (binding.getSpanId() != null && !binding.getSpanId().isBlank()) {
+                response.setHeader(binding.getSpanIdHeaderName(), binding.getSpanId());
+            }
         }
         String txName = request.getMethod() + " " + request.getRequestURI();
         MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.URL, txName);

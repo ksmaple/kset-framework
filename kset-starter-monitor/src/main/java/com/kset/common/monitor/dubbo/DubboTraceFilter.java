@@ -67,6 +67,12 @@ public class DubboTraceFilter implements Filter {
             Monitor.logError(e, txName);
             MonitorInterceptorRegistry.notifyAfter(ctx, e);
             throw e;
+        } catch (RuntimeException | Error e) {
+            tx.setStatus(e);
+            tx.addData("errorType", e.getClass().getSimpleName());
+            Monitor.logError(e, txName);
+            MonitorInterceptorRegistry.notifyAfter(ctx, e);
+            throw e;
         } finally {
             tx.close();
             Monitor.restore(previous);

@@ -61,29 +61,28 @@ public class KsetHttp {
      * @return java.lang.String
      **/
     public String execute(Request request) throws IOException {
-        Response response = null;
-        try {
-            response = okHttpClient.newCall(request).execute();
-            ResponseBody body=response.body();
-            String result=new String(body.bytes(),"utf-8");
-            response.close();
-            return result;
-        } catch (IOException e) {
-            throw e;
+        try (Response response = okHttpClient.newCall(request).execute()) {
+            ResponseBody body = response.body();
+            if (body == null) {
+                return null;
+            }
+            return body.string();
         }
     }
 
     public String execute(String url, Map<String,String> headers, Map<String,String> formBody) throws IOException {
         FormBody.Builder builder=new FormBody.Builder();
-        formBody.entrySet().forEach(t->{
-            if(t.getValue()!=null){
-                builder.add(t.getKey(), StringUtils.toEncodedString(t.getValue().getBytes(), Charset.defaultCharset()));
-            }
-        });
+        if (formBody != null) {
+            formBody.entrySet().forEach(t -> {
+                if (t.getValue() != null) {
+                    builder.add(t.getKey(), StringUtils.toEncodedString(t.getValue().getBytes(), Charset.defaultCharset()));
+                }
+            });
+        }
         Request request=new Request.Builder()
                 .url(url)
                 .post(builder.build())
-                .headers(Headers.of(headers))
+                .headers(Headers.of(headers != null ? headers : Map.of()))
                 .build();
         return execute(request);
     }
@@ -91,15 +90,17 @@ public class KsetHttp {
 
     public void enqueue(String url,Map<String,String> headers,Map<String,String> formBody, Callback callback){
         FormBody.Builder builder=new FormBody.Builder();
-        formBody.forEach((key, value) -> {
-            if (value != null) {
-                builder.add(key, StringUtils.toEncodedString(value.getBytes(), Charset.defaultCharset()));
-            }
-        });
+        if (formBody != null) {
+            formBody.forEach((key, value) -> {
+                if (value != null) {
+                    builder.add(key, StringUtils.toEncodedString(value.getBytes(), Charset.defaultCharset()));
+                }
+            });
+        }
         Request request=new Request.Builder()
                 .url(url)
                 .post(builder.build())
-                .headers(Headers.of(headers))
+                .headers(Headers.of(headers != null ? headers : Map.of()))
                 .build();
         enqueue(request,callback);
     }

@@ -24,8 +24,12 @@ public class TraceIdFilter implements Filter {
 
         String incomingTraceId = httpRequest.getHeader(TraceHeaders.TRACE_ID_HEADER);
         HttpTraceBinding binding = Monitor.bindHttpIncoming(incomingTraceId);
-        httpResponse.setHeader(binding.getTraceIdHeaderName(), binding.getTraceId());
-        httpResponse.setHeader(binding.getSpanIdHeaderName(), binding.getSpanId());
+        if (binding.getTraceId() != null && !binding.getTraceId().isBlank()) {
+            httpResponse.setHeader(binding.getTraceIdHeaderName(), binding.getTraceId());
+        }
+        if (binding.getSpanId() != null && !binding.getSpanId().isBlank()) {
+            httpResponse.setHeader(binding.getSpanIdHeaderName(), binding.getSpanId());
+        }
 
         try {
             chain.doFilter(request, response);

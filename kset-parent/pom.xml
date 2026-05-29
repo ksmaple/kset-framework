@@ -48,6 +48,7 @@
         <mysql-connector.version>8.3.0</mysql-connector.version>
         <jedis.version>5.1.2</jedis.version>
         <redisson.version>3.40.2</redisson.version>
+        <rocketmq-spring.version>2.3.5</rocketmq-spring.version>
         <elasticsearch.version>8.13.0</elasticsearch.version>
         <flyway.version>10.10.0</flyway.version>
         <resilience4j.version>2.1.0</resilience4j.version>
@@ -125,6 +126,11 @@
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-dubbo</artifactId>
+                <version>${kset-starter.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.kset</groupId>
+                <artifactId>kset-starter-mq</artifactId>
                 <version>${kset-starter.version}</version>
             </dependency>
             <dependency>
@@ -227,6 +233,11 @@
                 <groupId>org.redisson</groupId>
                 <artifactId>redisson</artifactId>
                 <version>${redisson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-spring-boot-starter</artifactId>
+                <version>${rocketmq-spring.version}</version>
             </dependency>
 
             <!-- Elasticsearch -->

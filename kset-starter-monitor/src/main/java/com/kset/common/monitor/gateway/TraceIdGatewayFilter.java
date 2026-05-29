@@ -7,6 +7,7 @@ import com.kset.common.monitor.TraceSnapshot;
 import com.kset.common.monitor.facade.MonitorStatus;
 import com.kset.common.monitor.facade.MonitorTransaction;
 import com.kset.common.monitor.facade.MonitorTypes;
+import com.kset.common.trace.TraceHeaders;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -33,15 +34,18 @@ public class TraceIdGatewayFilter implements GlobalFilter, Ordered {
         TraceSnapshot previous = Monitor.capture();
         String incomingTraceId = request.getHeaders().getFirst(traceHeader);
         GatewayTraceBinding binding = Monitor.resolveGatewayTrace(incomingTraceId, traceHeader);
-        Monitor.setTraceId(binding.getTraceId());
-        Monitor.setSpanId(binding.getSpanId());
+        String traceId = firstNonBlank(binding.getTraceId(), Monitor.generateTraceId());
+        String spanId = firstNonBlank(binding.getSpanId(), Monitor.generateSpanId());
+        String spanHeader = firstNonBlank(binding.getSpanIdHeaderName(), TraceHeaders.SPAN_ID_HEADER);
+        Monitor.setTraceId(traceId);
+        Monitor.setSpanId(spanId);
 
         ServerHttpRequest mutated = request.mutate()
-                .header(binding.getTraceHeaderName(), binding.getTraceId())
-                .header(binding.getSpanIdHeaderName(), binding.getSpanId())
+                .header(firstNonBlank(binding.getTraceHeaderName(), traceHeader), traceId)
+                .header(spanHeader, spanId)
                 .build();
 
-        final String finalTraceId = binding.getTraceId();
+        final String finalTraceId = traceId;
         final String txName = request.getMethod() + " " + request.getURI().getRawPath();
         final MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.URL, txName);
         tx.addData("component", "gateway");
@@ -51,7 +55,7 @@ public class TraceIdGatewayFilter implements GlobalFilter, Ordered {
         return chain.filter(exchange.mutate().request(mutated).build())
                 .contextWrite(ctx -> (Context) Monitor.putReactorContext(ctx, finalTraceId, null))
                 .doOnSuccess(unused -> {
-                    tx.addData("status", String.valueOf(exchange.getResponse().getRawStatusCode()));
+                    tx.addData("status", String.valueOf(exchange.getResponse().getStatusCode()));
                     tx.setStatus(MonitorStatus.SUCCESS);
                 })
                 .doOnError(error -> {
@@ -73,5 +77,12 @@ public class TraceIdGatewayFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         return Ordered.HIGHEST_PRECEDENCE;
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        return second;
     }
 }

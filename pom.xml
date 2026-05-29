@@ -34,6 +34,7 @@
         <module>kset-starter-nacos</module>
         <module>kset-starter-sentinel</module>
         <module>kset-starter-dubbo</module>
+        <module>kset-starter-mq</module>
         <module>kset-starter-gateway</module>
         <module>kset-starter-monitor</module>
         <module>kset-demo</module>

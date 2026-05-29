@@ -1,27 +1,33 @@
 package com.kset.common.monitor;
 
-import com.kset.common.monitor.DubboAttachmentAccessor;
-import com.kset.common.monitor.GatewayTraceBinding;
-import com.kset.common.monitor.HttpTraceBinding;
-import com.kset.common.monitor.MonitorScope;
-import com.kset.common.monitor.TraceSnapshot;
 import com.kset.common.monitor.backend.LogBackend;
-import com.kset.common.monitor.internal.DefaultMonitorFacade;
-import com.kset.common.monitor.internal.NoOpMonitorFacade;
-import com.kset.common.monitor.reporter.NoOpMetricAggregator;
-import com.kset.common.monitor.reporter.SyncAsyncReporter;
-import com.kset.common.monitor.sampler.RateSampler;
 import com.kset.common.monitor.facade.MetricKind;
 import com.kset.common.monitor.facade.MonitorFacade;
 import com.kset.common.monitor.facade.MonitorStatus;
 import com.kset.common.monitor.facade.MonitorTransaction;
+import com.kset.common.monitor.internal.DefaultMonitorFacade;
+import com.kset.common.monitor.internal.NoOpMonitorFacade;
+import com.kset.common.monitor.internal.NoOpMonitorTransaction;
+import com.kset.common.monitor.reporter.NoOpMetricAggregator;
+import com.kset.common.monitor.reporter.SyncAsyncReporter;
+import com.kset.common.monitor.sampler.RateSampler;
+import com.kset.common.trace.TraceHeaders;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import reactor.util.context.Context;
+import reactor.util.context.ContextView;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.function.Supplier;
 
 
 public final class Monitor {
+
+    private static final Logger log = LoggerFactory.getLogger(Monitor.class);
 
     private static volatile MonitorFacade facade = createBuiltinDefault();
 
@@ -46,79 +52,97 @@ public final class Monitor {
     }
 
     public static Optional<String> currentTraceId() {
-        return facade.currentTraceId();
+        return safeGet("currentTraceId", facade::currentTraceId, Monitor::localTraceId, Optional.empty());
     }
 
     public static Optional<String> currentSpanId() {
-        return facade.currentSpanId();
+        return safeGet("currentSpanId", facade::currentSpanId, Monitor::localSpanId, Optional.empty());
     }
 
     public static Optional<String> currentGrayTag() {
-        return facade.currentGrayTag();
+        return safeGet("currentGrayTag", facade::currentGrayTag, Monitor::localGrayTag, Optional.empty());
     }
 
     public static String generateTraceId() {
-        return facade.generateTraceId();
+        return safeGet("generateTraceId", facade::generateTraceId, Monitor::localGenerateTraceId, "");
     }
 
     public static String generateSpanId() {
-        return facade.generateSpanId();
+        return safeGet("generateSpanId", facade::generateSpanId, Monitor::localGenerateSpanId, "");
     }
 
     public static HttpTraceBinding bindHttpIncoming(String incomingTraceId) {
-        return facade.bindHttpIncoming(incomingTraceId);
+        return safeGet("bindHttpIncoming",
+                () -> facade.bindHttpIncoming(incomingTraceId),
+                () -> localBindHttpIncoming(incomingTraceId),
+                new HttpTraceBinding(firstNonBlank(incomingTraceId, ""), ""));
     }
 
     public static void bindHttpGrayTag(String incomingGrayTag, String defaultGray) {
-        facade.bindHttpGrayTag(incomingGrayTag, defaultGray);
+        safeRun("bindHttpGrayTag",
+                () -> facade.bindHttpGrayTag(incomingGrayTag, defaultGray),
+                () -> localSet(TraceHeaders.GRAY_TAG_KEY, firstNonBlank(incomingGrayTag, defaultGray)));
     }
 
     public static void clearHttpGrayTag() {
-        facade.clearHttpGrayTag();
+        safeRun("clearHttpGrayTag", facade::clearHttpGrayTag, () -> MDC.remove(TraceHeaders.GRAY_TAG_KEY));
     }
 
     public static void bindDubboConsumer(DubboAttachmentAccessor attachments, String defaultGray) {
-        facade.bindDubboConsumer(attachments, defaultGray);
+        safeRun("bindDubboConsumer",
+                () -> facade.bindDubboConsumer(attachments, defaultGray),
+                () -> localBindDubboConsumer(attachments, defaultGray));
     }
 
     public static void bindDubboProvider(DubboAttachmentAccessor attachments, String defaultGray) {
-        facade.bindDubboProvider(attachments, defaultGray);
+        safeRun("bindDubboProvider",
+                () -> facade.bindDubboProvider(attachments, defaultGray),
+                () -> localBindDubboProvider(attachments, defaultGray));
     }
 
     public static GatewayTraceBinding resolveGatewayTrace(String incomingTraceId, String traceHeaderName) {
-        return facade.resolveGatewayTrace(incomingTraceId, traceHeaderName);
+        return safeGet("resolveGatewayTrace",
+                () -> facade.resolveGatewayTrace(incomingTraceId, traceHeaderName),
+                () -> localResolveGatewayTrace(incomingTraceId, traceHeaderName),
+                new GatewayTraceBinding(firstNonBlank(incomingTraceId, ""), "", traceHeaderName));
     }
 
     public static Object putReactorContext(Object context, String traceId, String grayTag) {
-        return facade.putReactorContext(context, traceId, grayTag);
+        return safeGet("putReactorContext",
+                () -> facade.putReactorContext(context, traceId, grayTag),
+                () -> localPutReactorContext(context, traceId, grayTag),
+                context);
     }
 
     public static Optional<String> getFromReactor(Object contextView, String key) {
-        return facade.getFromReactor(contextView, key);
+        return safeGet("getFromReactor",
+                () -> facade.getFromReactor(contextView, key),
+                () -> localGetFromReactor(contextView, key),
+                Optional.empty());
     }
 
     public static void setTraceId(String traceId) {
-        facade.setTraceId(traceId);
+        safeRun("setTraceId", () -> facade.setTraceId(traceId), () -> localSet(TraceHeaders.TRACE_ID_KEY, traceId));
     }
 
     public static void setSpanId(String spanId) {
-        facade.setSpanId(spanId);
+        safeRun("setSpanId", () -> facade.setSpanId(spanId), () -> localSet(TraceHeaders.SPAN_ID_KEY, spanId));
     }
 
     public static void setGrayTag(String grayTag) {
-        facade.setGrayTag(grayTag);
+        safeRun("setGrayTag", () -> facade.setGrayTag(grayTag), () -> localSet(TraceHeaders.GRAY_TAG_KEY, grayTag));
     }
 
     public static void clear() {
-        facade.clear();
+        safeRun("clear", facade::clear, Monitor::localClear);
     }
 
     public static TraceSnapshot capture() {
-        return facade.capture();
+        return safeGet("capture", facade::capture, Monitor::localCapture, new TraceSnapshot(null, null, null));
     }
 
     public static void restore(TraceSnapshot snapshot) {
-        facade.restore(snapshot);
+        safeRun("restore", () -> facade.restore(snapshot), () -> localRestore(snapshot));
     }
 
     public static MonitorScope openScope(TraceSnapshot snapshot) {
@@ -128,19 +152,23 @@ public final class Monitor {
     }
 
     public static MonitorTransaction newTransaction(String type, String name) {
-        return facade.newTransaction(type, name);
+        MonitorTransaction transaction = safeGet("newTransaction",
+                () -> facade.newTransaction(type, name),
+                () -> new NoOpMonitorTransaction(type, name),
+                new NoOpMonitorTransaction(type, name));
+        return new SafeMonitorTransaction(transaction, type, name);
     }
 
     public static void logEvent(String type, String name, MonitorStatus status, String data) {
-        facade.logEvent(type, name, status, data);
+        safeRun("logEvent", () -> facade.logEvent(type, name, status, data));
     }
 
     public static void logMetric(String name, long value, MetricKind kind) {
-        facade.logMetric(name, value, kind);
+        safeRun("logMetric", () -> facade.logMetric(name, value, kind));
     }
 
     public static void logError(Throwable throwable, String message) {
-        facade.logError(throwable, message);
+        safeRun("logError", () -> facade.logError(throwable, message));
     }
 
     public static void runInTransaction(String type, String name, Runnable action) {
@@ -148,7 +176,7 @@ public final class Monitor {
             try {
                 action.run();
                 tx.setStatus(MonitorStatus.SUCCESS);
-            } catch (RuntimeException e) {
+            } catch (RuntimeException | Error e) {
                 tx.setStatus(e);
                 logError(e, e.getMessage() != null ? e.getMessage() : type + "." + name);
                 throw e;
@@ -166,7 +194,220 @@ public final class Monitor {
                 tx.setStatus(e);
                 logError(e, e.getMessage() != null ? e.getMessage() : type + "." + name);
                 throw e;
+            } catch (Error e) {
+                tx.setStatus(e);
+                logError(e, e.getMessage() != null ? e.getMessage() : type + "." + name);
+                throw e;
             }
+        }
+    }
+
+    private static void safeRun(String action, Runnable runnable) {
+        safeRun(action, runnable, null);
+    }
+
+    private static void safeRun(String action, Runnable runnable, Runnable fallback) {
+        try {
+            runnable.run();
+        } catch (RuntimeException | Error e) {
+            logMonitorError(action, e);
+            if (fallback != null) {
+                runFallback(action, fallback);
+            }
+        }
+    }
+
+    private static <T> T safeGet(String action, Supplier<T> supplier, Supplier<T> fallback, T finalFallback) {
+        try {
+            T value = supplier.get();
+            if (value != null) {
+                return value;
+            }
+            T fallbackValue = fallback.get();
+            return fallbackValue != null ? fallbackValue : finalFallback;
+        } catch (RuntimeException | Error e) {
+            logMonitorError(action, e);
+            T fallbackValue = safeFallback(action, fallback);
+            return fallbackValue != null ? fallbackValue : finalFallback;
+        }
+    }
+
+    private static void logMonitorError(String action, Throwable throwable) {
+        try {
+            log.error("monitor facade failed action={}", action, throwable);
+        } catch (RuntimeException | Error ignored) {
+            // Logging failure must not affect business flow.
+        }
+    }
+
+    private static void runFallback(String action, Runnable fallback) {
+        try {
+            fallback.run();
+        } catch (RuntimeException | Error e) {
+            logMonitorError(action + ".fallback", e);
+        }
+    }
+
+    private static <T> T safeFallback(String action, Supplier<T> fallback) {
+        try {
+            return fallback.get();
+        } catch (RuntimeException | Error e) {
+            logMonitorError(action + ".fallback", e);
+            return null;
+        }
+    }
+
+    private static Optional<String> localTraceId() {
+        return Optional.ofNullable(MDC.get(TraceHeaders.TRACE_ID_KEY));
+    }
+
+    private static Optional<String> localSpanId() {
+        return Optional.ofNullable(MDC.get(TraceHeaders.SPAN_ID_KEY));
+    }
+
+    private static Optional<String> localGrayTag() {
+        return Optional.ofNullable(MDC.get(TraceHeaders.GRAY_TAG_KEY));
+    }
+
+    private static String localGenerateTraceId() {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private static String localGenerateSpanId() {
+        return UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+    }
+
+    private static HttpTraceBinding localBindHttpIncoming(String incomingTraceId) {
+        String traceId = firstNonBlank(incomingTraceId, localGenerateTraceId());
+        String spanId = localGenerateSpanId();
+        localSet(TraceHeaders.TRACE_ID_KEY, traceId);
+        localSet(TraceHeaders.SPAN_ID_KEY, spanId);
+        return new HttpTraceBinding(traceId, spanId);
+    }
+
+    private static GatewayTraceBinding localResolveGatewayTrace(String incomingTraceId, String traceHeaderName) {
+        return new GatewayTraceBinding(firstNonBlank(incomingTraceId, localGenerateTraceId()),
+                localGenerateSpanId(),
+                traceHeaderName);
+    }
+
+    private static Object localPutReactorContext(Object context, String traceId, String grayTag) {
+        if (!(context instanceof Context reactorContext)) {
+            return context;
+        }
+        Context updated = reactorContext;
+        if (traceId != null) {
+            updated = updated.put(TraceHeaders.TRACE_ID_KEY, traceId);
+        }
+        if (grayTag != null) {
+            updated = updated.put(TraceHeaders.GRAY_TAG_KEY, grayTag);
+        }
+        return updated;
+    }
+
+    private static Optional<String> localGetFromReactor(Object contextView, String key) {
+        if (!(contextView instanceof ContextView view) || key == null || !view.hasKey(key)) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(view.get(key));
+    }
+
+    private static TraceSnapshot localCapture() {
+        return new TraceSnapshot(
+                MDC.get(TraceHeaders.TRACE_ID_KEY),
+                MDC.get(TraceHeaders.SPAN_ID_KEY),
+                MDC.get(TraceHeaders.GRAY_TAG_KEY));
+    }
+
+    private static void localRestore(TraceSnapshot snapshot) {
+        if (snapshot == null) {
+            localClear();
+            return;
+        }
+        localClear();
+        localSet(TraceHeaders.TRACE_ID_KEY, snapshot.getTraceId());
+        localSet(TraceHeaders.SPAN_ID_KEY, snapshot.getSpanId());
+        localSet(TraceHeaders.GRAY_TAG_KEY, snapshot.getGrayTag());
+    }
+
+    private static void localBindDubboConsumer(DubboAttachmentAccessor attachments, String defaultGray) {
+        if (attachments == null) {
+            return;
+        }
+        String traceId = localTraceId().orElseGet(Monitor::localGenerateTraceId);
+        String grayTag = localGrayTag().orElse(defaultGray);
+        attachments.setAttachment(TraceHeaders.TRACE_ID_KEY, traceId);
+        attachments.setAttachment(TraceHeaders.GRAY_TAG_KEY, grayTag);
+        localSet(TraceHeaders.TRACE_ID_KEY, traceId);
+        localSet(TraceHeaders.GRAY_TAG_KEY, grayTag);
+    }
+
+    private static void localBindDubboProvider(DubboAttachmentAccessor attachments, String defaultGray) {
+        String traceId = attachments != null ? attachments.getAttachment(TraceHeaders.TRACE_ID_KEY) : null;
+        String grayTag = attachments != null ? attachments.getAttachment(TraceHeaders.GRAY_TAG_KEY) : null;
+        localSet(TraceHeaders.TRACE_ID_KEY, firstNonBlank(traceId, localGenerateTraceId()));
+        localSet(TraceHeaders.GRAY_TAG_KEY, firstNonBlank(grayTag, defaultGray));
+    }
+
+    private static void localSet(String key, String value) {
+        if (value != null) {
+            MDC.put(key, value);
+        }
+    }
+
+    private static void localClear() {
+        MDC.remove(TraceHeaders.TRACE_ID_KEY);
+        MDC.remove(TraceHeaders.SPAN_ID_KEY);
+        MDC.remove(TraceHeaders.GRAY_TAG_KEY);
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        return second;
+    }
+
+    private static final class SafeMonitorTransaction implements MonitorTransaction {
+
+        private final MonitorTransaction delegate;
+        private final String type;
+        private final String name;
+
+        private SafeMonitorTransaction(MonitorTransaction delegate, String type, String name) {
+            this.delegate = delegate != null ? delegate : new NoOpMonitorTransaction(type, name);
+            this.type = type;
+            this.name = name;
+        }
+
+        @Override
+        public void setStatus(MonitorStatus status) {
+            safeRun("transaction.setStatus", () -> delegate.setStatus(status));
+        }
+
+        @Override
+        public void setStatus(Throwable throwable) {
+            safeRun("transaction.setStatusThrowable", () -> delegate.setStatus(throwable));
+        }
+
+        @Override
+        public void addData(String key, String value) {
+            safeRun("transaction.addData", () -> delegate.addData(key, value));
+        }
+
+        @Override
+        public String getType() {
+            return safeGet("transaction.getType", delegate::getType, () -> type, type);
+        }
+
+        @Override
+        public String getName() {
+            return safeGet("transaction.getName", delegate::getName, () -> name, name);
+        }
+
+        @Override
+        public void close() {
+            safeRun("transaction.close", delegate::close);
         }
     }
 }
