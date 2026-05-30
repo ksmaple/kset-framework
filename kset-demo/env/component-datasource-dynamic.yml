@@ -1,0 +1,56 @@
+# 多数据源组件配置
+#
+# 来源：dynamic-datasource-spring-boot3-starter。
+# 含义：对齐开源 dynamic-datasource，使用 spring.datasource.dynamic.* 和 @DS("数据源名") 切换。
+# 说明：启用本文件时不要再同时导入 component-mysql.yml、component-pgsql.yml、component-sqlite.yml。
+spring:
+  datasource:
+    dynamic:
+      # 来源：dynamic-datasource primary；含义：默认数据源名称。
+      primary: master
+      # 来源：dynamic-datasource strict；含义：找不到指定数据源时是否直接报错，false 表示回退到 primary。
+      strict: false
+      datasource:
+        master:
+          # 来源：dynamic-datasource DataSourceProperty.url；含义：主数据源连接地址，默认使用本地 SQLite 文件。
+          url: jdbc:sqlite:./data/kset_demo.db
+          # 来源：dynamic-datasource DataSourceProperty.driverClassName；含义：JDBC 驱动类。
+          driver-class-name: org.sqlite.JDBC
+          # 来源：dynamic-datasource HikariCpConfig；含义：当前数据源 HikariCP 连接池参数。
+          # hikari:
+          #   pool-name: kset-demo-master-hikari
+          #   min-idle: 5
+          #   max-pool-size: 20
+          #   connection-timeout: 30000
+        audit:
+          # 来源：dynamic-datasource DataSourceProperty.url；含义：审计数据源连接地址。
+          url: jdbc:sqlite:./data/kset_audit.db
+          # 来源：dynamic-datasource DataSourceProperty.driverClassName；含义：JDBC 驱动类。
+          driver-class-name: org.sqlite.JDBC
+
+# 来源：dynamic-datasource 可选能力。
+# 含义：只有需要高级行为时打开。
+# spring:
+#   datasource:
+#     dynamic:
+#       # 来源：dynamic-datasource lazy；含义：是否懒加载数据源。
+#       lazy: false
+#       # 来源：dynamic-datasource grace-destroy；含义：关闭数据源时是否等待连接优雅释放。
+#       grace-destroy: true
+#       # 来源：dynamic-datasource aop；含义：@DS 切面顺序，需和业务 AOP 顺序冲突时再调整。
+#       aop:
+#         order: -2147483648
+
+# 来源：MyBatis-Plus / MyBatis 原生配置。
+# 含义：@DS 对 Mapper/Service 方法生效，MyBatis-Plus 仍使用同一个动态 DataSource。
+# mybatis-plus:
+#   configuration:
+#     map-underscore-to-camel-case: true
+#     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+# 来源：Flyway / Spring Boot FlywayProperties。
+# 含义：Flyway 默认跟随主数据源；多库迁移建议由业务显式配置。
+# spring:
+#   flyway:
+#     enabled: true
+#     locations: classpath:db/migration/sqlite

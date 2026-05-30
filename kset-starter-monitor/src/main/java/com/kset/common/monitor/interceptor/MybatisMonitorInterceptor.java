@@ -15,7 +15,7 @@ import org.apache.ibatis.session.ResultHandler;
 import org.apache.ibatis.session.RowBounds;
 
 /**
- * MyBatis SQL Transaction 拦截器（替代 starter-mysql 中仅慢 SQL 事件的上报方式）。
+ * MyBatis SQL Transaction 拦截器。
  */
 @Intercepts({
         @Signature(type = Executor.class, method = "update", args = {MappedStatement.class, Object.class}),

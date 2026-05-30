@@ -40,12 +40,14 @@
 
         <!-- Third-party libraries -->
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
+        <dynamic-datasource.version>4.5.0</dynamic-datasource.version>
         <spring-ai.version>1.0.0</spring-ai.version>
         <spring-ai-alibaba-graph.version>1.0.0.2</spring-ai-alibaba-graph.version>
         <duckdb.version>1.0.0</duckdb.version>
         <hikaricp.version>5.1.0</hikaricp.version>
         <sqlite-jdbc.version>3.45.2.0</sqlite-jdbc.version>
         <mysql-connector.version>8.3.0</mysql-connector.version>
+        <postgresql.version>42.7.5</postgresql.version>
         <jedis.version>5.1.2</jedis.version>
         <redisson.version>3.40.2</redisson.version>
         <rocketmq-spring.version>2.3.5</rocketmq-spring.version>
@@ -64,7 +66,7 @@
         <protobuf-java.version>3.25.8</protobuf-java.version>
         <aliyun-oss.version>3.17.4</aliyun-oss.version>
         <logstash-encoder.version>8.0</logstash-encoder.version>
-        <cat-client.version>4.0-RC1</cat-client.version>
+        <cat-client.version>3.1.0</cat-client.version>
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
 
         <!-- JSON / utilities / HTTP (common third-party) -->
@@ -105,7 +107,7 @@
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
-                <artifactId>kset-starter-mysql</artifactId>
+                <artifactId>kset-starter-datasource</artifactId>
                 <version>${kset-starter.version}</version>
             </dependency>
             <dependency>
@@ -190,6 +192,11 @@
                 <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>dynamic-datasource-spring-boot3-starter</artifactId>
+                <version>${dynamic-datasource.version}</version>
+            </dependency>
 
             <!-- Spring AI BOM -->
             <dependency>
@@ -228,6 +235,13 @@
                 <version>${mysql-connector.version}</version>
             </dependency>
 
+            <!-- PostgreSQL -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version>
+            </dependency>
+
             <!-- Redis -->
             <dependency>
                 <groupId>redis.clients</groupId>
@@ -256,6 +270,16 @@
             <dependency>
                 <groupId>org.flywaydb</groupId>
                 <artifactId>flyway-core</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-mysql</artifactId>
+                <version>${flyway.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-database-postgresql</artifactId>
                 <version>${flyway.version}</version>
             </dependency>
 

@@ -2,7 +2,6 @@ package com.kset.common.monitor.autoconfigure;
 
 import com.kset.common.monitor.aop.MonitorAspect;
 import com.kset.common.monitor.interceptor.MvcMonitorInterceptor;
-import com.kset.common.monitor.interceptor.MybatisMonitorInterceptor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -41,12 +40,5 @@ public class MonitorAutoConfiguration {
                 registry.addInterceptor(mvcMonitorInterceptor).addPathPatterns("/**").order(0);
             }
         };
-    }
-
-    @Bean
-    @ConditionalOnClass(name = "org.apache.ibatis.plugin.Interceptor")
-    @ConditionalOnProperty(prefix = "kset.monitor.mybatis", name = "enabled", havingValue = "true", matchIfMissing = true)
-    public MybatisMonitorInterceptor mybatisMonitorInterceptor() {
-        return new MybatisMonitorInterceptor();
     }
 }

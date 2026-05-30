@@ -40,7 +40,7 @@
 
 **仅依赖 `kset-common`（未引入 starter-monitor）时**：已内置 `DefaultMonitorFacade` + `LogBackend`，`newTransaction` / `logEvent` / `logError` 等会写入本地 SLF4J；traceId 需业务调用 `Monitor.setTraceId` 或 `bindHttpIncoming` 自行绑定。
 
-**引入 `kset-starter-monitor` 后**：Spring 启动时 `Monitor.install(...)` 替换为可配置门面（采样、异步上报、Servlet/Dubbo/Gateway 无感知集成）。
+**引入 `kset-starter-monitor` 后**：Spring 启动时 `Monitor.install(...)` 替换为可配置门面（采样、同步调用后端、Servlet/Dubbo/Gateway 无感知集成）。门面层不创建异步上报队列；CAT、日志或其他后端是否异步由具体后端框架自行决定。
 
 ## 下游升级对照
 
@@ -96,7 +96,7 @@ public void createOrder(...) { }
 | Servlet 灰度 MDC | monitor + Servlet | `GrayTagServletFilter` |
 | Dubbo 透传 + RPC Transaction | monitor + Dubbo | `DubboTraceFilter` |
 | Gateway TraceId | monitor + Gateway | `TraceIdGatewayFilter` |
-| MyBatis SQL Transaction | monitor + MyBatis | `MybatisMonitorInterceptor` |
+| MyBatis SQL Transaction | monitor + MyBatis / MyBatis-Plus | `KsetMonitorMybatisAutoConfiguration` 注册 `MybatisMonitorInterceptor` |
 | `@Monitored` AOP | monitor + AOP | `MonitorAspect` |
 | 日志 traceId | KSet Logback | `%X{traceId}`、`%X{spanId}`（MDC 由 Monitor 写入） |
 | 日志 operator / flow | KSet Logback | `%X{operator}`、`flow.*`（由 OpLogContext / FlowLogContext 写入） |
@@ -104,6 +104,8 @@ public void createOrder(...) { }
 | Redis 插件 | monitor + redis starter | `RedisMonitorPluginAutoConfiguration` |
 
 HTTP 慢请求由 URL Transaction + `LogBackend` 超阈值 WARN 统一处理。
+
+数据源组件兼容：业务引入 `kset-starter-datasource` 和对应 JDBC 驱动后即可使用 MyBatis-Plus。只要业务同时引入 `kset-starter-monitor`，SQL Transaction 拦截器会在 MyBatis 自动装配前注册，无需按数据库类型额外配置。
 
 ## 配置示例
 
@@ -117,9 +119,6 @@ kset:
       domain: demo-app    # initialize=true 时可选
     sampler:
       rate: 1.0
-    reporter:
-      async-enabled: true
-      queue-capacity: 2048
     slow-log:
       transaction-warn-ms: 500
     servlet:

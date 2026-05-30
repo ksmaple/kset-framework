@@ -31,9 +31,9 @@ public class MonitorBackendConfiguration {
         if (catProperties.isInitialize()) {
             String domain = resolveCatDomain(environment, catProperties);
             if (domain != null && !domain.isBlank()) {
-                Cat.getBootstrap().initializeByDomain(domain);
+                Cat.initializeByDomain(domain);
             } else {
-                Cat.getBootstrap().initialize();
+                Cat.initialize(new String[0]);
             }
         }
         log.info("kset.monitor.backend=cat, using CAT monitor backend");

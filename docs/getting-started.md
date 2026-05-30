@@ -6,8 +6,8 @@ kset-framework 提供两类典型接入方式，对应 **两个示例工程**：
 
 | 场景 | 示例模块 | 依赖中间件 | 说明 |
 |------|----------|------------|------|
-| **单机项目** | [demo-standalone-service](../kset-demo/demo-standalone-service) | MySQL、Redis | Web + DB + 缓存，无注册中心 |
-| **微服务 Cloud** | demo-user / demo-order / demo-gateway | MySQL、Redis、Nacos | Nacos + Dubbo + Gateway + 灰度 |
+| **单机项目** | [demo-standalone-service](../kset-demo/demo-standalone-service) | MySQL/PostgreSQL/SQLite、Redis | Web + DB + 缓存，无注册中心 |
+| **微服务 Cloud** | demo-user / demo-order / demo-gateway | MySQL/PostgreSQL/SQLite、Redis、Nacos | Nacos + Dubbo + Gateway + 灰度 |
 
 业务项目均继承 `kset-parent`：
 
@@ -35,7 +35,11 @@ kset-framework 提供两类典型接入方式，对应 **两个示例工程**：
     </dependency>
     <dependency>
         <groupId>com.kset</groupId>
-        <artifactId>kset-starter-mysql</artifactId>
+        <artifactId>kset-starter-datasource</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.xerial</groupId>
+        <artifactId>sqlite-jdbc</artifactId>
     </dependency>
     <dependency>
         <groupId>com.kset</groupId>
@@ -47,6 +51,8 @@ kset-framework 提供两类典型接入方式，对应 **两个示例工程**：
     </dependency>
 </dependencies>
 ```
+
+数据源能力统一引入 `kset-starter-datasource`，数据库类型由 JDBC 驱动决定。示例默认使用 `org.xerial:sqlite-jdbc`，无需外部数据库；MySQL 或 PostgreSQL 项目可替换为 `com.mysql:mysql-connector-j` 或 `org.postgresql:postgresql`。
 
 **不要** 引入 `starter-nacos`、`starter-dubbo`、`starter-gateway`（单机不会写入 Nacos 默认 `spring.config.import`）。
 
@@ -71,9 +77,7 @@ spring:
   application:
     name: my-app
   datasource:
-    url: jdbc:mysql://localhost:3306/my_db?useSSL=false&serverTimezone=UTC
-    username: root
-    password: root
+    url: jdbc:sqlite:./data/kset_demo.db
   data:
     redis:
       host: localhost
@@ -85,8 +89,7 @@ knife4j:
   enable: true
 
 kset:
-  mysql:
-    enabled: true
+  datasource:
     auto-fill: true
   redis:
     key-prefix: "myapp:"
@@ -193,7 +196,11 @@ mvn -pl kset-demo/demo-standalone-service spring-boot:run
     </dependency>
     <dependency>
         <groupId>com.kset</groupId>
-        <artifactId>kset-starter-mysql</artifactId>
+        <artifactId>kset-starter-datasource</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.xerial</groupId>
+        <artifactId>sqlite-jdbc</artifactId>
     </dependency>
     <!-- 按需 -->
     <dependency>
@@ -218,6 +225,8 @@ mvn -pl kset-demo/demo-standalone-service spring-boot:run
     </dependency>
 </dependencies>
 ```
+
+业务微服务同样引入 `kset-starter-datasource`，并按实际数据库显式引入 JDBC 驱动。
 
 > `starter-nacos` **不传递** `starter-web` / `starter-sentinel`；HTTP 与限流熔断须按需显式引入。仅 Dubbo Provider、无 REST、无 Sentinel 时可只加 `starter-dubbo`（自带 Nacos Config）。
 
@@ -251,9 +260,7 @@ spring:
   config:
     import: optional:nacos:${spring.application.name}.yaml
   datasource:
-    url: jdbc:mysql://localhost:3306/kset_demo?useSSL=false&serverTimezone=UTC
-    username: root
-    password: root
+    url: jdbc:sqlite:./data/kset_demo.db
   data:
     redis:
       host: localhost
@@ -313,7 +320,7 @@ mvn -pl kset-demo/demo-gateway spring-boot:run
 flowchart LR
   subgraph standalone [单机项目]
     SWeb[starter-web]
-    SMysql[starter-mysql]
+    SDb[starter-datasource + JDBC driver]
     SRedis[starter-redis]
   end
   subgraph cloud [微服务Cloud]
@@ -322,10 +329,10 @@ flowchart LR
     CDubbo[starter-dubbo]
     CGw[starter-gateway]
   end
-  standalone --> MySQL[(MySQL)]
+  standalone --> DB[(MySQL/PostgreSQL/SQLite)]
   standalone --> Redis[(Redis)]
   cloud --> Nacos[(Nacos)]
-  cloud --> MySQL
+  cloud --> DB
   cloud --> Redis
 ```
 

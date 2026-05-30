@@ -14,7 +14,7 @@
     <artifactId>demo-standalone-service</artifactId>
     <packaging>jar</packaging>
     <name>demo-standalone-service</name>
-    <description>单机示例：web + mysql + redis，无 Nacos / Dubbo / Gateway</description>
+    <description>单机示例：web + datasource + SQLite driver + redis，无 Nacos / Dubbo / Gateway</description>
 
     <dependencies>
         <dependency>
@@ -27,7 +27,11 @@
         </dependency>
         <dependency>
             <groupId>com.kset</groupId>
-            <artifactId>kset-starter-mysql</artifactId>
+            <artifactId>kset-starter-datasource</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
         </dependency>
         <dependency>
             <groupId>com.kset</groupId>

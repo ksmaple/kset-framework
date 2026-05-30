@@ -15,9 +15,6 @@ kset:
     # 非必选项：默认均由 starter 自动装配；需要改变默认行为时再打开。
     # sampler:
     #   rate: 1.0
-    # reporter:
-    #   async-enabled: true
-    #   queue-capacity: 2048
     # servlet:
     #   trace-enabled: true
     #   gray-tag-enabled: true

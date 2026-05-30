@@ -8,9 +8,9 @@
 
 | 项 | 说明 |
 |----|------|
-| 依赖 | web + mysql + redis |
+| 依赖 | web + datasource + SQLite driver + redis |
 | 端口 | 8080 |
-| 中间件 | MySQL（库 `kset_demo`）、Redis |
+| 中间件 | SQLite（文件 `./data/kset_demo.db`）、Redis |
 | 启动 | `mvn -pl kset-demo/demo-standalone-service spring-boot:run` |
 
 - API：http://localhost:8080/api/users/1  
@@ -27,7 +27,7 @@
 | `demo-order-service` | 8082 | 订单服务，Dubbo 消费用户 + Redis（nacos + sentinel） |
 | `demo-gateway` | 见 application.yaml | 网关（仅 starter-gateway） |
 
-中间件：MySQL、Redis、Nacos（`NACOS_ADDR` 默认 `127.0.0.1:8848`）。
+中间件：SQLite、Redis、Nacos（`NACOS_ADDR` 默认 `127.0.0.1:8848`）。
 
 ```bash
 mvn clean install

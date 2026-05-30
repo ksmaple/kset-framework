@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Import;
 @Import({
         KsetMonitorFacadeAutoConfiguration.class,
         MonitorAutoConfiguration.class,
+        KsetMonitorMybatisAutoConfiguration.class,
         KsetMonitorServletAutoConfiguration.class,
         KsetMonitorDubboAutoConfiguration.class,
         KsetMonitorGatewayAutoConfiguration.class,

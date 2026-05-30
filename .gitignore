@@ -28,3 +28,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local deploy env
+env/.env
+env/config/.env
+env/cat/mysql/volume/
+env/cat/appdatas/
+data/appdatas/

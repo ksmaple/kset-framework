@@ -33,13 +33,23 @@ public final class DefaultMonitorFacade implements MonitorFacade {
 
     private final MonitorBackend backend;
     private final Sampler sampler;
-    private final AsyncReporter asyncReporter;
     private final MetricAggregator metricAggregator;
-    private final boolean asyncEnabled;
 
     private final ThreadLocal<Deque<ActiveTransaction>> transactionStack =
             ThreadLocal.withInitial(ArrayDeque::new);
 
+    public DefaultMonitorFacade(MonitorBackend backend,
+                                Sampler sampler,
+                                MetricAggregator metricAggregator) {
+        this.backend = backend;
+        this.sampler = sampler;
+        this.metricAggregator = metricAggregator;
+    }
+
+    /**
+     * 兼容旧构造器；门面层固定同步上报，异步策略由具体 backend 或外部监控框架决定。
+     */
+    @Deprecated(since = "1.0.0", forRemoval = false)
     public DefaultMonitorFacade(MonitorBackend backend,
                                 Sampler sampler,
                                 AsyncReporter asyncReporter,
@@ -47,9 +57,7 @@ public final class DefaultMonitorFacade implements MonitorFacade {
                                 boolean asyncEnabled) {
         this.backend = backend;
         this.sampler = sampler;
-        this.asyncReporter = asyncReporter;
         this.metricAggregator = metricAggregator;
-        this.asyncEnabled = asyncEnabled;
     }
 
     @Override
@@ -266,11 +274,7 @@ public final class DefaultMonitorFacade implements MonitorFacade {
         if (!backend.isEnabled()) {
             return;
         }
-        if (asyncEnabled && asyncReporter != null) {
-            asyncReporter.report(task);
-        } else {
-            task.run();
-        }
+        task.run();
     }
 
     private static String firstNonBlank(String first, String second) {

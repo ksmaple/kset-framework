@@ -10,7 +10,6 @@ import com.kset.common.monitor.internal.DefaultMonitorFacade;
 import com.kset.common.monitor.backend.LogBackend;
 import com.kset.common.monitor.reporter.DefaultMetricAggregator;
 import com.kset.common.monitor.reporter.NoOpMetricAggregator;
-import com.kset.common.monitor.reporter.SyncAsyncReporter;
 import com.kset.common.monitor.sampler.RateSampler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -33,9 +32,7 @@ class MonitorFacadeTest {
         Monitor.install(new DefaultMonitorFacade(
                 new LogBackend(500),
                 new RateSampler(1.0),
-                new SyncAsyncReporter(),
-                new NoOpMetricAggregator(),
-                false));
+                new NoOpMetricAggregator()));
         assertDoesNotThrow(() -> {
             try (MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.BIZ, "builtin")) {
                 tx.setStatus(MonitorStatus.SUCCESS);
@@ -58,9 +55,7 @@ class MonitorFacadeTest {
         DefaultMonitorFacade facade = new DefaultMonitorFacade(
                 backend,
                 new RateSampler(1.0),
-                new SyncAsyncReporter(),
-                new DefaultMetricAggregator(),
-                false);
+                new DefaultMetricAggregator());
         Monitor.install(facade);
         facade.setTraceId("trace-1");
         try (MonitorTransaction outer = Monitor.newTransaction(MonitorTypes.URL, "/order")) {
@@ -78,9 +73,7 @@ class MonitorFacadeTest {
         DefaultMonitorFacade facade = new DefaultMonitorFacade(
                 backend,
                 new RateSampler(0.0),
-                new SyncAsyncReporter(),
-                new DefaultMetricAggregator(),
-                false);
+                new DefaultMetricAggregator());
         Monitor.install(facade);
         try (MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.BIZ, "ignored")) {
             tx.setStatus(MonitorStatus.SUCCESS);

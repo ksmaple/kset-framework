@@ -1,7 +1,7 @@
 package com.kset.common.monitor.reporter;
 
 /**
- * 同步直调上报（关闭 async 时使用）。
+ * 同步直调上报。
  */
 public final class SyncAsyncReporter implements AsyncReporter {
 

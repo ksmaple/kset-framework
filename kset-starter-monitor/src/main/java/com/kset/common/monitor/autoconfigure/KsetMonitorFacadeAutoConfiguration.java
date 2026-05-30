@@ -5,9 +5,6 @@ import com.kset.common.monitor.backend.MonitorBackend;
 import com.kset.common.monitor.config.KsetMonitorProperties;
 import com.kset.common.monitor.facade.MonitorFacade;
 import com.kset.common.monitor.internal.DefaultMonitorFacade;
-import com.kset.common.monitor.reporter.AsyncReporter;
-import com.kset.common.monitor.reporter.DefaultAsyncReporter;
-import com.kset.common.monitor.reporter.SyncAsyncReporter;
 import com.kset.common.monitor.reporter.DefaultMetricAggregator;
 import com.kset.common.monitor.reporter.MetricAggregator;
 import com.kset.common.monitor.sampler.RateSampler;
@@ -35,28 +32,16 @@ public class KsetMonitorFacadeAutoConfiguration {
         return new DefaultMetricAggregator();
     }
 
-    @Bean(destroyMethod = "shutdown")
-    @ConditionalOnMissingBean
-    public AsyncReporter monitorAsyncReporter(KsetMonitorProperties properties) {
-        if (!properties.getReporter().isAsyncEnabled()) {
-            return new SyncAsyncReporter();
-        }
-        return new DefaultAsyncReporter(properties.getReporter().getQueueCapacity());
-    }
-
     @Bean
     @ConditionalOnMissingBean
     public MonitorFacade ksetMonitorFacade(MonitorBackend monitorBackend,
                                            Sampler monitorSampler,
-                                           AsyncReporter monitorAsyncReporter,
                                            MetricAggregator monitorMetricAggregator,
                                            KsetMonitorProperties properties) {
         return new DefaultMonitorFacade(
                 monitorBackend,
                 monitorSampler,
-                monitorAsyncReporter,
-                monitorMetricAggregator,
-                properties.getReporter().isAsyncEnabled());
+                monitorMetricAggregator);
     }
 
     @Bean

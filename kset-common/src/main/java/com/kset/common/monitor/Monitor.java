@@ -9,7 +9,6 @@ import com.kset.common.monitor.internal.DefaultMonitorFacade;
 import com.kset.common.monitor.internal.NoOpMonitorFacade;
 import com.kset.common.monitor.internal.NoOpMonitorTransaction;
 import com.kset.common.monitor.reporter.NoOpMetricAggregator;
-import com.kset.common.monitor.reporter.SyncAsyncReporter;
 import com.kset.common.monitor.sampler.RateSampler;
 import com.kset.common.trace.TraceHeaders;
 import org.slf4j.Logger;
@@ -38,9 +37,7 @@ public final class Monitor {
         return new DefaultMonitorFacade(
                 new LogBackend(),
                 new RateSampler(1.0),
-                new SyncAsyncReporter(),
-                new NoOpMetricAggregator(),
-                false);
+                new NoOpMetricAggregator());
     }
 
     public static void install(MonitorFacade newFacade) {

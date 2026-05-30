@@ -31,7 +31,11 @@
         </dependency>
         <dependency>
             <groupId>com.kset</groupId>
-            <artifactId>kset-starter-mysql</artifactId>
+            <artifactId>kset-starter-datasource</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
         </dependency>
         <dependency>
             <groupId>com.kset</groupId>

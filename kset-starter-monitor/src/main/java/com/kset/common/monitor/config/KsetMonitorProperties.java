@@ -256,21 +256,37 @@ public class KsetMonitorProperties {
     }
 
     public static class Reporter {
-        private boolean asyncEnabled = true;
+        private boolean asyncEnabled = false;
         private int queueCapacity = 2048;
 
+        /**
+         * 历史兼容字段；门面层固定同步上报，异步策略由具体 backend 或外部监控框架决定。
+         */
+        @Deprecated(since = "1.0.0", forRemoval = false)
         public boolean isAsyncEnabled() {
             return asyncEnabled;
         }
 
+        /**
+         * 历史兼容字段；门面层固定同步上报，异步策略由具体 backend 或外部监控框架决定。
+         */
+        @Deprecated(since = "1.0.0", forRemoval = false)
         public void setAsyncEnabled(boolean asyncEnabled) {
             this.asyncEnabled = asyncEnabled;
         }
 
+        /**
+         * 历史兼容字段；门面层不再创建异步队列。
+         */
+        @Deprecated(since = "1.0.0", forRemoval = false)
         public int getQueueCapacity() {
             return queueCapacity;
         }
 
+        /**
+         * 历史兼容字段；门面层不再创建异步队列。
+         */
+        @Deprecated(since = "1.0.0", forRemoval = false)
         public void setQueueCapacity(int queueCapacity) {
             this.queueCapacity = queueCapacity;
         }
