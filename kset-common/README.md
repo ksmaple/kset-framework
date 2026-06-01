@@ -188,7 +188,7 @@ executor.execute(() -> {
 });
 ```
 
-详见 [monitoring.md](monitoring.md)「与 logging 协作」小节。
+详见 [kset-starter-monitor/README.md](../kset-starter-monitor/README.md)「与 logging 协作」小节。
 
 ## 随机（`com.kset.common.utils.random`）
 

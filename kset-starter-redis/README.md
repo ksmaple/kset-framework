@@ -50,7 +50,7 @@ kset:
 
 ## Redis Key 规范（`:` 分隔）
 
-对齐 cache-spec **K001**：`{system}:{module}:{business}:{identifier}`。统一使用 [`KsetRedisKeys`](kset-starter-redis/src/main/java/com/kset/redis/key/KsetRedisKeys.java)：
+对齐 cache-spec **K001**：`{system}:{module}:{business}:{identifier}`。统一使用 [`KsetRedisKeys`](src/main/java/com/kset/redis/key/KsetRedisKeys.java)：
 
 - 每段非空，**段内不得包含 `:`**（多段用 `join` / `builder`）
 - 与 `kset.redis.key-prefix` 组合：`KsetRedisKeys.joinPrefix(prefix, logicalKey)`（Template 序列化已内置）

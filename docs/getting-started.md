@@ -56,7 +56,7 @@ kset-framework 提供两类典型接入方式，对应 **两个示例工程**：
 
 **不要** 引入 `starter-nacos`、`starter-dubbo`、`starter-gateway`（单机不会写入 Nacos 默认 `spring.config.import`）。
 
-引入 `kset-starter-monitor` 后，业务代码获取 traceId 或埋点请使用 **`com.kset.common.monitor.Monitor`**（详见 [monitoring.md](monitoring.md)）：
+引入 `kset-starter-monitor` 后，业务代码获取 traceId 或埋点请使用 **`com.kset.common.monitor.Monitor`**（详见 [kset-starter-monitor/README.md](../kset-starter-monitor/README.md)）：
 
 ```java
 import com.kset.common.monitor.Monitor;
@@ -94,7 +94,7 @@ kset:
     default-ttl: 30m
 ```
 
-业务侧推荐注入 **`KsetRedisService`** 或使用静态 **`KsetRedis`**（见 [kset-redis.md](kset-redis.md)）。须配置 **`kset.redis.default-ttl`**（禁止永久 key）；可选 **`kset.redis.redisson.enabled=true`** 启用 Redisson 分布式锁。示例：
+业务侧推荐注入 **`KsetRedisService`** 或使用静态 **`KsetRedis`**（见 [kset-starter-redis/README.md](../kset-starter-redis/README.md)）。须配置 **`kset.redis.default-ttl`**（禁止永久 key）；可选 **`kset.redis.redisson.enabled=true`** 启用 Redisson 分布式锁。示例：
 
 ```java
 redisService.setEx("user:" + id, user, Duration.ofMinutes(5));
@@ -341,4 +341,4 @@ flowchart LR
 | Dubbo RPC | 否 | 是 |
 | Gateway / 灰度 LB | 否 | 是 |
 
-更多文档：[openapi.md](openapi.md)。
+更多文档：[kset-starter-web/README.md](../kset-starter-web/README.md)。
