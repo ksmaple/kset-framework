@@ -16,7 +16,7 @@
     <packaging>jar</packaging>
 
     <name>kset-starter-datasource</name>
-    <description>KSet datasource starter - JDBC, MyBatis-Plus, Flyway</description>
+    <description>KSet datasource starter - JDBC, MyBatis-Plus, dynamic-datasource</description>
 
     <dependencies>
         <dependency>

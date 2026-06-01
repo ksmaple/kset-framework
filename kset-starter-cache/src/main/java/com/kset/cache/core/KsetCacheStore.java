@@ -27,4 +27,11 @@ public interface KsetCacheStore {
      * 从当前层删除缓存值。
      */
     void evict(KsetCacheSpec spec);
+
+    /**
+     * Clear all entries of a cache namespace when the backend supports it.
+     */
+    default void clear(String cacheName) {
+        throw new UnsupportedOperationException(layer() + " cache store does not support clear");
+    }
 }

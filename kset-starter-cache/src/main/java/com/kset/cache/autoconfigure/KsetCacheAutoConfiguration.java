@@ -8,11 +8,13 @@ import com.kset.cache.core.KsetCacheStore;
 import com.kset.cache.interceptor.KsetCacheAspect;
 import com.kset.cache.interceptor.KsetCacheKeyEvaluator;
 import com.kset.cache.store.CaffeineKsetCacheStore;
+import com.kset.cache.spring.KsetSpringCacheManager;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Bean;
 
 import java.util.List;
@@ -54,6 +56,13 @@ public class KsetCacheAutoConfiguration {
     @ConditionalOnMissingBean
     public KsetCacheBootstrap ksetCacheBootstrap(KsetCacheFacade cacheFacade) {
         return new KsetCacheBootstrap(cacheFacade);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(CacheManager.class)
+    @ConditionalOnProperty(prefix = "kset.cache.spring", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public CacheManager ksetSpringCacheManager(KsetCacheFacade cacheFacade, KsetCacheProperties properties) {
+        return new KsetSpringCacheManager(cacheFacade, properties);
     }
 
     @Bean

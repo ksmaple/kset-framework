@@ -85,6 +85,26 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
     }
 
     @Override
+    public void clear(String cacheName) {
+        for (KsetCacheLayer layer : properties.getDefaultLayers()) {
+            KsetCacheStore store = stores.get(layer);
+            if (store == null) {
+                continue;
+            }
+            try (MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.CACHE, "clear." + layer)) {
+                store.clear(cacheName);
+                tx.setStatus(MonitorStatus.SUCCESS);
+            } catch (UnsupportedOperationException ignored) {
+                log.warn("cache clear unsupported layer={} cacheName={}", layer, cacheName);
+            } catch (RuntimeException | Error e) {
+                log.warn("cache clear failed layer={} cacheName={}", layer, cacheName, e);
+                Monitor.logError(e, "cache clear failed");
+                metrics.error();
+            }
+        }
+    }
+
+    @Override
     public Object getOrLoad(List<KsetCacheSpec> specs, Callable<Object> loader) throws Exception {
         if (specs == null || specs.isEmpty()) {
             return loader.call();

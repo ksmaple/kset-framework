@@ -8,6 +8,7 @@ import com.kset.cache.core.KsetCacheStore;
 import com.kset.cache.core.KsetCacheValue;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 
 public class CaffeineKsetCacheStore implements KsetCacheStore {
@@ -47,6 +48,16 @@ public class CaffeineKsetCacheStore implements KsetCacheStore {
     @Override
     public void evict(KsetCacheSpec spec) {
         cache.invalidate(spec.fullKey());
+    }
+
+    @Override
+    public void clear(String cacheName) {
+        String prefix = cacheName + "::";
+        for (Map.Entry<String, TimedValue> entry : cache.asMap().entrySet()) {
+            if (entry.getKey().startsWith(prefix)) {
+                cache.invalidate(entry.getKey());
+            }
+        }
     }
 
     private static long expiresAt(Duration ttl) {

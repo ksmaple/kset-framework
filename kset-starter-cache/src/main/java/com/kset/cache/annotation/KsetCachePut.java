@@ -27,7 +27,7 @@ public @interface KsetCachePut {
     /**
      * 写入的缓存层级。
      */
-    KsetCacheLayer[] layers() default {KsetCacheLayer.L1, KsetCacheLayer.L2};
+    KsetCacheLayer[] layers() default {};
 
     /**
      * 非空结果的过期时间；空值时使用全局或层级默认 TTL。

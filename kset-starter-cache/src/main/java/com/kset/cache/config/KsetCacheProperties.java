@@ -20,7 +20,7 @@ public class KsetCacheProperties {
     /**
      * 未在注解中指定 layers 时使用的默认缓存层级。
      */
-    private List<KsetCacheLayer> defaultLayers = new ArrayList<>(List.of(KsetCacheLayer.L1, KsetCacheLayer.L2));
+    private List<KsetCacheLayer> defaultLayers = new ArrayList<>(List.of(KsetCacheLayer.L1));
     /**
      * 默认是否缓存 null 结果，避免热点空值反复穿透到后端。
      */
@@ -35,6 +35,7 @@ public class KsetCacheProperties {
     private boolean singleFlightEnabled = true;
     private final L1 l1 = new L1();
     private final L2 l2 = new L2();
+    private final Spring spring = new Spring();
 
     public boolean isEnabled() {
         return enabled;
@@ -84,6 +85,10 @@ public class KsetCacheProperties {
         return l2;
     }
 
+    public Spring getSpring() {
+        return spring;
+    }
+
     public static class L1 {
         /**
          * 是否启用本地 L1 缓存。
@@ -127,7 +132,7 @@ public class KsetCacheProperties {
         /**
          * 是否要求存在 L2 存储；为 true 时缺少 L2 会启动失败。
          */
-        private boolean required = true;
+        private boolean required = false;
         /**
          * L2 默认 TTL。
          */
@@ -147,6 +152,21 @@ public class KsetCacheProperties {
 
         public void setDefaultTtl(Duration defaultTtl) {
             this.defaultTtl = defaultTtl;
+        }
+    }
+
+    public static class Spring {
+        /**
+         * Whether to expose KSet cache as a Spring CacheManager.
+         */
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
     }
 }

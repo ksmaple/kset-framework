@@ -22,7 +22,7 @@
 | API | 需调整 | `@GetMapping`/`@PostMapping`、路径参数；统一 `ApiResponse` | references/api-spec.md |
 | Frontend | 待生成 | 本仓无前端 | references/frontend-spec.md |
 | SQL | 部分整合 | MyBatis-Plus、`@TableLogic`、`IdType.AUTO`；方言 MySQL | references/sql-spec.md |
-| Conversion | 不适用 | 无 MapStruct DTO 层；以 PO/Entity 与配置类为主 | references/conversion-spec.md |
+| Conversion | 已整合 | MapStruct 1.5.5；`com.kset.common.convert.KsetMapperConfig` 全局配置；依赖与注解处理器见 `kset-parent` / `kset-common` | references/conversion-spec.md |
 | Event | 按需 | 部分能力在 starter 中（按模块阅读） | references/event-spec.md |
 | Cache | 部分整合 | Redis starter；按模块配置 | references/cache-spec.md |
 | Orchestration | 部分整合 | Dubbo、Gateway、Nacos 等云原生组件 | references/orchestration-spec.md |

@@ -17,11 +17,11 @@ public class KsetWebMvcConfigurer implements WebMvcConfigurer {
     @Bean
     public Jackson2ObjectMapperBuilderCustomizer ksetJacksonCustomizer() {
         return builder -> {
-            builder.modules(new JavaTimeModule());
             SimpleModule longModule = new SimpleModule();
             longModule.addSerializer(Long.class, ToStringSerializer.instance);
             longModule.addSerializer(Long.TYPE, ToStringSerializer.instance);
-            builder.modules(longModule);
+            builder.modulesToInstall(JavaTimeModule.class);
+            builder.modulesToInstall(longModule);
             builder.simpleDateFormat("yyyy-MM-dd HH:mm:ss");
         };
     }

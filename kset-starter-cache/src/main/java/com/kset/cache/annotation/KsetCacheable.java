@@ -25,9 +25,9 @@ public @interface KsetCacheable {
     String key();
 
     /**
-     * 参与读写的缓存层级，默认先查 L1 再查 L2。
+     * 参与读写的缓存层级；未指定时使用 kset.cache.default-layers。
      */
-    KsetCacheLayer[] layers() default {KsetCacheLayer.L1, KsetCacheLayer.L2};
+    KsetCacheLayer[] layers() default {};
 
     /**
      * 非空结果的过期时间；空值时使用全局或层级默认 TTL。

@@ -23,16 +23,6 @@ spring:
     #   validation-timeout: 5000
     #   connection-test-query: SELECT 1
 
-# 来源：Flyway / Spring Boot FlywayProperties。
-# 含义：数据库迁移配置，只有需要自动迁移时打开。
-# spring:
-#   flyway:
-#     enabled: true
-#     baseline-on-migrate: true
-#     locations: classpath:db/migration/mysql
-#     table: flyway_schema_history
-#     out-of-order: false
-
 # 来源：MyBatis-Plus / MyBatis 原生配置。
 # 含义：覆盖 mapper、枚举、驼峰映射、逻辑删除等行为时打开。
 # mybatis-plus:

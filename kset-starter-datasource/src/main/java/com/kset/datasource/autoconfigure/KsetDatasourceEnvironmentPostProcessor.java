@@ -26,7 +26,6 @@ public class KsetDatasourceEnvironmentPostProcessor implements EnvironmentPostPr
         putIfMissing(environment, defaults, "mybatis-plus.global-config.db-config.logic-delete-field", "deleted");
         putIfMissing(environment, defaults, "mybatis-plus.global-config.db-config.logic-delete-value", "1");
         putIfMissing(environment, defaults, "mybatis-plus.global-config.db-config.logic-not-delete-value", "0");
-        putIfMissing(environment, defaults, "spring.flyway.locations", "classpath:db/migration");
         putDynamicDatasourceDefault(environment, defaults);
         if (!defaults.isEmpty()) {
             environment.getPropertySources().addLast(new MapPropertySource(PROPERTY_SOURCE_NAME, defaults));

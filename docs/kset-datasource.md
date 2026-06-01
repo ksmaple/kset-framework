@@ -1,6 +1,6 @@
 # KSet Datasource
 
-`kset-starter-datasource` 提供 JDBC、MyBatis-Plus、Flyway、dynamic-datasource 多数据源和 KSet 自动填充能力。MySQL、PostgreSQL、SQLite 不再提供 KSet 独立 starter，业务按需直接引入对应 JDBC 驱动。
+`kset-starter-datasource` 提供 JDBC、MyBatis-Plus、dynamic-datasource 多数据源和 KSet 自动填充能力。MySQL、PostgreSQL、SQLite 不再提供 KSet 独立 starter，业务按需直接引入对应 JDBC 驱动。
 
 ## 单数据源
 
@@ -32,7 +32,6 @@ Maven 依赖示例：
 - `spring.datasource.username`：来源 Spring Boot `DataSourceProperties`，数据库用户名。
 - `spring.datasource.password`：来源 Spring Boot `DataSourceProperties`，数据库密码。
 - `spring.datasource.hikari.*`：来源 HikariCP，连接池参数，非必选。
-- `spring.flyway.*`：来源 Spring Boot FlywayProperties，数据库迁移参数，非必选。
 - `mybatis-plus.*`：来源 MyBatis-Plus，Mapper、枚举、驼峰映射、逻辑删除等参数，非必选。
 
 ## 多数据源
@@ -91,5 +90,5 @@ public void writeAuditLog() {
 - 没有配置 `spring.datasource.dynamic.datasource.*` 时，KSet 会默认关闭 dynamic-datasource 自动配置，避免影响 Spring Boot 原生单数据源。
 - 配置了 `spring.datasource.dynamic.datasource.*` 后，dynamic-datasource 按开源默认规则启用。
 - MyBatis-Plus 使用最终的 Spring `DataSource`，单库和多库都不需要额外配置。
-- Flyway 默认跟随主数据源；多库迁移建议由业务显式配置。
+- Flyway 不属于 datasource starter 默认能力；需要数据库迁移时由业务显式引入 Flyway 依赖和配置。
 - Monitor SQL 拦截器基于 MyBatis / MyBatis-Plus 生效，不按数据库类型额外配置。

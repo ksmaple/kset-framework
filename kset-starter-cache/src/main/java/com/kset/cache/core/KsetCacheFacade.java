@@ -25,6 +25,11 @@ public interface KsetCacheFacade {
     void evict(KsetCacheSpec spec);
 
     /**
+     * Clear all entries under the cache namespace for the configured default layers.
+     */
+    void clear(String cacheName);
+
+    /**
      * 多层缓存读取；全部未命中时调用 loader，并按规格回填缓存。
      */
     Object getOrLoad(List<KsetCacheSpec> specs, Callable<Object> loader) throws Exception;

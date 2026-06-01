@@ -1,6 +1,6 @@
 # KSet Cache 多级缓存
 
-`kset-starter-cache` 提供统一缓存门面、KSet 自定义注解、L1 Caffeine、本地 single-flight、指标统计与 L2 SPI。它不依赖 `kset-starter-redis`；需要 Redis 二级缓存时，额外引入 `kset-starter-redis`，Redis 模块会自动注册 L2 适配器。
+`kset-starter-cache` 提供统一缓存门面、KSet 自定义注解、Spring Cache 适配、L1 Caffeine、本地 single-flight、指标统计与 L2 SPI。它不依赖 `kset-starter-redis`；需要 Redis 二级缓存时，额外引入 `kset-starter-redis`，Redis 模块会自动注册 L2 适配器。
 
 ## 依赖
 
@@ -28,7 +28,7 @@
 
 ## 配置
 
-只用 L1 时要把默认层级改为 `L1`，否则声明 L2 但没有 L2 store 会启动失败。
+默认只启用 L1。只有显式配置 `default-layers: L1,L2` 或注解上声明 `layers = {L1, L2}` 时才要求存在 L2 store。
 
 ```yaml
 kset:
@@ -38,6 +38,8 @@ kset:
     cache-null: true
     null-ttl: 1m
     single-flight-enabled: true
+    spring:
+      enabled: true
     l1:
       enabled: true
       default-ttl: 5m
@@ -66,6 +68,11 @@ public UserDTO getById(Long id) {
     return queryDb(id);
 }
 
+@KsetCacheable(cacheName = "user", key = "'user:id:' + #id")
+public UserDTO getByIdWithDefaultLayers(Long id) {
+    return queryDb(id);
+}
+
 @KsetCachePut(cacheName = "user", key = "'user:id:' + #result.id", layers = {L1, L2})
 public UserDTO save(UserDTO user) {
     return saveDb(user);
@@ -85,8 +92,27 @@ public void deleteUser(Long id, String phone) {
 - 读顺序固定为 L1 -> L2 -> 方法加载。
 - L2 命中后自动回填 L1。
 - 方法加载成功后写入声明的所有层级。
+- KSet 注解不声明 `layers` 时使用 `kset.cache.default-layers`。
 - 默认缓存 `null`，使用 `kset.cache.null-ttl`。
 - key 使用 SpEL，支持 `#id`、`#result`、`#root.methodName`。
+
+## Spring Cache 适配
+
+默认注册 `CacheManager`，可直接使用 Spring Cache 注解。`@CacheEvict(allEntries = true)` 会调用 KSet 的 cache namespace clear。
+
+```java
+@Cacheable(cacheNames = "user", key = "#id")
+public UserDTO getById(Long id) {
+    return queryDb(id);
+}
+
+@CacheEvict(cacheNames = "user", allEntries = true)
+public void refreshUsers() {
+    reloadUsers();
+}
+```
+
+如业务项目已有自己的 `CacheManager`，框架不会覆盖；也可以通过 `kset.cache.spring.enabled=false` 关闭适配。
 
 ## 编程式 API
 

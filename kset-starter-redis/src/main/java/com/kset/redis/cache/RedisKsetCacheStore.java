@@ -7,6 +7,8 @@ import com.kset.cache.core.KsetCacheValue;
 import com.kset.redis.core.KsetRedisService;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class RedisKsetCacheStore implements KsetCacheStore {
@@ -35,5 +37,20 @@ public class RedisKsetCacheStore implements KsetCacheStore {
     @Override
     public void evict(KsetCacheSpec spec) {
         redisService.delete(spec.fullKey());
+    }
+
+    @Override
+    public void clear(String cacheName) {
+        List<String> keys = new ArrayList<>();
+        redisService.scanKeys(cacheName + "::*", key -> {
+            keys.add(key);
+            if (keys.size() >= 500) {
+                redisService.deleteAll(List.copyOf(keys));
+                keys.clear();
+            }
+        });
+        if (!keys.isEmpty()) {
+            redisService.deleteAll(keys);
+        }
     }
 }

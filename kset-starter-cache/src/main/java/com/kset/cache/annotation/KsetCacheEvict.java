@@ -27,7 +27,7 @@ public @interface KsetCacheEvict {
     /**
      * 需要清理的缓存层级。
      */
-    KsetCacheLayer[] layers() default {KsetCacheLayer.L1, KsetCacheLayer.L2};
+    KsetCacheLayer[] layers() default {};
 
     /**
      * 是否在目标方法执行前清理缓存。

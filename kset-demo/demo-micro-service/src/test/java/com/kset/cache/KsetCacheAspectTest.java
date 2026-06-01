@@ -74,8 +74,16 @@ class KsetCacheAspectTest {
     }
 
     @Test
-    void startupFailsWhenDefaultLayersRequireMissingL2() {
+    void startupUsesL1ByDefault() {
         new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(AopAutoConfiguration.class, KsetCacheAutoConfiguration.class))
+                .run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    void startupFailsWhenExplicitDefaultLayersRequireMissingL2() {
+        new ApplicationContextRunner()
+                .withPropertyValues("kset.cache.default-layers=L1,L2")
                 .withConfiguration(AutoConfigurations.of(AopAutoConfiguration.class, KsetCacheAutoConfiguration.class))
                 .run(context -> {
                     assertThat(context).hasFailed();

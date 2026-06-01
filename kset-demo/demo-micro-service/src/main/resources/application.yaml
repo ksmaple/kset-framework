@@ -7,8 +7,6 @@ spring:
     url: jdbc:postgresql://127.0.0.1:5432/kset_demo
     username: postgres
     password: postgres
-  flyway:
-    validate-on-migrate: false
   data:
     redis:
       host: 127.0.0.1

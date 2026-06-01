@@ -25,8 +25,8 @@ public class KsetWebAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public GlobalExceptionHandler globalExceptionHandler() {
-        return new GlobalExceptionHandler();
+    public GlobalExceptionHandler globalExceptionHandler(KsetWebProperties properties) {
+        return new GlobalExceptionHandler(properties);
     }
 
     @Bean

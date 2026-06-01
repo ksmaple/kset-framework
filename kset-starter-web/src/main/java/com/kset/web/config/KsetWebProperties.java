@@ -10,6 +10,7 @@ public class KsetWebProperties {
     private final Knife4j knife4j = new Knife4j();
     private final RequestLogging requestLogging = new RequestLogging();
     private final Response response = new Response();
+    private final ExceptionHandling exceptionHandling = new ExceptionHandling();
 
     public Oplog getOplog() {
         return oplog;
@@ -25,6 +26,10 @@ public class KsetWebProperties {
 
     public Response getResponse() {
         return response;
+    }
+
+    public ExceptionHandling getExceptionHandling() {
+        return exceptionHandling;
     }
 
     public static class Oplog {
@@ -110,6 +115,69 @@ public class KsetWebProperties {
 
         public void setTraceIdEnabled(boolean traceIdEnabled) {
             this.traceIdEnabled = traceIdEnabled;
+        }
+    }
+
+    public static class ExceptionHandling {
+        /**
+         * Whether framework exception responses should use real HTTP error status.
+         */
+        private boolean useHttpStatus = true;
+        /**
+         * Business code used when BusinessException does not carry a numeric errorCode.
+         */
+        private int defaultBusinessCode = -1;
+        /**
+         * Business code used for validation errors.
+         */
+        private int validationCode = -1;
+        /**
+         * Business code used for unknown system errors.
+         */
+        private int systemCode = -1;
+        /**
+         * Whether numeric BusinessException#errorCode should be parsed as ApiResponse code.
+         */
+        private boolean parseBusinessErrorCode = true;
+
+        public boolean isUseHttpStatus() {
+            return useHttpStatus;
+        }
+
+        public void setUseHttpStatus(boolean useHttpStatus) {
+            this.useHttpStatus = useHttpStatus;
+        }
+
+        public int getDefaultBusinessCode() {
+            return defaultBusinessCode;
+        }
+
+        public void setDefaultBusinessCode(int defaultBusinessCode) {
+            this.defaultBusinessCode = defaultBusinessCode;
+        }
+
+        public int getValidationCode() {
+            return validationCode;
+        }
+
+        public void setValidationCode(int validationCode) {
+            this.validationCode = validationCode;
+        }
+
+        public int getSystemCode() {
+            return systemCode;
+        }
+
+        public void setSystemCode(int systemCode) {
+            this.systemCode = systemCode;
+        }
+
+        public boolean isParseBusinessErrorCode() {
+            return parseBusinessErrorCode;
+        }
+
+        public void setParseBusinessErrorCode(boolean parseBusinessErrorCode) {
+            this.parseBusinessErrorCode = parseBusinessErrorCode;
         }
     }
 }

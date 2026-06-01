@@ -20,6 +20,10 @@ public class NoOpKsetCacheFacade implements KsetCacheFacade {
     }
 
     @Override
+    public void clear(String cacheName) {
+    }
+
+    @Override
     public Object getOrLoad(List<KsetCacheSpec> specs, Callable<Object> loader) throws Exception {
         return loader.call();
     }

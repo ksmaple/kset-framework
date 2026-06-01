@@ -1,6 +1,7 @@
 package com.kset.cache.interceptor;
 
 import com.kset.cache.core.KsetCacheFacade;
+import com.kset.cache.core.KsetCacheLayer;
 import com.kset.cache.core.KsetCacheSpec;
 import com.kset.cache.config.KsetCacheProperties;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -98,10 +99,13 @@ public class KsetCacheAspect {
                                  Object target,
                                  Object result,
                                  Class<?> valueType) {
+        List<KsetCacheLayer> layers = operation.layers().isEmpty()
+                ? properties.getDefaultLayers()
+                : operation.layers();
         return new KsetCacheSpec(
                 operation.cacheName(),
                 keyEvaluator.evalKey(operation.key(), method, args, target, result),
-                operation.layers(),
+                layers,
                 parseDuration(operation.ttl(), null),
                 parseDuration(operation.nullTtl(), properties.getNullTtl()),
                 operation.cacheNull(),

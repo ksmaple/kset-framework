@@ -82,8 +82,6 @@ spring:
     redis:
       host: localhost
       port: 6379
-  flyway:
-    enabled: true
 
 knife4j:
   enable: true
@@ -337,7 +335,7 @@ flowchart LR
 |------|:----:|:------------:|
 | 统一响应 / 异常 / TraceId | 是 | 是 |
 | Knife4j | 是 | 是（各业务服务） |
-| MyBatis-Plus / Flyway | 是 | 是 |
+| MyBatis-Plus / dynamic-datasource | 是 | 是 |
 | Redis | 可选 | 可选 |
 | Nacos 配置/发现 | 否 | 是 |
 | Dubbo RPC | 否 | 是 |

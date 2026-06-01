@@ -59,20 +59,8 @@ class KsetDatasourceAutoConfigurationTest {
                 .isEqualTo("1");
         assertThat(environment.getProperty("mybatis-plus.global-config.db-config.logic-not-delete-value"))
                 .isEqualTo("0");
-        assertThat(environment.getProperty("spring.flyway.locations"))
-                .isEqualTo("classpath:db/migration");
         assertThat(environment.getProperty("spring.datasource.dynamic.enabled", Boolean.class))
                 .isFalse();
-    }
-
-    @Test
-    void respectsExistingDatasourceDefaults() {
-        MockEnvironment environment = new MockEnvironment();
-        environment.setProperty("spring.flyway.locations", "classpath:db/migration/postgresql");
-        processor.postProcessEnvironment(environment, new SpringApplication(Object.class));
-
-        assertThat(environment.getProperty("spring.flyway.locations"))
-                .isEqualTo("classpath:db/migration/postgresql");
     }
 
     @Test
