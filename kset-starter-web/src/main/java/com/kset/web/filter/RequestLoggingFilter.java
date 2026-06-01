@@ -23,6 +23,9 @@ import java.nio.charset.StandardCharsets;
 public class RequestLoggingFilter extends OncePerRequestFilter {
 
     private static final int REQUEST_BODY_CACHE_LIMIT = 64 * 1024;
+    private static final String CONTENT_TYPE_JSON = "json";
+    private static final String CONTENT_TYPE_TEXT = "text";
+    private static final String CONTENT_TYPE_FORM = "x-www-form-urlencoded";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -39,7 +42,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
                         cost + "ms " + request.getMethod() + " " + request.getRequestURI());
             }
             if (log.isDebugEnabled()) {
-                String body = new String(wrappedRequest.getContentAsByteArray(), StandardCharsets.UTF_8);
+                String body = readBody(wrappedRequest);
                 log.debug("HTTP {} {} status={} costMs={} traceId={} body={}",
                         request.getMethod(),
                         request.getRequestURI(),
@@ -50,5 +53,26 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
             }
             wrappedResponse.copyBodyToResponse();
         }
+    }
+
+    private String readBody(ContentCachingRequestWrapper request) {
+        if (!isVisibleContent(request.getContentType())) {
+            return "[content omitted]";
+        }
+        byte[] content = request.getContentAsByteArray();
+        if (content.length == 0) {
+            return "";
+        }
+        return new String(content, StandardCharsets.UTF_8);
+    }
+
+    private boolean isVisibleContent(String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            return true;
+        }
+        String value = contentType.toLowerCase();
+        return value.contains(CONTENT_TYPE_JSON)
+                || value.contains(CONTENT_TYPE_TEXT)
+                || value.contains(CONTENT_TYPE_FORM);
     }
 }

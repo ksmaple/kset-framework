@@ -7,6 +7,8 @@ import jakarta.servlet.http.HttpServletRequest;
  */
 public final class IpUtil {
 
+    private static final String UNKNOWN = "unknown";
+
     private IpUtil() {
     }
 
@@ -15,15 +17,30 @@ public final class IpUtil {
      */
     public static String getClientIp(HttpServletRequest request) {
         String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+        if (!hasIp(ip)) {
             ip = request.getHeader("Proxy-Client-IP");
         }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+        if (!hasIp(ip)) {
             ip = request.getHeader("WL-Proxy-Client-IP");
         }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+        if (!hasIp(ip)) {
             ip = request.getRemoteAddr();
         }
-        return ip;
+        return firstIp(ip);
+    }
+
+    private static boolean hasIp(String ip) {
+        return ip != null && !ip.isBlank() && !UNKNOWN.equalsIgnoreCase(ip.trim());
+    }
+
+    private static String firstIp(String ip) {
+        if (ip == null) {
+            return null;
+        }
+        int commaIndex = ip.indexOf(',');
+        if (commaIndex < 0) {
+            return ip.trim();
+        }
+        return ip.substring(0, commaIndex).trim();
     }
 }

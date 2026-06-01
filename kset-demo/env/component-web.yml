@@ -12,6 +12,17 @@
 #       enabled: false
 #     response:
 #       trace-id-enabled: true
+#     exception-handling:
+#       # 默认 false：HTTP 状态固定 200，业务异常状态通过 ApiResponse.code/message 表达
+#       use-http-status: false
+#       default-business-code: 400
+#       validation-code: 400
+#       system-code: 500
+#       method-not-allowed-code: 405
+#       not-found-code: 404
+#       unsupported-media-type-code: 415
+#       bad-request-code: 400
+#       parse-business-error-code: true
 
 # 来源：Spring MVC / Servlet 原生配置。
 # 非必选项：需要覆盖路径匹配、请求大小、错误响应时再打开。

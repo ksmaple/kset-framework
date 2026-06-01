@@ -121,20 +121,37 @@ public class KsetWebProperties {
     public static class ExceptionHandling {
         /**
          * Whether framework exception responses should use real HTTP error status.
+         * Default false keeps HTTP 200 and returns error status through ApiResponse.code.
          */
-        private boolean useHttpStatus = true;
+        private boolean useHttpStatus = false;
         /**
          * Business code used when BusinessException does not carry a numeric errorCode.
          */
-        private int defaultBusinessCode = -1;
+        private int defaultBusinessCode = 400;
         /**
          * Business code used for validation errors.
          */
-        private int validationCode = -1;
+        private int validationCode = 400;
         /**
          * Business code used for unknown system errors.
          */
-        private int systemCode = -1;
+        private int systemCode = 500;
+        /**
+         * Business code used when request method is not supported.
+         */
+        private int methodNotAllowedCode = 405;
+        /**
+         * Business code used when requested resource is not found.
+         */
+        private int notFoundCode = 404;
+        /**
+         * Business code used when request media type is not supported.
+         */
+        private int unsupportedMediaTypeCode = 415;
+        /**
+         * Business code used when request body cannot be read.
+         */
+        private int badRequestCode = 400;
         /**
          * Whether numeric BusinessException#errorCode should be parsed as ApiResponse code.
          */
@@ -170,6 +187,38 @@ public class KsetWebProperties {
 
         public void setSystemCode(int systemCode) {
             this.systemCode = systemCode;
+        }
+
+        public int getMethodNotAllowedCode() {
+            return methodNotAllowedCode;
+        }
+
+        public void setMethodNotAllowedCode(int methodNotAllowedCode) {
+            this.methodNotAllowedCode = methodNotAllowedCode;
+        }
+
+        public int getNotFoundCode() {
+            return notFoundCode;
+        }
+
+        public void setNotFoundCode(int notFoundCode) {
+            this.notFoundCode = notFoundCode;
+        }
+
+        public int getUnsupportedMediaTypeCode() {
+            return unsupportedMediaTypeCode;
+        }
+
+        public void setUnsupportedMediaTypeCode(int unsupportedMediaTypeCode) {
+            this.unsupportedMediaTypeCode = unsupportedMediaTypeCode;
+        }
+
+        public int getBadRequestCode() {
+            return badRequestCode;
+        }
+
+        public void setBadRequestCode(int badRequestCode) {
+            this.badRequestCode = badRequestCode;
         }
 
         public boolean isParseBusinessErrorCode() {
