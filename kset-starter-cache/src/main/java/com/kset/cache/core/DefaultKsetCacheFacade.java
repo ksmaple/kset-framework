@@ -18,6 +18,8 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 
 public class DefaultKsetCacheFacade implements KsetCacheFacade {
 
@@ -39,11 +41,12 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
 
     @Override
     public Optional<KsetCacheValue> get(KsetCacheSpec spec) {
-        for (KsetCacheLayer layer : readOrder(spec.layers())) {
+        List<KsetCacheLayer> layers = effectiveLayers(spec.layers());
+        for (KsetCacheLayer layer : readOrder(layers)) {
             Optional<KsetCacheValue> value = getFromLayer(layer, spec);
             if (value.isPresent()) {
                 metrics.hit(layer);
-                if (layer == KsetCacheLayer.L2 && spec.layers().contains(KsetCacheLayer.L1)) {
+                if (layer == KsetCacheLayer.L2 && layers.contains(KsetCacheLayer.L1)) {
                     putToLayer(KsetCacheLayer.L1, spec, value.get());
                 }
                 return value;
@@ -59,7 +62,7 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
             return;
         }
         KsetCacheValue cacheValue = KsetCacheValue.of(value);
-        for (KsetCacheLayer layer : spec.layers()) {
+        for (KsetCacheLayer layer : effectiveLayers(spec.layers())) {
             putToLayer(layer, spec, cacheValue);
         }
         metrics.put();
@@ -67,7 +70,7 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
 
     @Override
     public void evict(KsetCacheSpec spec) {
-        for (KsetCacheLayer layer : spec.layers()) {
+        for (KsetCacheLayer layer : effectiveLayers(spec.layers())) {
             KsetCacheStore store = stores.get(layer);
             if (store == null) {
                 continue;
@@ -86,7 +89,12 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
 
     @Override
     public void clear(String cacheName) {
-        for (KsetCacheLayer layer : properties.getDefaultLayers()) {
+        clear(cacheName, properties.getDefaultLayers());
+    }
+
+    @Override
+    public void clear(String cacheName, List<KsetCacheLayer> layers) {
+        for (KsetCacheLayer layer : effectiveLayers(layers)) {
             KsetCacheStore store = stores.get(layer);
             if (store == null) {
                 continue;
@@ -106,6 +114,13 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
 
     @Override
     public Object getOrLoad(List<KsetCacheSpec> specs, Callable<Object> loader) throws Exception {
+        return getOrLoad(specs, loader, value -> specs);
+    }
+
+    @Override
+    public Object getOrLoad(List<KsetCacheSpec> specs,
+                            Callable<Object> loader,
+                            Function<Object, List<KsetCacheSpec>> writeSpecSelector) throws Exception {
         if (specs == null || specs.isEmpty()) {
             return loader.call();
         }
@@ -118,10 +133,10 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
         if (!properties.isSingleFlightEnabled()) {
             Object loaded = loader.call();
             metrics.load();
-            putAll(specs, loaded);
+            putAll(writeSpecs(writeSpecSelector, loaded), loaded);
             return loaded;
         }
-        return loadSingleFlight(specs, loader);
+        return loadSingleFlight(specs, loader, writeSpecSelector);
     }
 
     private Object unwrap(KsetCacheSpec spec, KsetCacheValue value) {
@@ -132,12 +147,14 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
         return objectMapper.convertValue(raw, spec.valueType());
     }
 
-    private Object loadSingleFlight(List<KsetCacheSpec> specs, Callable<Object> loader) throws Exception {
+    private Object loadSingleFlight(List<KsetCacheSpec> specs,
+                                    Callable<Object> loader,
+                                    Function<Object, List<KsetCacheSpec>> writeSpecSelector) throws Exception {
         String loadKey = specs.get(0).fullKey();
         FutureTask<Object> newTask = new FutureTask<>(() -> {
             Object loaded = loader.call();
             metrics.load();
-            putAll(specs, loaded);
+            putAll(writeSpecs(writeSpecSelector, loaded), loaded);
             return loaded;
         });
         FutureTask<Object> task = loadingTasks.putIfAbsent(loadKey, newTask);
@@ -168,9 +185,20 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
     }
 
     private void putAll(List<KsetCacheSpec> specs, Object value) {
+        if (specs == null || specs.isEmpty()) {
+            return;
+        }
         for (KsetCacheSpec spec : specs) {
             put(spec, value);
         }
+    }
+
+    private static List<KsetCacheSpec> writeSpecs(Function<Object, List<KsetCacheSpec>> selector, Object value) {
+        if (selector == null) {
+            return List.of();
+        }
+        List<KsetCacheSpec> selected = selector.apply(value);
+        return selected != null ? selected : List.of();
     }
 
     private Optional<KsetCacheValue> getFromLayer(KsetCacheLayer layer, KsetCacheSpec spec) {
@@ -195,7 +223,7 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
         if (store == null) {
             return;
         }
-        Duration ttl = effectiveTtl(layer, spec, value);
+        Duration ttl = jitter(effectiveTtl(layer, spec, value));
         try (MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.CACHE, "put." + layer)) {
             store.put(spec, value, ttl);
             tx.setStatus(MonitorStatus.SUCCESS);
@@ -222,6 +250,45 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
         return layers.stream()
                 .sorted(Comparator.comparing(KsetCacheLayer::ordinal))
                 .toList();
+    }
+
+    private Duration jitter(Duration ttl) {
+        if (!properties.isTtlJitterEnabled()
+                || ttl == null
+                || ttl.isZero()
+                || ttl.isNegative()
+                || properties.getTtlJitterPercent() <= 0) {
+            return ttl;
+        }
+        long baseNanos;
+        try {
+            baseNanos = ttl.toNanos();
+        } catch (ArithmeticException ignored) {
+            return ttl;
+        }
+        long maxExtra = baseNanos / 100 * properties.getTtlJitterPercent();
+        if (maxExtra <= 0) {
+            return ttl;
+        }
+        long extra = ThreadLocalRandom.current().nextLong(maxExtra + 1);
+        try {
+            return ttl.plusNanos(extra);
+        } catch (ArithmeticException ignored) {
+            return ttl;
+        }
+    }
+
+    private List<KsetCacheLayer> effectiveLayers(List<KsetCacheLayer> requestedLayers) {
+        List<KsetCacheLayer> available = requestedLayers.stream()
+                .filter(stores::containsKey)
+                .toList();
+        if (!available.isEmpty()) {
+            return available;
+        }
+        if (stores.containsKey(KsetCacheLayer.L1)) {
+            return List.of(KsetCacheLayer.L1);
+        }
+        return List.of();
     }
 
     @Override

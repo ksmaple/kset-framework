@@ -48,6 +48,10 @@ public final class KsetCache {
         facade.clear(cacheName);
     }
 
+    public static void clear(String cacheName, java.util.List<KsetCacheLayer> layers) {
+        facade.clear(cacheName, layers);
+    }
+
     public static <T> T getOrLoad(String cacheName, String key, Class<T> type, Callable<T> loader) throws Exception {
         return facade.getOrLoadValue(KsetCacheSpec.builder(cacheName, key).valueType(type).build(), type, loader);
     }

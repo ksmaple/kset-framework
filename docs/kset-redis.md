@@ -15,7 +15,7 @@
 KSet Redis 统一使用名为 `ksetRedisValueSerializer` 的 Fastjson2 序列化器处理值对象，覆盖范围包括：
 
 - `ksetRedisTemplate` 的 value / hash value
-- `RedisCacheManager` 的缓存值
+- KSet Redis API 与 KSet Cache L2 适配器的缓存值
 - Redisson 的默认 `Codec`
 
 基础类型按 Redis 友好的文本存储，复杂对象按 Fastjson2 JSON 存储并携带类型信息。业务如需调整值序列化规则，只需要声明同名 Bean：

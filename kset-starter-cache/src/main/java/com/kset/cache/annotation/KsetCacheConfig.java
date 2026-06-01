@@ -8,12 +8,12 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-@Target(ElementType.METHOD)
+@Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 /**
- * 删除指定缓存 key，适合写操作后清理旧值。
+ * 类级缓存默认配置，对齐 Spring Cache 的 CacheConfig 迁移习惯。
  */
-public @interface KsetCacheEvict {
+public @interface KsetCacheConfig {
 
     /**
      * 缓存名称，用于区分业务缓存空间。
@@ -33,32 +33,13 @@ public @interface KsetCacheEvict {
     String[] cacheNames() default {};
 
     /**
-     * 缓存 key，支持 SpEL 表达式；allEntries=false 且留空时按 Spring SimpleKey 规则生成。
-     */
-    String key() default "";
-
-    /**
-     * 自定义 key 生成器 Bean 名称；key 非空时优先使用 key 表达式。
+     * 自定义 key 生成器 Bean 名称。
      */
     String keyGenerator() default "";
 
     /**
-     * 执行缓存清理前的条件表达式，返回 true 时才清理缓存。
-     */
-    String condition() default "";
-
-    /**
-     * 需要清理的缓存层级。
+     * 类级默认缓存层级；未指定时使用 kset.cache.default-layers。
      */
     KsetCacheLayer[] layers() default {};
 
-    /**
-     * 是否清理整个缓存命名空间。
-     */
-    boolean allEntries() default false;
-
-    /**
-     * 是否在目标方法执行前清理缓存。
-     */
-    boolean beforeInvocation() default false;
 }

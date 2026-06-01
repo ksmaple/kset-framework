@@ -33,9 +33,16 @@ public class KsetCacheProperties {
      * 是否启用同 key 加载合并，降低缓存击穿时的并发回源。
      */
     private boolean singleFlightEnabled = true;
+    /**
+     * 是否为最终 TTL 增加随机抖动，降低同批 key 同时过期概率。
+     */
+    private boolean ttlJitterEnabled = false;
+    /**
+     * TTL 抖动百分比，开启后在原 TTL 基础上随机增加 0 到该百分比。
+     */
+    private int ttlJitterPercent = 10;
     private final L1 l1 = new L1();
     private final L2 l2 = new L2();
-    private final Spring spring = new Spring();
 
     public boolean isEnabled() {
         return enabled;
@@ -50,7 +57,9 @@ public class KsetCacheProperties {
     }
 
     public void setDefaultLayers(List<KsetCacheLayer> defaultLayers) {
-        this.defaultLayers = defaultLayers != null ? new ArrayList<>(defaultLayers) : new ArrayList<>();
+        this.defaultLayers = defaultLayers != null && !defaultLayers.isEmpty()
+                ? new ArrayList<>(defaultLayers)
+                : new ArrayList<>(List.of(KsetCacheLayer.L1));
     }
 
     public boolean isCacheNull() {
@@ -77,16 +86,28 @@ public class KsetCacheProperties {
         this.singleFlightEnabled = singleFlightEnabled;
     }
 
+    public boolean isTtlJitterEnabled() {
+        return ttlJitterEnabled;
+    }
+
+    public void setTtlJitterEnabled(boolean ttlJitterEnabled) {
+        this.ttlJitterEnabled = ttlJitterEnabled;
+    }
+
+    public int getTtlJitterPercent() {
+        return ttlJitterPercent;
+    }
+
+    public void setTtlJitterPercent(int ttlJitterPercent) {
+        this.ttlJitterPercent = Math.max(0, ttlJitterPercent);
+    }
+
     public L1 getL1() {
         return l1;
     }
 
     public L2 getL2() {
         return l2;
-    }
-
-    public Spring getSpring() {
-        return spring;
     }
 
     public static class L1 {
@@ -102,6 +123,14 @@ public class KsetCacheProperties {
          * L1 本地缓存最大条目数。
          */
         private long maximumSize = 10_000;
+        /**
+         * L1 本地缓存初始容量。
+         */
+        private int initialCapacity = 128;
+        /**
+         * 是否启用 Caffeine 统计。
+         */
+        private boolean recordStats = false;
 
         public boolean isEnabled() {
             return enabled;
@@ -126,25 +155,29 @@ public class KsetCacheProperties {
         public void setMaximumSize(long maximumSize) {
             this.maximumSize = maximumSize;
         }
+
+        public int getInitialCapacity() {
+            return initialCapacity;
+        }
+
+        public void setInitialCapacity(int initialCapacity) {
+            this.initialCapacity = initialCapacity;
+        }
+
+        public boolean isRecordStats() {
+            return recordStats;
+        }
+
+        public void setRecordStats(boolean recordStats) {
+            this.recordStats = recordStats;
+        }
     }
 
     public static class L2 {
         /**
-         * 是否要求存在 L2 存储；为 true 时缺少 L2 会启动失败。
-         */
-        private boolean required = false;
-        /**
          * L2 默认 TTL。
          */
         private Duration defaultTtl = Duration.ofMinutes(30);
-
-        public boolean isRequired() {
-            return required;
-        }
-
-        public void setRequired(boolean required) {
-            this.required = required;
-        }
 
         public Duration getDefaultTtl() {
             return defaultTtl;
@@ -155,18 +188,4 @@ public class KsetCacheProperties {
         }
     }
 
-    public static class Spring {
-        /**
-         * Whether to expose KSet cache as a Spring CacheManager.
-         */
-        private boolean enabled = true;
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-    }
 }

@@ -17,7 +17,6 @@ import org.springframework.context.annotation.Import;
 @Import({
         KsetRedisSerializerConfiguration.class,
         KsetRedisTemplateConfiguration.class,
-        KsetCacheAutoConfiguration.class,
         KsetRedisServiceAutoConfiguration.class,
         KsetRedisMultiSourceConfiguration.class,
         KsetRedissonAutoConfiguration.class,

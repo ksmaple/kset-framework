@@ -3,6 +3,7 @@ package com.kset.cache.core;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
+import java.util.function.Function;
 
 public class NoOpKsetCacheFacade implements KsetCacheFacade {
 
@@ -24,7 +25,18 @@ public class NoOpKsetCacheFacade implements KsetCacheFacade {
     }
 
     @Override
+    public void clear(String cacheName, List<KsetCacheLayer> layers) {
+    }
+
+    @Override
     public Object getOrLoad(List<KsetCacheSpec> specs, Callable<Object> loader) throws Exception {
+        return loader.call();
+    }
+
+    @Override
+    public Object getOrLoad(List<KsetCacheSpec> specs,
+                            Callable<Object> loader,
+                            Function<Object, List<KsetCacheSpec>> writeSpecSelector) throws Exception {
         return loader.call();
     }
 

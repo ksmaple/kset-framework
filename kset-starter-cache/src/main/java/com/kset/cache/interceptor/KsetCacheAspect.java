@@ -12,6 +12,7 @@ import org.springframework.aop.support.AopUtils;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 
@@ -48,11 +49,24 @@ public class KsetCacheAspect {
         evict(operations, method, args, target, KsetCacheKeyEvaluator.noResult(), true);
         List<KsetCacheSpec> cacheableSpecs = operations.stream()
                 .filter(operation -> operation.kind() == KsetCacheOperation.Kind.CACHEABLE)
-                .map(operation -> toSpec(operation, method, args, target, KsetCacheKeyEvaluator.noResult(), method.getReturnType()))
+                .filter(operation -> matchesCondition(operation, method, args, target, KsetCacheKeyEvaluator.noResult()))
+                .filter(operation -> operation.unless().isBlank())
+                .map(operation -> toSpecs(operation, method, args, target, KsetCacheKeyEvaluator.noResult(), method.getReturnType()))
+                .flatMap(Collection::stream)
+                .toList();
+        List<KsetCacheOperation> deferredCacheables = operations.stream()
+                .filter(operation -> operation.kind() == KsetCacheOperation.Kind.CACHEABLE)
+                .filter(operation -> matchesCondition(operation, method, args, target, KsetCacheKeyEvaluator.noResult()))
+                .filter(operation -> !operation.unless().isBlank())
                 .toList();
         Object result;
-        if (!cacheableSpecs.isEmpty()) {
+        if (deferredCacheables.isEmpty() && !cacheableSpecs.isEmpty()) {
             result = cacheFacade.getOrLoad(cacheableSpecs, () -> proceed(point));
+        } else if (!cacheableSpecs.isEmpty() || !deferredCacheables.isEmpty()) {
+            result = cacheFacade.getOrLoad(
+                    readSpecs(cacheableSpecs, deferredCacheables, method, args, target),
+                    () -> proceed(point),
+                    value -> writeSpecs(cacheableSpecs, deferredCacheables, method, args, target, value));
         } else {
             result = point.proceed();
         }
@@ -76,8 +90,38 @@ public class KsetCacheAspect {
     private void put(List<KsetCacheOperation> operations, Method method, Object[] args, Object target, Object result, Class<?> type) {
         operations.stream()
                 .filter(operation -> operation.kind() == KsetCacheOperation.Kind.PUT)
-                .map(operation -> toSpec(operation, method, args, target, result, type))
+                .filter(operation -> matchesCondition(operation, method, args, target, result))
+                .filter(operation -> !matchesUnless(operation, method, args, target, result))
+                .map(operation -> toSpecs(operation, method, args, target, result, type))
+                .flatMap(Collection::stream)
                 .forEach(spec -> cacheFacade.put(spec, result));
+    }
+
+    private List<KsetCacheSpec> readSpecs(List<KsetCacheSpec> directSpecs,
+                                          List<KsetCacheOperation> deferredOperations,
+                                          Method method,
+                                          Object[] args,
+                                          Object target) {
+        List<KsetCacheSpec> allReadSpecs = new java.util.ArrayList<>(directSpecs);
+        deferredOperations.stream()
+                .map(operation -> toSpecs(operation, method, args, target, KsetCacheKeyEvaluator.noResult(), method.getReturnType()))
+                .forEach(allReadSpecs::addAll);
+        return allReadSpecs;
+    }
+
+    private List<KsetCacheSpec> writeSpecs(List<KsetCacheSpec> directSpecs,
+                                           List<KsetCacheOperation> deferredOperations,
+                                           Method method,
+                                           Object[] args,
+                                           Object target,
+                                           Object loaded) {
+        List<KsetCacheSpec> writeSpecs = new java.util.ArrayList<>(directSpecs);
+        deferredOperations.stream()
+                .filter(operation -> !matchesUnless(operation, method, args, target, loaded))
+                .map(operation -> toSpecs(operation, method, args, target, loaded, method.getReturnType()))
+                .flatMap(Collection::stream)
+                .forEach(writeSpecs::add);
+        return writeSpecs;
     }
 
     private void evict(List<KsetCacheOperation> operations,
@@ -89,27 +133,56 @@ public class KsetCacheAspect {
         operations.stream()
                 .filter(operation -> operation.kind() == KsetCacheOperation.Kind.EVICT)
                 .filter(operation -> operation.beforeInvocation() == beforeInvocation)
-                .map(operation -> toSpec(operation, method, args, target, result, method.getReturnType()))
-                .forEach(cacheFacade::evict);
+                .filter(operation -> matchesCondition(operation, method, args, target, result))
+                .forEach(operation -> evict(operation, method, args, target, result));
     }
 
-    private KsetCacheSpec toSpec(KsetCacheOperation operation,
-                                 Method method,
-                                 Object[] args,
-                                 Object target,
-                                 Object result,
-                                 Class<?> valueType) {
+    private void evict(KsetCacheOperation operation,
+                       Method method,
+                       Object[] args,
+                       Object target,
+                       Object result) {
+        if (operation.allEntries()) {
+            List<KsetCacheLayer> layers = operation.layers().isEmpty()
+                    ? properties.getDefaultLayers()
+                    : operation.layers();
+            operation.cacheNames().forEach(cacheName -> cacheFacade.clear(cacheName, layers));
+            return;
+        }
+        toSpecs(operation, method, args, target, result, method.getReturnType()).forEach(cacheFacade::evict);
+    }
+
+    private List<KsetCacheSpec> toSpecs(KsetCacheOperation operation,
+                                        Method method,
+                                        Object[] args,
+                                        Object target,
+                                        Object result,
+                                        Class<?> valueType) {
         List<KsetCacheLayer> layers = operation.layers().isEmpty()
                 ? properties.getDefaultLayers()
                 : operation.layers();
-        return new KsetCacheSpec(
-                operation.cacheName(),
-                keyEvaluator.evalKey(operation.key(), method, args, target, result),
-                layers,
-                parseDuration(operation.ttl(), null),
-                parseDuration(operation.nullTtl(), properties.getNullTtl()),
-                operation.cacheNull(),
-                valueType);
+        String key = keyEvaluator.evalKey(operation.key(), operation.keyGenerator(), method, args, target, result);
+        Duration ttl = parseDuration(operation.ttl(), null);
+        Duration nullTtl = parseDuration(operation.nullTtl(), properties.getNullTtl());
+        return operation.cacheNames().stream()
+                .map(cacheName -> new KsetCacheSpec(cacheName, key, layers, ttl, nullTtl, operation.cacheNull(), valueType))
+                .toList();
+    }
+
+    private boolean matchesCondition(KsetCacheOperation operation,
+                                     Method method,
+                                     Object[] args,
+                                     Object target,
+                                     Object result) {
+        return keyEvaluator.evalCondition(operation.condition(), method, args, target, result, true);
+    }
+
+    private boolean matchesUnless(KsetCacheOperation operation,
+                                  Method method,
+                                  Object[] args,
+                                  Object target,
+                                  Object result) {
+        return keyEvaluator.evalCondition(operation.unless(), method, args, target, result, false);
     }
 
     private static Method specificMethod(ProceedingJoinPoint point) {

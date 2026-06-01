@@ -13,29 +13,41 @@ public final class KsetCacheOperation {
     }
 
     private final Kind kind;
-    private final String cacheName;
+    private final List<String> cacheNames;
     private final String key;
+    private final String keyGenerator;
     private final List<KsetCacheLayer> layers;
     private final String ttl;
     private final String nullTtl;
     private final boolean cacheNull;
+    private final String condition;
+    private final String unless;
+    private final boolean allEntries;
     private final boolean beforeInvocation;
 
     KsetCacheOperation(Kind kind,
-                       String cacheName,
+                       List<String> cacheNames,
                        String key,
+                       String keyGenerator,
                        List<KsetCacheLayer> layers,
                        String ttl,
                        String nullTtl,
                        boolean cacheNull,
+                       String condition,
+                       String unless,
+                       boolean allEntries,
                        boolean beforeInvocation) {
         this.kind = kind;
-        this.cacheName = cacheName;
+        this.cacheNames = List.copyOf(cacheNames);
         this.key = key;
+        this.keyGenerator = keyGenerator;
         this.layers = layers;
         this.ttl = ttl;
         this.nullTtl = nullTtl;
         this.cacheNull = cacheNull;
+        this.condition = condition;
+        this.unless = unless;
+        this.allEntries = allEntries;
         this.beforeInvocation = beforeInvocation;
     }
 
@@ -43,12 +55,16 @@ public final class KsetCacheOperation {
         return kind;
     }
 
-    String cacheName() {
-        return cacheName;
+    List<String> cacheNames() {
+        return cacheNames;
     }
 
     String key() {
         return key;
+    }
+
+    String keyGenerator() {
+        return keyGenerator;
     }
 
     public List<KsetCacheLayer> layers() {
@@ -65,6 +81,18 @@ public final class KsetCacheOperation {
 
     boolean cacheNull() {
         return cacheNull;
+    }
+
+    String condition() {
+        return condition;
+    }
+
+    String unless() {
+        return unless;
+    }
+
+    boolean allEntries() {
+        return allEntries;
     }
 
     boolean beforeInvocation() {

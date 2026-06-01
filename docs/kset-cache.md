@@ -1,6 +1,6 @@
 # KSet Cache 多级缓存
 
-`kset-starter-cache` 提供统一缓存门面、KSet 自定义注解、Spring Cache 适配、L1 Caffeine、本地 single-flight、指标统计与 L2 SPI。它不依赖 `kset-starter-redis`；需要 Redis 二级缓存时，额外引入 `kset-starter-redis`，Redis 模块会自动注册 L2 适配器。
+`kset-starter-cache` 提供统一缓存门面、KSet 自定义注解、L1 Caffeine、本地 single-flight、指标统计与 L2 SPI。它不依赖 `kset-starter-redis`；需要 Redis 二级缓存时，额外引入 `kset-starter-redis`，Redis 模块会自动注册 L2 适配器。
 
 ## 依赖
 
@@ -28,7 +28,7 @@
 
 ## 配置
 
-默认只启用 L1。只有显式配置 `default-layers: L1,L2` 或注解上声明 `layers = {L1, L2}` 时才要求存在 L2 store。
+默认只启用 L1。显式配置 `default-layers: L1,L2` 或注解上声明 `layers = {L1, L2}` 时，如果没有 L2 store，会自动降级使用可用的 L1。
 
 ```yaml
 kset:
@@ -38,12 +38,14 @@ kset:
     cache-null: true
     null-ttl: 1m
     single-flight-enabled: true
-    spring:
-      enabled: true
+    ttl-jitter-enabled: true
+    ttl-jitter-percent: 10
     l1:
       enabled: true
       default-ttl: 5m
+      initial-capacity: 128
       maximum-size: 10000
+      record-stats: false
 ```
 
 L1 + L2：
@@ -56,7 +58,18 @@ kset:
       default-ttl: 5m
       maximum-size: 10000
     l2:
-      required: true
+      default-ttl: 30m
+```
+
+仅 L2：
+
+```yaml
+kset:
+  cache:
+    default-layers: L2
+    l1:
+      enabled: false
+    l2:
       default-ttl: 30m
 ```
 
@@ -68,8 +81,36 @@ public UserDTO getById(Long id) {
     return queryDb(id);
 }
 
+@KsetCacheable("user")
+public UserDTO getByIdWithDefaultKey(Long id) {
+    return queryDb(id);
+}
+
+@KsetCacheConfig(cacheNames = "user", keyGenerator = "userCacheKeyGenerator")
+public class UserQueryService {
+
+    @KsetCacheable(condition = "#id > 0", unless = "#result == null")
+    public UserDTO getById(Long id) {
+        return queryDb(id);
+    }
+}
+
+@KsetCacheConfig(cacheNames = "session", layers = {L2})
+public class SessionCacheService {
+
+    @KsetCacheable
+    public SessionDTO getSession(String token) {
+        return querySession(token);
+    }
+}
+
 @KsetCacheable(cacheName = "user", key = "'user:id:' + #id")
 public UserDTO getByIdWithDefaultLayers(Long id) {
+    return queryDb(id);
+}
+
+@KsetCacheable(cacheName = "user", key = "'user:id:' + #id", condition = "#id > 0", unless = "#result == null")
+public UserDTO getByIdWhenValid(Long id) {
     return queryDb(id);
 }
 
@@ -93,26 +134,18 @@ public void deleteUser(Long id, String phone) {
 - L2 命中后自动回填 L1。
 - 方法加载成功后写入声明的所有层级。
 - KSet 注解不声明 `layers` 时使用 `kset.cache.default-layers`。
+- `cacheName`、`value`、`cacheNames` 都可声明缓存名称，`value/cacheNames` 用法兼容 Spring Cache。
+- `@KsetCacheConfig` 可在类上声明默认 `cacheName/cacheNames`、`keyGenerator` 与 `layers`，适合统一指定仅 L2 缓存。
+- `key` 留空时使用 KSet 默认 key 生成器；也可声明 `KsetCacheKeyGenerator` Bean，并通过 `keyGenerator` 指定。
+- `condition` 返回 `true` 时才执行缓存操作；`unless` 返回 `true` 时跳过写缓存。
+- `@KsetCacheEvict(allEntries = true)` 会按注解 `layers` 清理整个缓存命名空间；未指定时使用默认层级。
 - 默认缓存 `null`，使用 `kset.cache.null-ttl`。
+- 开启 `ttl-jitter-enabled` 后，会在最终 TTL 上随机增加不超过 `ttl-jitter-percent` 的抖动，降低同批 key 同时过期概率。
 - key 使用 SpEL，支持 `#id`、`#result`、`#root.methodName`。
 
-## Spring Cache 适配
+## Spring Cache 边界
 
-默认注册 `CacheManager`，可直接使用 Spring Cache 注解。`@CacheEvict(allEntries = true)` 会调用 KSet 的 cache namespace clear。
-
-```java
-@Cacheable(cacheNames = "user", key = "#id")
-public UserDTO getById(Long id) {
-    return queryDb(id);
-}
-
-@CacheEvict(cacheNames = "user", allEntries = true)
-public void refreshUsers() {
-    reloadUsers();
-}
-```
-
-如业务项目已有自己的 `CacheManager`，框架不会覆盖；也可以通过 `kset.cache.spring.enabled=false` 关闭适配。
+KSet Cache 不注册 `CacheManager`，不自动启用 Spring Cache，也不处理 `@Cacheable`、`@CachePut`、`@CacheEvict`。框架内统一使用 KSet 自定义注解；业务项目如需 Spring Cache，应在项目侧自行配置，避免框架 starter 接管应用全局缓存体系。
 
 ## 编程式 API
 

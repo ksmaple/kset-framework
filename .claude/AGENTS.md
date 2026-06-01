@@ -26,13 +26,13 @@
 三端技能链接（在 **kset-developer** 仓库根执行，已 `npm install` 后）：
 
 ```bash
-npm run setup:ai-env-links -- --repo-root c:/coder/kset-framework
+npm run setup:ai-env-links -- --repo-root k:/git_pro/kset-framework
 ```
 
 从平台同步 `kaka-coder-designer`、`kaka-util-git-commit`（守卫确认 OVERWRITE 后加 `--force`）：
 
 ```bash
-npm run copy:init-skills -- c:/coder/kset-framework --force
+npm run copy:init-skills -- k:/git_pro/kset-framework --force
 ```
 
 ## 使用指引

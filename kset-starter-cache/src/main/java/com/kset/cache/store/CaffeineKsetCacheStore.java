@@ -16,9 +16,17 @@ public class CaffeineKsetCacheStore implements KsetCacheStore {
     private final Cache<String, TimedValue> cache;
 
     public CaffeineKsetCacheStore(long maximumSize) {
-        this.cache = Caffeine.newBuilder()
-                .maximumSize(maximumSize > 0 ? maximumSize : 10_000)
-                .build();
+        this(maximumSize, 128, false);
+    }
+
+    public CaffeineKsetCacheStore(long maximumSize, int initialCapacity, boolean recordStats) {
+        Caffeine<Object, Object> builder = Caffeine.newBuilder()
+                .initialCapacity(initialCapacity > 0 ? initialCapacity : 128)
+                .maximumSize(maximumSize > 0 ? maximumSize : 10_000);
+        if (recordStats) {
+            builder.recordStats();
+        }
+        this.cache = builder.build();
     }
 
     @Override

@@ -2,12 +2,12 @@
 
 > init 生成。优先级：本文档 > `.claude/skills/kaka-coder-designer/references/`。
 
-**proj**：`kset-framework` · **框架库（Spring Boot Starter 聚合仓）** · 生成：2026-05-28（init 重同步平台技能与规则）
+**proj**：`kset-framework` · **框架库（Spring Boot Starter 聚合仓）** · 生成：2026-06-01（init 重同步平台技能与规则）
 
 ## 1. 画像
 
 - coder / fixer：`kset-framework-coder`、`kset-framework-fixer`
-- 技术栈：Java 21、Spring Boot 3.4.5、Spring Cloud 2024、MyBatis-Plus、Dubbo、Nacos、Redis、Gateway trace；Maven 多模块（`kset-common`、`kset-cloud`、`kset-starter-*`、`kset-demo`）
+- 技术栈：Java 21、Spring Boot 3.5.14、Spring Cloud 2025.0.2、Spring Cloud Alibaba 2025.0.0.0、MyBatis-Plus 3.5.5、Dubbo 3.3.6、Nacos、Redis、Gateway trace；Maven 多模块（`kset-common`、`kset-cloud`、`kset-starter-*`、`kset-demo`）
 - 包名：`com.kset.*`（demo 为 `com.kset.demo.*`）
 - SQL：MySQL 8.0（见 `.claude/sql-dialect.json`）；实体以 MyBatis-Plus 注解为主
 - Git 提交：`kaka-util-git-commit`（init 自 kset-developer 复制，与 coder-designer 同级）
