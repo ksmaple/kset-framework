@@ -69,4 +69,17 @@ class KsetRedisAutoConfigurationTest {
                     assertThat(context).doesNotHaveBean(KsetRedisLockExecutor.class);
                 });
     }
+
+    @Test
+    void redissonUsesOnlyPrimaryRedisWhenNamedSourcesExist() {
+        contextRunnerWithRedissonClient
+                .withPropertyValues(
+                        "kset.redis.sources.cache.host=127.0.0.1",
+                        "kset.redis.sources.cache.port=6379")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(RedissonClient.class);
+                    assertThat(context).hasSingleBean(KsetRedissonLockProvider.class);
+                    assertThat(context).hasSingleBean(KsetRedisLockExecutor.class);
+                });
+    }
 }

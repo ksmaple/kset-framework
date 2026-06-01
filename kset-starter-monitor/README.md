@@ -108,6 +108,30 @@ HTTP 慢请求由 URL Transaction + `LogBackend` 超阈值 WARN 统一处理。
 
 数据源组件兼容：业务引入 `kset-starter-datasource` 和对应 JDBC 驱动后即可使用 MyBatis-Plus。只要业务同时引入 `kset-starter-monitor`，SQL Transaction 拦截器会在 MyBatis 自动装配前注册，无需按数据库类型额外配置。
 
+## Actuator 健康检查
+
+引入 `kset-starter-monitor` 后会传递引入 `spring-boot-starter-actuator`，并在业务未显式配置时提供以下默认值：
+
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+```
+
+默认暴露 `/actuator/health`，并启用 `/actuator/health/liveness`、`/actuator/health/readiness`。业务工程可以继续通过标准 `management.*` 配置覆盖。
+
 ## 配置示例
 
 ```yaml

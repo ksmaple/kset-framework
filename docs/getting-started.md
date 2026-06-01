@@ -94,7 +94,7 @@ kset:
     default-ttl: 30m
 ```
 
-业务侧推荐注入 **`KsetRedisService`** 或使用静态 **`KsetRedis`**（见 [kset-starter-redis/README.md](../kset-starter-redis/README.md)）。须配置 **`kset.redis.default-ttl`**（禁止永久 key）；Redisson 分布式锁默认开启，可用 **`kset.redis.redisson.enabled=false`** 关闭。示例：
+业务侧推荐注入 **`KsetRedisService`** 或使用静态 **`KsetRedis`**（见 [kset-starter-redis/README.md](../kset-starter-redis/README.md)）。须配置 **`kset.redis.default-ttl`**（禁止永久 key）；Redisson 分布式锁默认开启并使用主 Redis `spring.data.redis.*`，可用 **`kset.redis.redisson.enabled=false`** 关闭。示例：
 
 ```java
 redisService.setEx("user:" + id, user, Duration.ofMinutes(5));

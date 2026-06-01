@@ -14,7 +14,7 @@ import org.springframework.util.StringUtils;
 import java.util.List;
 
 /**
- * 基于 Spring {@link RedisProperties} 或 KSet 多源配置创建 {@link RedissonClient}。
+ * Creates the Redisson client from the primary Spring Redis configuration.
  */
 public final class KsetRedissonClientFactory {
 
@@ -37,24 +37,6 @@ public final class KsetRedissonClientFactory {
             single.setAddress("redis://" + host + ":" + port);
             single.setDatabase(springRedis.getDatabase());
             applyPassword(single, springRedis.getPassword());
-        }
-        return Redisson.create(config);
-    }
-
-    public static RedissonClient createFromSource(
-            KsetRedisProperties.RedisSourceProperties source,
-            KsetRedisProperties ksetRedis,
-            KsetFastjsonRedisSerializer valueSerializer) {
-        Config config = baseConfig(ksetRedis, valueSerializer);
-        if (source.isClusterMode()) {
-            ClusterServersConfig cluster = config.useClusterServers();
-            cluster.addNodeAddress(toAddresses(source.getCluster().getNodes()));
-            applyPassword(cluster, source.getPassword());
-        } else {
-            SingleServerConfig single = config.useSingleServer();
-            single.setAddress("redis://" + source.getHost() + ":" + source.getPort());
-            single.setDatabase(source.getDatabase());
-            applyPassword(single, source.getPassword());
         }
         return Redisson.create(config);
     }

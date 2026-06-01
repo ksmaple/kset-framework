@@ -112,7 +112,7 @@ kset:
 
 ## Redisson 分布式锁（`com.kset.redis.lock`）
 
-锁**仅基于 Redisson**，默认随 `kset-starter-redis` 开启；如无需分布式锁，可配置 `kset.redis.redisson.enabled=false` 关闭。缓存用 `KsetRedisService`；锁用 **`KsetRedisLockExecutor`**、**`KsetRedisLocks`** 或 **`@KsetLocked`**。
+锁**仅基于 Redisson**，默认随 `kset-starter-redis` 开启，并始终使用主 Redis 连接配置 `spring.data.redis.*`；不为 `kset.redis.sources.*` 命名源创建 Redisson 多数据源。缓存用 `KsetRedisService`；锁用 **`KsetRedisLockExecutor`**、**`KsetRedisLocks`** 或 **`@KsetLocked`**。如无需分布式锁，可配置 `kset.redis.redisson.enabled=false` 关闭。
 
 | 层级 | 说明 |
 |------|------|
