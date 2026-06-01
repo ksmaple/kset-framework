@@ -47,3 +47,14 @@ spring:
 #     key-prefix: "kset:${spring.application.name}:"
 #     default-ttl: 30m
 #     max-ttl: 7d
+#     sources:
+#       cache:
+#         host: 127.0.0.1
+#         port: 6379
+#         database: 1
+#         pool:
+#           enabled: true
+#           max-active: 8
+#           max-idle: 8
+#           min-idle: 0
+#           max-wait: 2s

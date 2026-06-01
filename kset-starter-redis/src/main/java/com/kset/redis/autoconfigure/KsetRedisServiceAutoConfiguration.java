@@ -6,7 +6,6 @@ import com.kset.redis.core.KsetRedisRegistry;
 import com.kset.redis.core.KsetRedisService;
 import com.kset.redis.core.KsetRedisStreamSettings;
 import com.kset.redis.core.KsetRedisTtlPolicy;
-import com.kset.redis.lock.internal.KsetRedissonLockProvider;
 import com.kset.redis.support.KsetRedisBootstrap;
 import com.kset.redis.support.KsetRedisNamedSources;
 import org.springframework.beans.factory.ObjectProvider;
@@ -52,15 +51,6 @@ public class KsetRedisServiceAutoConfiguration {
             return KsetRedisService.monitoredFrom(KsetRedisRegistry.PRIMARY_NAME, redisTemplate, ttlPolicy, streamSettings);
         }
         return KsetRedisService.from(redisTemplate, ttlPolicy, streamSettings);
-    }
-
-    @Bean
-    @ConditionalOnBean(KsetRedissonLockProvider.class)
-    @ConditionalOnMissingBean
-    public KsetRedisLockExecutor ksetRedisLockExecutor(KsetRedissonLockProvider lockProvider,
-                                                       KsetRedisTtlPolicy ttlPolicy,
-                                                       Environment environment) {
-        return new KsetRedisLockExecutor(lockProvider, ttlPolicy, monitorEnabled(environment));
     }
 
     @Bean

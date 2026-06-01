@@ -125,6 +125,6 @@ public final class KsetRedissonLockProvider {
 
     static void ensureRedissonEnabled() {
         throw new KsetRedisLockException("",
-                "Distributed lock requires Redisson; set kset.redis.redisson.enabled=true");
+                "Distributed lock requires Redisson; ensure Redisson is on the classpath and kset.redis.redisson.enabled is not false");
     }
 }

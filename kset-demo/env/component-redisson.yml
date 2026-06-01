@@ -4,8 +4,8 @@
 kset:
   redis:
     redisson:
-      # 含义：启用 RedissonClient 自动装配。
-      enabled: true
+      # RedissonClient 默认自动装配；不需要分布式锁时设置为 false。
+      # enabled: false
       # 非必选项：默认锁等待时间。
       # lock-wait-time: 3s
       # 非必选项：默认锁租约时间。

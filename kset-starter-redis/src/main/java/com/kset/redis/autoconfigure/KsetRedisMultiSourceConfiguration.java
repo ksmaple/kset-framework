@@ -3,6 +3,7 @@ package com.kset.redis.autoconfigure;
 import com.kset.cloud.config.KsetRedisProperties;
 import com.kset.redis.codec.KsetFastjsonRedisSerializer;
 import com.kset.redis.config.KsetRedisConnectionFactoryBuilder;
+import com.kset.redis.config.KsetRedisConnectionCustomizer;
 import com.kset.redis.config.KsetRedisSerializerConfiguration;
 import com.kset.redis.config.KsetRedisTemplateFactory;
 import com.kset.redis.core.KsetRedisRegistry;
@@ -14,6 +15,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -21,7 +23,9 @@ import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactor
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -42,6 +46,7 @@ public class KsetRedisMultiSourceConfiguration {
                                                        KsetRedisStreamSettings streamSettings,
                                                        ConfigurableListableBeanFactory beanFactory,
                                                        Environment environment,
+                                                       ObjectProvider<KsetRedisConnectionCustomizer> connectionCustomizers,
                                                        @Qualifier(KsetRedisSerializerConfiguration.BEAN_NAME)
                                                        KsetFastjsonRedisSerializer valueSerializer) {
         Map<String, KsetRedisProperties.RedisSourceProperties> sources = properties.getSources();
@@ -49,6 +54,7 @@ public class KsetRedisMultiSourceConfiguration {
             return KsetRedisNamedSources.empty();
         }
         Map<String, KsetRedisService> services = new LinkedHashMap<>();
+        List<LettuceConnectionFactory> connectionFactories = new ArrayList<>();
         for (Map.Entry<String, KsetRedisProperties.RedisSourceProperties> entry : sources.entrySet()) {
             String name = entry.getKey();
             KsetRedisProperties.RedisSourceProperties source = entry.getValue();
@@ -61,7 +67,11 @@ public class KsetRedisMultiSourceConfiguration {
             if (source == null || !source.isEnabled()) {
                 continue;
             }
-            LettuceConnectionFactory connectionFactory = KsetRedisConnectionFactoryBuilder.build(source);
+            LettuceConnectionFactory connectionFactory = KsetRedisConnectionFactoryBuilder.build(
+                    name,
+                    source,
+                    connectionCustomizers.orderedStream().toList());
+            connectionFactories.add(connectionFactory);
             RedisTemplate<String, Object> template =
                     KsetRedisTemplateFactory.create(connectionFactory, source.getKeyPrefix(), valueSerializer);
             KsetRedisService service = KsetRedisServiceAutoConfiguration.monitorEnabled(environment)
@@ -70,6 +80,6 @@ public class KsetRedisMultiSourceConfiguration {
             services.put(name, service);
             beanFactory.registerSingleton(namedServiceBeanName(name), service);
         }
-        return new KsetRedisNamedSources(services);
+        return new KsetRedisNamedSources(services, connectionFactories);
     }
 }

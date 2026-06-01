@@ -51,7 +51,7 @@ public final class KsetRedisLocks {
         KsetRedisLockExecutor e = executor;
         if (e == null) {
             throw new IllegalStateException(
-                    "KsetRedisLocks is not initialized; enable kset.redis.redisson.enabled=true");
+                    "KsetRedisLocks is not initialized; ensure Redisson is on the classpath and kset.redis.redisson.enabled is not false");
         }
         return e;
     }

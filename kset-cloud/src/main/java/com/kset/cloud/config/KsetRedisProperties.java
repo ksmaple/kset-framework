@@ -164,7 +164,7 @@ public class KsetRedisProperties {
      */
     public static class Redisson {
 
-        private boolean enabled = false;
+        private boolean enabled = true;
         private Duration lockWaitTime = Duration.ofSeconds(3);
         private Duration lockLeaseTime = Duration.ofSeconds(30);
         private int threads = 16;
@@ -245,6 +245,7 @@ public class KsetRedisProperties {
         private String password;
         private boolean ssl = false;
         private Duration timeout = Duration.ofSeconds(2);
+        private final RedisSourcePoolProperties pool = new RedisSourcePoolProperties();
         private final Cluster cluster = new Cluster();
 
         public boolean isEnabled() {
@@ -311,12 +312,65 @@ public class KsetRedisProperties {
             this.timeout = timeout;
         }
 
+        public RedisSourcePoolProperties getPool() {
+            return pool;
+        }
+
         public Cluster getCluster() {
             return cluster;
         }
 
         public boolean isClusterMode() {
             return cluster.isEnabled() && cluster.getNodes() != null && !cluster.getNodes().isEmpty();
+        }
+    }
+
+    public static class RedisSourcePoolProperties {
+
+        private boolean enabled = false;
+        private int maxActive = 8;
+        private int maxIdle = 8;
+        private int minIdle = 0;
+        private Duration maxWait = Duration.ofMillis(-1);
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getMaxActive() {
+            return maxActive;
+        }
+
+        public void setMaxActive(int maxActive) {
+            this.maxActive = maxActive;
+        }
+
+        public int getMaxIdle() {
+            return maxIdle;
+        }
+
+        public void setMaxIdle(int maxIdle) {
+            this.maxIdle = maxIdle;
+        }
+
+        public int getMinIdle() {
+            return minIdle;
+        }
+
+        public void setMinIdle(int minIdle) {
+            this.minIdle = minIdle;
+        }
+
+        public Duration getMaxWait() {
+            return maxWait;
+        }
+
+        public void setMaxWait(Duration maxWait) {
+            this.maxWait = maxWait;
         }
     }
 

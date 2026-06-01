@@ -112,7 +112,7 @@ kset:
 
 ## Redisson 分布式锁（`com.kset.redis.lock`）
 
-锁**仅基于 Redisson**，须 `kset.redis.redisson.enabled=true`。缓存用 `KsetRedisService`；锁用 **`KsetRedisLockExecutor`**、**`KsetRedisLocks`** 或 **`@KsetLocked`**。
+锁**仅基于 Redisson**，默认随 `kset-starter-redis` 开启；如无需分布式锁，可配置 `kset.redis.redisson.enabled=false` 关闭。缓存用 `KsetRedisService`；锁用 **`KsetRedisLockExecutor`**、**`KsetRedisLocks`** 或 **`@KsetLocked`**。
 
 | 层级 | 说明 |
 |------|------|
@@ -153,7 +153,7 @@ lockExecutor.run("job", KsetRedisLockOptions.waitThenFail(Duration.ofSeconds(3),
 kset:
   redis:
     redisson:
-      enabled: true
+      # enabled: false  # 不需要 Redisson 分布式锁时关闭
     lock:
       annotation-enabled: true   # 默认 true（需 classpath 含 AOP）
       validate-targets: true     # 启动时 WARN 不可织入场景
@@ -255,6 +255,12 @@ kset:
         host: redis-cache
         port: 6379
         key-prefix: "myapp:cache:"
+        pool:
+          enabled: true
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 2s
       session:
         cluster:
           enabled: true
@@ -278,6 +284,24 @@ public class CustomRedisRegistrar implements InitializingBean {
     public void afterPropertiesSet() {
         registry.register("custom", KsetRedisService.from("custom", customTemplate, ...));
     }
+}
+```
+
+### Redis 连接扩展
+
+业务需要调整命名 Redis 源的底层连接参数时，实现 `KsetRedisConnectionCustomizer` Bean 即可；框架仍负责创建 `LettuceConnectionFactory`、`RedisTemplate`、`KsetRedisService` 与关闭释放。
+
+```java
+@Bean
+KsetRedisConnectionCustomizer redisConnectionCustomizer() {
+    return new KsetRedisConnectionCustomizer() {
+        @Override
+        public void customizeClient(String sourceName,
+                                    KsetRedisProperties.RedisSourceProperties source,
+                                    LettuceClientConfiguration.LettuceClientConfigurationBuilder builder) {
+            // customize framework-created named Redis connections
+        }
+    };
 }
 ```
 
