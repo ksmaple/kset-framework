@@ -24,10 +24,11 @@ public class AuthRuleResolver {
         String subject = defaultSubject(request);
         if (isPublicPath(request)) {
             return new AuthRuleMatch("public", subject, AuthSchemes.NONE,
-                    defaultTokenHeader(request), AuthHeaders.loginContextHeader(subject));
+                    defaultTokenHeader(request, AuthSchemes.NONE), AuthHeaders.loginContextHeader(subject));
         }
-        return new AuthRuleMatch("default", subject, defaultScheme(request),
-                defaultTokenHeader(request), AuthHeaders.loginContextHeader(subject));
+        String scheme = defaultScheme(request);
+        return new AuthRuleMatch("default", subject, scheme,
+                defaultTokenHeader(request, scheme), AuthHeaders.loginContextHeader(subject));
     }
 
     private KsetAuthProperties.AuthRule findRule(String path) {
@@ -40,7 +41,7 @@ public class AuthRuleResolver {
     private AuthRuleMatch buildMatch(KsetAuthProperties.AuthRule rule, AuthRequest request) {
         String subject = hasText(rule.getSubject()) ? rule.getSubject() : defaultSubject();
         String scheme = hasText(rule.getScheme()) ? rule.getScheme() : defaultScheme(request);
-        String tokenHeader = hasText(rule.getTokenHeader()) ? rule.getTokenHeader() : defaultTokenHeader(request);
+        String tokenHeader = hasText(rule.getTokenHeader()) ? rule.getTokenHeader() : defaultTokenHeader(request, scheme);
         String trustedHeader = hasText(rule.getTrustedHeaderName())
                 ? rule.getTrustedHeaderName()
                 : AuthHeaders.loginContextHeader(subject);
@@ -74,7 +75,12 @@ public class AuthRuleResolver {
         return hasText(properties.getDefaultScheme()) ? properties.getDefaultScheme() : AuthSchemes.SESSION;
     }
 
-    private String defaultTokenHeader(AuthRequest request) {
+    private String defaultTokenHeader(AuthRequest request, String scheme) {
+        if (AuthSchemes.APP_TOKEN.equalsIgnoreCase(scheme)) {
+            return hasText(properties.getAppKey().getTokenHeader())
+                    ? properties.getAppKey().getTokenHeader()
+                    : "X-App-Token";
+        }
         if (SOURCE_WEB.equals(request.getSource())
                 && !AuthHeaders.SESSION_TOKEN.equals(properties.getWeb().getTokenHeader())) {
             return properties.getWeb().getTokenHeader();

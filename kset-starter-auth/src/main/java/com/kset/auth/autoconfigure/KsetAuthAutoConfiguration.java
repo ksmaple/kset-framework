@@ -2,10 +2,12 @@ package com.kset.auth.autoconfigure;
 
 import com.kset.auth.config.KsetAuthProperties;
 import com.kset.auth.core.AuthRuleResolver;
+import com.kset.auth.core.AppTokenAuthenticator;
 import com.kset.auth.core.DefaultLoginUserHeaderCodec;
 import com.kset.auth.core.LoginAuthService;
 import com.kset.auth.core.NoneAuthenticator;
 import com.kset.auth.core.SessionAuthenticator;
+import com.kset.auth.core.SignatureAuthenticator;
 import com.kset.auth.core.TrustedHeaderAuthenticator;
 import com.kset.auth.session.LoginSessionStore;
 import com.kset.auth.session.RedisLoginSessionStore;
@@ -57,6 +59,18 @@ public class KsetAuthAutoConfiguration {
     @ConditionalOnMissingBean(TrustedHeaderAuthenticator.class)
     public Authenticator trustedHeaderAuthenticator(LoginUserHeaderCodec headerCodec) {
         return new TrustedHeaderAuthenticator(headerCodec);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(SignatureAuthenticator.class)
+    public Authenticator signatureAuthenticator(KsetAuthProperties properties) {
+        return new SignatureAuthenticator(properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AppTokenAuthenticator.class)
+    public Authenticator appTokenAuthenticator(KsetAuthProperties properties) {
+        return new AppTokenAuthenticator(properties);
     }
 
     @Bean

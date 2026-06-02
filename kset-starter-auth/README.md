@@ -330,11 +330,49 @@ Dubbo 规则：
 | SPI | 用途 |
 |-----|------|
 | `LoginSessionStore` | 替换 Redis session 读写 |
-| `Authenticator` | 扩展新的认证方案，如 JWT、OAuth2、API Key |
+| `Authenticator` | 扩展新的认证方案，如 OAuth2、自定义 JWT |
 | `LoginUserHeaderCodec` | 自定义 Gateway/Dubbo 登录上下文编解码 |
 | `PermissionChecker` | 自定义角色、权限、数据权限判断 |
 | `ServletAuthFailureHandler` | 自定义 Servlet 未登录/无权限响应 |
 | `GatewayAuthFailureHandler` | 自定义 Gateway 未登录响应 |
+
+内置 AppKey 认证：
+
+```yaml
+kset:
+  auth:
+    app-key:
+      app-key-header: X-App-Key
+      token-header: X-App-Token
+      sign-header: X-Sign
+      app-key-field: appKey
+      sign-field: sign
+      algorithm: sha1
+      timestamp-required: false
+      timestamp-ttl: 5m
+      apps:
+        - app-key: partner-app
+          secret: app-secret
+          token: partner-token
+          subject: partner
+          user-id: partner-user
+          roles:
+            - partner
+    rules:
+      - name: openapi-sign
+        paths:
+          - /openapi/sign/**
+        subject: partner
+        scheme: signature
+      - name: openapi-token
+        paths:
+          - /openapi/token/**
+        subject: partner
+        scheme: app-token
+```
+
+- `signature`：按 `KsetSignUtil` 规则验签，默认从 `X-App-Key` / `X-Sign` 读取，也支持 query 中的 `appKey` / `sign`。
+- `app-token`：按 `X-App-Key` + `X-App-Token` 匹配配置中的 app。
 
 自定义认证器示例：
 
@@ -405,6 +443,19 @@ kset:
       ttl: 2h
       sliding-refresh-enabled: true
       refresh-threshold: 30m
+    app-key:
+      enabled: true
+      app-key-header: X-App-Key
+      token-header: X-App-Token
+      sign-header: X-Sign
+      timestamp-header: X-Timestamp
+      nonce-header: X-Nonce
+      app-key-field: appKey
+      sign-field: sign
+      algorithm: sha1
+      timestamp-required: false
+      timestamp-ttl: 5m
+      apps: []
     web:
       enabled: true
       mode: redis

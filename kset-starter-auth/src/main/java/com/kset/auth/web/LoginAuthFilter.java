@@ -14,6 +14,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LoginAuthFilter extends OncePerRequestFilter {
 
@@ -46,7 +49,9 @@ public class LoginAuthFilter extends OncePerRequestFilter {
             AuthResult result = authService.authenticate(new AuthRequest(
                     request.getRequestURI(),
                     request::getHeader,
-                    AuthRuleResolver.SOURCE_WEB));
+                    AuthRuleResolver.SOURCE_WEB,
+                    request.getMethod(),
+                    queryParams(request)));
             if (result.isPermitAll()) {
                 filterChain.doFilter(request, response);
                 return;
@@ -60,5 +65,16 @@ public class LoginAuthFilter extends OncePerRequestFilter {
         } finally {
             LoginContext.restore(previous);
         }
+    }
+
+    private static Map<String, String> queryParams(HttpServletRequest request) {
+        return request.getParameterMap().entrySet().stream()
+                .filter(entry -> entry.getValue() != null && entry.getValue().length > 0)
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        entry -> Arrays.stream(entry.getValue())
+                                .filter(value -> value != null && !value.isBlank())
+                                .findFirst()
+                                .orElse(""),
+                        (left, right) -> left));
     }
 }

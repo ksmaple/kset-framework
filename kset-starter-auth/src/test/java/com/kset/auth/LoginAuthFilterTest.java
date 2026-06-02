@@ -6,8 +6,11 @@ import com.kset.auth.core.DefaultLoginUserHeaderCodec;
 import com.kset.auth.core.DefaultLoginUserHeaderCodec.BasicLoginContext;
 import com.kset.auth.core.LoginAuthService;
 import com.kset.auth.core.NoneAuthenticator;
+import com.kset.auth.core.AppTokenAuthenticator;
 import com.kset.auth.core.SessionAuthenticator;
+import com.kset.auth.core.SignatureAuthenticator;
 import com.kset.auth.core.TrustedHeaderAuthenticator;
+import com.kset.common.utils.sign.KsetSignUtil;
 import com.kset.auth.session.LoginSessionStore;
 import com.kset.auth.web.DefaultServletAuthFailureHandler;
 import com.kset.auth.web.LoginAuthFilter;
@@ -24,6 +27,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 import java.util.Optional;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -154,14 +158,75 @@ class LoginAuthFilterTest {
         verify(store, never()).findByToken(org.mockito.ArgumentMatchers.any());
     }
 
+    @Test
+    void appTokenRuleAuthenticatesConfiguredApp() throws Exception {
+        KsetAuthProperties properties = appKeyProperties("partner-app", "app-secret", "app-token");
+        KsetAuthProperties.AuthRule rule = new KsetAuthProperties.AuthRule();
+        rule.setName("partner");
+        rule.setPaths(List.of("/openapi/**"));
+        rule.setSubject("partner");
+        rule.setScheme("app-token");
+        properties.setRules(List.of(rule));
+        LoginAuthFilter filter = filter(properties, mock(LoginSessionStore.class));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/openapi/orders");
+        request.addHeader("X-App-Key", "partner-app");
+        request.addHeader("X-App-Token", "app-token");
+        CapturingFilterChain chain = new CapturingFilterChain();
+
+        filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+        assertThat(chain.userId).isEqualTo("partner-user");
+        assertThat(chain.subjectType).isEqualTo("partner");
+    }
+
+    @Test
+    void signatureRuleAuthenticatesConfiguredApp() throws Exception {
+        KsetAuthProperties properties = appKeyProperties("partner-app", "app-secret", "app-token");
+        KsetAuthProperties.AuthRule rule = new KsetAuthProperties.AuthRule();
+        rule.setName("partner-sign");
+        rule.setPaths(List.of("/openapi/**"));
+        rule.setSubject("partner");
+        rule.setScheme("signature");
+        properties.setRules(List.of(rule));
+        LoginAuthFilter filter = filter(properties, mock(LoginSessionStore.class));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/openapi/orders");
+        request.addParameter("orderId", "o1");
+        request.addHeader("X-App-Key", "partner-app");
+        request.addHeader("X-Sign", KsetSignUtil.of("app-secret").signSha1(Map.of(
+                "appKey", "partner-app",
+                "method", "GET",
+                "orderId", "o1")));
+        CapturingFilterChain chain = new CapturingFilterChain();
+
+        filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+        assertThat(chain.userId).isEqualTo("partner-user");
+        assertThat(chain.subjectType).isEqualTo("partner");
+    }
+
     private LoginAuthFilter filter(KsetAuthProperties properties, LoginSessionStore store) {
         return new LoginAuthFilter(properties,
                 new LoginAuthService(store,
                         new AuthRuleResolver(properties),
                         List.of(new SessionAuthenticator(store),
                                 new TrustedHeaderAuthenticator(new DefaultLoginUserHeaderCodec()),
+                                new SignatureAuthenticator(properties),
+                                new AppTokenAuthenticator(properties),
                                 new NoneAuthenticator())),
                 new DefaultServletAuthFailureHandler());
+    }
+
+    private KsetAuthProperties appKeyProperties(String appKey, String secret, String token) {
+        KsetAuthProperties properties = new KsetAuthProperties();
+        KsetAuthProperties.App app = new KsetAuthProperties.App();
+        app.setAppKey(appKey);
+        app.setSecret(secret);
+        app.setToken(token);
+        app.setSubject("partner");
+        app.setUserId("partner-user");
+        app.setRoles(List.of("partner"));
+        properties.getAppKey().setApps(List.of(app));
+        return properties;
     }
 
     private static final class CapturingFilterChain extends MockFilterChain {

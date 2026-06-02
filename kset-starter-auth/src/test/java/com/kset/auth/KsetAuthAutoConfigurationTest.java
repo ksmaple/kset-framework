@@ -6,7 +6,9 @@ import com.kset.auth.autoconfigure.KsetAuthDubboAutoConfiguration;
 import com.kset.auth.autoconfigure.KsetAuthGatewayAutoConfiguration;
 import com.kset.auth.autoconfigure.KsetAuthWebAutoConfiguration;
 import com.kset.auth.core.AuthRuleResolver;
+import com.kset.auth.core.AppTokenAuthenticator;
 import com.kset.auth.core.LoginAuthService;
+import com.kset.auth.core.SignatureAuthenticator;
 import com.kset.auth.session.LoginSessionStore;
 import com.kset.auth.spi.PermissionChecker;
 import com.kset.auth.web.LoginAuthFilter;
@@ -34,7 +36,9 @@ class KsetAuthAutoConfigurationTest {
                 .withConfiguration(AutoConfigurations.of(KsetAuthAutoConfiguration.class))
                 .withUserConfiguration(TestSessionStoreConfiguration.class)
                 .run(context -> assertThat(context).hasSingleBean(LoginAuthService.class)
-                        .hasSingleBean(AuthRuleResolver.class));
+                        .hasSingleBean(AuthRuleResolver.class)
+                        .hasSingleBean(SignatureAuthenticator.class)
+                        .hasSingleBean(AppTokenAuthenticator.class));
     }
 
     @Test

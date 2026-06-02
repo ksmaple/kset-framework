@@ -68,7 +68,7 @@ fix、engineering：修错或运维调参时单独打开
 
 ## 禁止
 
-- 在 `{proj}-coder` 中重定义 naming 语义  
-- 在 ddd 文档写 SQL/API 映射表（见 ddd D009/D020）  
-- 未读 sql-dialect.json 混用多方言 DDL（sql S020）  
+- 在 `{proj}-coder` 中重定义 naming 语义
+- 在 ddd 文档写 SQL/API 映射表（见 ddd D009/D020）
+- 未读 sql-dialect.json 混用多方言 DDL（sql S020）
 - 事务提交后直接发 MQ（event E010）

@@ -15,6 +15,7 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class LoginAuthGatewayFilter implements GlobalFilter, Ordered {
 
@@ -41,7 +42,9 @@ public class LoginAuthGatewayFilter implements GlobalFilter, Ordered {
         AuthResult result = authService.authenticate(new AuthRequest(
                 exchange.getRequest().getURI().getPath(),
                 name -> exchange.getRequest().getHeaders().getFirst(name),
-                AuthRuleResolver.SOURCE_GATEWAY));
+                AuthRuleResolver.SOURCE_GATEWAY,
+                exchange.getRequest().getMethod() != null ? exchange.getRequest().getMethod().name() : null,
+                queryParams(exchange)));
         if (result.isPermitAll()) {
             return chain.filter(exchange);
         }
@@ -59,5 +62,16 @@ public class LoginAuthGatewayFilter implements GlobalFilter, Ordered {
     @Override
     public int getOrder() {
         return Ordered.HIGHEST_PRECEDENCE + 1;
+    }
+
+    private static Map<String, String> queryParams(ServerWebExchange exchange) {
+        return exchange.getRequest().getQueryParams().entrySet().stream()
+                .filter(entry -> entry.getValue() != null && !entry.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        entry -> entry.getValue().stream()
+                                .filter(value -> value != null && !value.isBlank())
+                                .findFirst()
+                                .orElse(""),
+                        (left, right) -> left));
     }
 }

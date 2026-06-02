@@ -3,6 +3,7 @@ package com.kset.auth.config;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import com.kset.common.auth.AuthHeaders;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -17,6 +18,7 @@ public class KsetAuthProperties {
     private String subjectHeader = AuthHeaders.AUTH_SUBJECT;
     private List<AuthRule> rules = new ArrayList<>();
     private final Session session = new Session();
+    private final AppKey appKey = new AppKey();
     private final Web web = new Web();
     private final Gateway gateway = new Gateway();
     private final Dubbo dubbo = new Dubbo();
@@ -73,6 +75,10 @@ public class KsetAuthProperties {
         return session;
     }
 
+    public AppKey getAppKey() {
+        return appKey;
+    }
+
     public Web getWeb() {
         return web;
     }
@@ -121,6 +127,212 @@ public class KsetAuthProperties {
 
         public void setRefreshThreshold(Duration refreshThreshold) {
             this.refreshThreshold = refreshThreshold;
+        }
+    }
+
+    public static class AppKey {
+        private boolean enabled = true;
+        private String appKeyHeader = "X-App-Key";
+        private String tokenHeader = "X-App-Token";
+        private String signHeader = "X-Sign";
+        private String timestampHeader = "X-Timestamp";
+        private String nonceHeader = "X-Nonce";
+        private String appKeyField = "appKey";
+        private String signField = "sign";
+        private String algorithm = "sha1";
+        private boolean timestampRequired = false;
+        private Duration timestampTtl = Duration.ofMinutes(5);
+        private List<App> apps = new ArrayList<>();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getAppKeyHeader() {
+            return appKeyHeader;
+        }
+
+        public void setAppKeyHeader(String appKeyHeader) {
+            this.appKeyHeader = appKeyHeader;
+        }
+
+        public String getTokenHeader() {
+            return tokenHeader;
+        }
+
+        public void setTokenHeader(String tokenHeader) {
+            this.tokenHeader = tokenHeader;
+        }
+
+        public String getSignHeader() {
+            return signHeader;
+        }
+
+        public void setSignHeader(String signHeader) {
+            this.signHeader = signHeader;
+        }
+
+        public String getTimestampHeader() {
+            return timestampHeader;
+        }
+
+        public void setTimestampHeader(String timestampHeader) {
+            this.timestampHeader = timestampHeader;
+        }
+
+        public String getNonceHeader() {
+            return nonceHeader;
+        }
+
+        public void setNonceHeader(String nonceHeader) {
+            this.nonceHeader = nonceHeader;
+        }
+
+        public String getAppKeyField() {
+            return appKeyField;
+        }
+
+        public void setAppKeyField(String appKeyField) {
+            this.appKeyField = appKeyField;
+        }
+
+        public String getSignField() {
+            return signField;
+        }
+
+        public void setSignField(String signField) {
+            this.signField = signField;
+        }
+
+        public String getAlgorithm() {
+            return algorithm;
+        }
+
+        public void setAlgorithm(String algorithm) {
+            this.algorithm = algorithm;
+        }
+
+        public boolean isTimestampRequired() {
+            return timestampRequired;
+        }
+
+        public void setTimestampRequired(boolean timestampRequired) {
+            this.timestampRequired = timestampRequired;
+        }
+
+        public Duration getTimestampTtl() {
+            return timestampTtl;
+        }
+
+        public void setTimestampTtl(Duration timestampTtl) {
+            this.timestampTtl = timestampTtl;
+        }
+
+        public List<App> getApps() {
+            return apps;
+        }
+
+        public void setApps(List<App> apps) {
+            this.apps = apps != null ? new ArrayList<>(apps) : new ArrayList<>();
+        }
+
+        public Optional<App> findApp(String appKey) {
+            if (appKey == null || appKey.isBlank()) {
+                return Optional.empty();
+            }
+            String value = appKey.trim();
+            return apps.stream()
+                    .filter(App::isEnabled)
+                    .filter(app -> value.equals(app.getAppKey()))
+                    .findFirst();
+        }
+    }
+
+    public static class App {
+        private boolean enabled = true;
+        private String appKey;
+        private String secret;
+        private String token;
+        private String subject;
+        private String userId;
+        private String userName;
+        private List<String> roles = new ArrayList<>();
+        private List<String> permissions = new ArrayList<>();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getAppKey() {
+            return appKey;
+        }
+
+        public void setAppKey(String appKey) {
+            this.appKey = appKey;
+        }
+
+        public String getSecret() {
+            return secret;
+        }
+
+        public void setSecret(String secret) {
+            this.secret = secret;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public void setToken(String token) {
+            this.token = token;
+        }
+
+        public String getSubject() {
+            return subject;
+        }
+
+        public void setSubject(String subject) {
+            this.subject = subject;
+        }
+
+        public String getUserId() {
+            return userId;
+        }
+
+        public void setUserId(String userId) {
+            this.userId = userId;
+        }
+
+        public String getUserName() {
+            return userName;
+        }
+
+        public void setUserName(String userName) {
+            this.userName = userName;
+        }
+
+        public List<String> getRoles() {
+            return roles;
+        }
+
+        public void setRoles(List<String> roles) {
+            this.roles = roles != null ? new ArrayList<>(roles) : new ArrayList<>();
+        }
+
+        public List<String> getPermissions() {
+            return permissions;
+        }
+
+        public void setPermissions(List<String> permissions) {
+            this.permissions = permissions != null ? new ArrayList<>(permissions) : new ArrayList<>();
         }
     }
 

@@ -3,7 +3,7 @@
   "version": "8.0",
   "profileRelPath": "skills/kaka-coder-designer/references/sql-spec.md",
   "commonSpecRelPath": "skills/kaka-coder-designer/references/naming-spec.md",
-  "detectedFrom": "no signal -> default mysql (WARN)",
-  "selectedAt": "2026-06-01T08:41:30+08:00",
-  "source": "auto"
+  "detectedFrom": "project-spec override -> mysql; kset-demo/demo-micro-service/src/main/resources/application.yaml -> postgresql; kset-demo/demo-standalone-service/src/main/resources/application.yaml -> postgresql",
+  "selectedAt": "2026-06-02T09:23:02+08:00",
+  "source": "project-spec"
 }
