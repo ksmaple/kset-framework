@@ -1,0 +1,5 @@
+com.kset.auth.autoconfigure.KsetAuthAutoConfiguration
+com.kset.auth.autoconfigure.KsetAuthWebAutoConfiguration
+com.kset.auth.autoconfigure.KsetAuthGatewayAutoConfiguration
+com.kset.auth.autoconfigure.KsetAuthDubboAutoConfiguration
+com.kset.auth.autoconfigure.KsetAuthAopAutoConfiguration

@@ -33,6 +33,7 @@
         <module>kset-starter-web</module>
         <module>kset-starter-datasource</module>
         <module>kset-starter-cache</module>
+        <module>kset-starter-auth</module>
         <module>kset-starter-redis</module>
         <module>kset-starter-nacos</module>
         <module>kset-starter-sentinel</module>
