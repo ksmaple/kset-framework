@@ -1,5 +1,8 @@
 package com.kset.common.monitor;
 
+import com.kset.common.context.KsetContext;
+import com.kset.common.context.KsetContextKey;
+import com.kset.common.context.KsetContextKeys;
 import com.kset.common.monitor.backend.LogBackend;
 import com.kset.common.monitor.facade.MetricKind;
 import com.kset.common.monitor.facade.MonitorFacade;
@@ -49,15 +52,18 @@ public final class Monitor {
     }
 
     public static Optional<String> currentTraceId() {
-        return safeGet("currentTraceId", facade::currentTraceId, Monitor::localTraceId, Optional.empty());
+        return KsetContext.get(KsetContextKeys.TRACE_ID)
+                .or(() -> safeGet("currentTraceId", facade::currentTraceId, Monitor::localTraceId, Optional.empty()));
     }
 
     public static Optional<String> currentSpanId() {
-        return safeGet("currentSpanId", facade::currentSpanId, Monitor::localSpanId, Optional.empty());
+        return KsetContext.get(KsetContextKeys.SPAN_ID)
+                .or(() -> safeGet("currentSpanId", facade::currentSpanId, Monitor::localSpanId, Optional.empty()));
     }
 
     public static Optional<String> currentGrayTag() {
-        return safeGet("currentGrayTag", facade::currentGrayTag, Monitor::localGrayTag, Optional.empty());
+        return KsetContext.get(KsetContextKeys.GRAY_TAG)
+                .or(() -> safeGet("currentGrayTag", facade::currentGrayTag, Monitor::localGrayTag, Optional.empty()));
     }
 
     public static String generateTraceId() {
@@ -83,6 +89,7 @@ public final class Monitor {
 
     public static void clearHttpGrayTag() {
         safeRun("clearHttpGrayTag", facade::clearHttpGrayTag, () -> MDC.remove(TraceHeaders.GRAY_TAG_KEY));
+        KsetContext.remove(KsetContextKeys.GRAY_TAG);
     }
 
     public static void bindDubboConsumer(DubboAttachmentAccessor attachments, String defaultGray) {
@@ -120,26 +127,37 @@ public final class Monitor {
 
     public static void setTraceId(String traceId) {
         safeRun("setTraceId", () -> facade.setTraceId(traceId), () -> localSet(TraceHeaders.TRACE_ID_KEY, traceId));
+        putTraceContext(KsetContextKeys.TRACE_ID, traceId);
     }
 
     public static void setSpanId(String spanId) {
         safeRun("setSpanId", () -> facade.setSpanId(spanId), () -> localSet(TraceHeaders.SPAN_ID_KEY, spanId));
+        putTraceContext(KsetContextKeys.SPAN_ID, spanId);
     }
 
     public static void setGrayTag(String grayTag) {
         safeRun("setGrayTag", () -> facade.setGrayTag(grayTag), () -> localSet(TraceHeaders.GRAY_TAG_KEY, grayTag));
+        putTraceContext(KsetContextKeys.GRAY_TAG, grayTag);
     }
 
     public static void clear() {
         safeRun("clear", facade::clear, Monitor::localClear);
+        KsetContext.remove(KsetContextKeys.TRACE_ID);
+        KsetContext.remove(KsetContextKeys.SPAN_ID);
+        KsetContext.remove(KsetContextKeys.GRAY_TAG);
     }
 
     public static TraceSnapshot capture() {
-        return safeGet("capture", facade::capture, Monitor::localCapture, new TraceSnapshot(null, null, null));
+        TraceSnapshot fallback = new TraceSnapshot(
+                KsetContext.get(KsetContextKeys.TRACE_ID).orElse(null),
+                KsetContext.get(KsetContextKeys.SPAN_ID).orElse(null),
+                KsetContext.get(KsetContextKeys.GRAY_TAG).orElse(null));
+        return safeGet("capture", facade::capture, Monitor::localCapture, fallback);
     }
 
     public static void restore(TraceSnapshot snapshot) {
         safeRun("restore", () -> facade.restore(snapshot), () -> localRestore(snapshot));
+        syncTraceContext(snapshot);
     }
 
     public static MonitorScope openScope(TraceSnapshot snapshot) {
@@ -311,20 +329,22 @@ public final class Monitor {
 
     private static TraceSnapshot localCapture() {
         return new TraceSnapshot(
-                MDC.get(TraceHeaders.TRACE_ID_KEY),
-                MDC.get(TraceHeaders.SPAN_ID_KEY),
-                MDC.get(TraceHeaders.GRAY_TAG_KEY));
+                currentTraceId().orElse(null),
+                currentSpanId().orElse(null),
+                currentGrayTag().orElse(null));
     }
 
     private static void localRestore(TraceSnapshot snapshot) {
         if (snapshot == null) {
             localClear();
+            syncTraceContext(null);
             return;
         }
         localClear();
         localSet(TraceHeaders.TRACE_ID_KEY, snapshot.getTraceId());
         localSet(TraceHeaders.SPAN_ID_KEY, snapshot.getSpanId());
         localSet(TraceHeaders.GRAY_TAG_KEY, snapshot.getGrayTag());
+        syncTraceContext(snapshot);
     }
 
     private static void localBindDubboConsumer(DubboAttachmentAccessor attachments, String defaultGray) {
@@ -363,6 +383,26 @@ public final class Monitor {
             return first;
         }
         return second;
+    }
+
+    private static void putTraceContext(KsetContextKey<String> key, String value) {
+        if (value == null) {
+            KsetContext.remove(key);
+        } else {
+            KsetContext.put(key, value);
+        }
+    }
+
+    private static void syncTraceContext(TraceSnapshot snapshot) {
+        if (snapshot == null) {
+            KsetContext.remove(KsetContextKeys.TRACE_ID);
+            KsetContext.remove(KsetContextKeys.SPAN_ID);
+            KsetContext.remove(KsetContextKeys.GRAY_TAG);
+            return;
+        }
+        putTraceContext(KsetContextKeys.TRACE_ID, snapshot.getTraceId());
+        putTraceContext(KsetContextKeys.SPAN_ID, snapshot.getSpanId());
+        putTraceContext(KsetContextKeys.GRAY_TAG, snapshot.getGrayTag());
     }
 
     private static final class SafeMonitorTransaction implements MonitorTransaction {

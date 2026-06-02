@@ -9,9 +9,14 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
 import org.springframework.util.StringUtils;
+
+import java.util.Arrays;
+import java.util.List;
 
 
 @AutoConfiguration
@@ -38,11 +43,36 @@ public class KsetKnife4jAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public GroupedOpenApi ksetDefaultGroupedOpenApi(KsetWebProperties properties, Environment environment) {
-        String pathPattern = environment.getProperty(SPRINGDOC_PATH, knife4jPathPattern(properties));
+        List<String> pathPatterns = pathPatterns(properties, environment);
         return GroupedOpenApi.builder()
                 .group("default")
-                .pathsToMatch(pathPattern)
+                .pathsToMatch(pathPatterns.toArray(String[]::new))
                 .build();
+    }
+
+    private static List<String> pathPatterns(KsetWebProperties properties, Environment environment) {
+        List<String> paths = Binder.get(environment)
+                .bind(SPRINGDOC_PATH, Bindable.listOf(String.class))
+                .map(KsetKnife4jAutoConfiguration::nonBlankPaths)
+                .orElseGet(List::of);
+        if (!paths.isEmpty()) {
+            return paths;
+        }
+
+        String pathPattern = environment.getProperty(SPRINGDOC_PATH);
+        if (StringUtils.hasText(pathPattern)) {
+            paths = nonBlankPaths(Arrays.asList(StringUtils.commaDelimitedListToStringArray(pathPattern)));
+            if (!paths.isEmpty()) {
+                return paths;
+            }
+        }
+        return List.of(knife4jPathPattern(properties));
+    }
+
+    private static List<String> nonBlankPaths(List<String> paths) {
+        return paths.stream()
+                .filter(StringUtils::hasText)
+                .toList();
     }
 
     private static String knife4jPathPattern(KsetWebProperties properties) {

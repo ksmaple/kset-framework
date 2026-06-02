@@ -6,6 +6,8 @@ import com.kset.common.monitor.HttpTraceBinding;
 import com.kset.common.monitor.facade.MonitorFacade;
 import com.kset.common.monitor.TraceSnapshot;
 import com.kset.common.trace.TraceHeaders;
+import com.kset.common.context.KsetContext;
+import com.kset.common.context.KsetContextKeys;
 import com.kset.common.monitor.backend.MonitorBackend;
 import com.kset.common.monitor.facade.CompletedTransaction;
 import com.kset.common.monitor.facade.MetricKind;
@@ -62,17 +64,20 @@ public final class DefaultMonitorFacade implements MonitorFacade {
 
     @Override
     public Optional<String> currentTraceId() {
-        return Optional.ofNullable(MDC.get(TraceHeaders.TRACE_ID_KEY));
+        return KsetContext.get(KsetContextKeys.TRACE_ID)
+                .or(() -> Optional.ofNullable(MDC.get(TraceHeaders.TRACE_ID_KEY)));
     }
 
     @Override
     public Optional<String> currentSpanId() {
-        return Optional.ofNullable(MDC.get(TraceHeaders.SPAN_ID_KEY));
+        return KsetContext.get(KsetContextKeys.SPAN_ID)
+                .or(() -> Optional.ofNullable(MDC.get(TraceHeaders.SPAN_ID_KEY)));
     }
 
     @Override
     public Optional<String> currentGrayTag() {
-        return Optional.ofNullable(MDC.get(TraceHeaders.GRAY_TAG_KEY));
+        return KsetContext.get(KsetContextKeys.GRAY_TAG)
+                .or(() -> Optional.ofNullable(MDC.get(TraceHeaders.GRAY_TAG_KEY)));
     }
 
     @Override
@@ -102,6 +107,7 @@ public final class DefaultMonitorFacade implements MonitorFacade {
     @Override
     public void clearHttpGrayTag() {
         MDC.remove(TraceHeaders.GRAY_TAG_KEY);
+        KsetContext.remove(KsetContextKeys.GRAY_TAG);
     }
 
     @Override
@@ -156,6 +162,7 @@ public final class DefaultMonitorFacade implements MonitorFacade {
     @Override
     public void setTraceId(String traceId) {
         if (traceId != null) {
+            KsetContext.put(KsetContextKeys.TRACE_ID, traceId);
             MDC.put(TraceHeaders.TRACE_ID_KEY, traceId);
         }
     }
@@ -163,6 +170,7 @@ public final class DefaultMonitorFacade implements MonitorFacade {
     @Override
     public void setSpanId(String spanId) {
         if (spanId != null) {
+            KsetContext.put(KsetContextKeys.SPAN_ID, spanId);
             MDC.put(TraceHeaders.SPAN_ID_KEY, spanId);
         }
     }
@@ -170,6 +178,7 @@ public final class DefaultMonitorFacade implements MonitorFacade {
     @Override
     public void setGrayTag(String grayTag) {
         if (grayTag != null) {
+            KsetContext.put(KsetContextKeys.GRAY_TAG, grayTag);
             MDC.put(TraceHeaders.GRAY_TAG_KEY, grayTag);
         }
     }
@@ -179,15 +188,18 @@ public final class DefaultMonitorFacade implements MonitorFacade {
         MDC.remove(TraceHeaders.TRACE_ID_KEY);
         MDC.remove(TraceHeaders.SPAN_ID_KEY);
         MDC.remove(TraceHeaders.GRAY_TAG_KEY);
+        KsetContext.remove(KsetContextKeys.TRACE_ID);
+        KsetContext.remove(KsetContextKeys.SPAN_ID);
+        KsetContext.remove(KsetContextKeys.GRAY_TAG);
         transactionStack.remove();
     }
 
     @Override
     public TraceSnapshot capture() {
         return new TraceSnapshot(
-                MDC.get(TraceHeaders.TRACE_ID_KEY),
-                MDC.get(TraceHeaders.SPAN_ID_KEY),
-                MDC.get(TraceHeaders.GRAY_TAG_KEY));
+                currentTraceId().orElse(null),
+                currentSpanId().orElse(null),
+                currentGrayTag().orElse(null));
     }
 
     @Override

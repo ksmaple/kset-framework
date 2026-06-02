@@ -107,6 +107,19 @@ DateZoneHelper.sauToLocalDef("2024-06-07 10:00:00");  // 沙特快捷
 
 内置枚举：`UTC`、`CN`、`SAU`、`JP`、`SG`、`UAE`、`IN`、`UK`、`US_EAST`、`US_WEST`（固定偏移，不含夏令时）。
 
+## VersionUtil（`com.kset.common.utils`）
+
+常见版本号比较与判断。数字段逐段比较，缺失段按 0 处理，因此 `1.0`、`1.0.0`、`1.0.0.0` 视为相同版本；支持 `v` 前缀、`-SNAPSHOT`、`-RC1`、`.Final` 等常见后缀。
+
+```java
+import com.kset.common.utils.VersionUtil;
+
+VersionUtil.isEqual("1.0", "1.0.0.0");          // true
+VersionUtil.greaterThan("1.0.1", "1.0.0.9");   // true
+VersionUtil.isAtLeast("1.5.0", "1.4.9");       // true
+VersionUtil.inRange("1.5.0", "1.0.0", "2.0.0");
+```
+
 ## KsetHttp（`com.kset.common.utils.http`）
 
 基于 OkHttp 的 HTTP 客户端封装（原 `DDKJHttp`）。
@@ -286,3 +299,38 @@ boolean ok = signer.verifySha1(params);  // 或 checkSign()
 ```
 
 `kset-parent` BOM 已管理 OkHttp、Guava、commons-lang3 等版本，**无需** 再引入 `joda-time`。
+## KsetContext（`com.kset.common.context`）
+
+统一请求上下文门面，底层使用 Alibaba `TransmittableThreadLocal`，用于在当前请求、线程池任务和 RPC 调用中承载登录态、trace、灰度、租户、语言等轻量上下文。
+
+```java
+KsetContext.put(KsetContextKeys.LOGIN_USER, loginUser);
+KsetContext.put(KsetContextKeys.TRACE_ID, traceId);
+
+LoginUser user = KsetContext.get(KsetContextKeys.LOGIN_USER).orElse(null);
+KsetContextSnapshot snapshot = KsetContext.capture();
+
+try (KsetContextScope ignored = KsetContext.openScope(snapshot)) {
+    // async / rpc work
+}
+```
+
+`LoginContext` 已兼容委托到 `KsetContextKeys.LOGIN_USER`；业务原有 `LoginContext.requireUser()`、`LoginContext.capture()` 可继续使用。Redis 只作为登录 session 存储，不作为通用上下文传播底座。
+
+多业务隔离约定：
+
+- 公共语义使用 `KsetContextKeys`，如 `LOGIN_USER`、`TRACE_ID`、`TENANT_ID`。
+- 业务自定义 key 必须带命名空间，避免覆盖其他业务字段。
+- 同名 key 如果类型、传播标记或敏感标记不同，注册时会直接失败。
+- `propagatable=false` 的 key 只在当前线程内使用，不会进入 `capture()` 和线程池传播快照。
+
+```java
+public static final KsetContextKey<String> ORDER_ID =
+        KsetContextKey.of("order", "currentOrderId", String.class);
+
+public static final KsetContextKey<String> CMS_OPERATOR =
+        KsetContextKey.of("cms", "operator", String.class);
+
+public static final KsetContextKey<String> LOCAL_TEMP =
+        KsetContextKey.of("order", "localTemp", String.class, false, false);
+```

@@ -1,16 +1,17 @@
 package com.kset.common.auth;
 
+import com.kset.common.context.KsetContext;
+import com.kset.common.context.KsetContextKeys;
+
 import java.util.Optional;
 
 public final class LoginContext {
-
-    private static final ThreadLocal<LoginUser> CURRENT = new ThreadLocal<>();
 
     private LoginContext() {
     }
 
     public static Optional<LoginUser> currentUser() {
-        return Optional.ofNullable(CURRENT.get());
+        return KsetContext.get(KsetContextKeys.LOGIN_USER);
     }
 
     public static LoginUser requireUser() {
@@ -63,20 +64,20 @@ public final class LoginContext {
         if (user == null) {
             clear();
         } else {
-            CURRENT.set(user);
+            KsetContext.put(KsetContextKeys.LOGIN_USER, user);
         }
     }
 
     public static void clear() {
-        CURRENT.remove();
+        KsetContext.remove(KsetContextKeys.LOGIN_USER);
     }
 
     public static LoginContextSnapshot capture() {
-        return new LoginContextSnapshot(CURRENT.get());
+        return new LoginContextSnapshot(KsetContext.capture());
     }
 
     public static void restore(LoginContextSnapshot snapshot) {
-        if (snapshot == null || snapshot.getUser() == null) {
+        if (snapshot == null) {
             clear();
         } else {
             bind(snapshot.getUser());

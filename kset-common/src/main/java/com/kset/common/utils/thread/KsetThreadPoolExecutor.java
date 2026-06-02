@@ -2,6 +2,9 @@ package com.kset.common.utils.thread;
 
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.kset.common.context.KsetContext;
+import com.kset.common.context.KsetContextScope;
+import com.kset.common.context.KsetContextSnapshot;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
@@ -88,6 +91,7 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
     private final ThreadLocal<Long> startTimeHolder = new ThreadLocal<>();
     private final ThreadLocal<Long> waitTimeHolder = new ThreadLocal<>();
     private final ThreadLocal<FutureTask<?>> currentFutureTask = new ThreadLocal<>();
+    private final ThreadLocal<KsetContextScope> currentContextScope = new ThreadLocal<>();
 
     // ========== 内部结构 ==========
 
@@ -95,11 +99,17 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
         final Runnable delegate;
         final long submitTime;
         final String traceId;
+        final KsetContextSnapshot contextSnapshot;
 
         TimedRunnable(Runnable delegate, long submitTime, String traceId) {
+            this(delegate, submitTime, traceId, KsetContext.capture());
+        }
+
+        TimedRunnable(Runnable delegate, long submitTime, String traceId, KsetContextSnapshot contextSnapshot) {
             this.delegate = delegate;
             this.submitTime = submitTime;
             this.traceId = traceId;
+            this.contextSnapshot = contextSnapshot;
         }
 
         @Override
@@ -111,17 +121,28 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
     private static class TimedFutureTask<T> extends FutureTask<T> {
         final long submitTime;
         final String traceId;
+        final KsetContextSnapshot contextSnapshot;
 
         TimedFutureTask(Callable<T> callable, long submitTime, String traceId) {
+            this(callable, submitTime, traceId, KsetContext.capture());
+        }
+
+        TimedFutureTask(Callable<T> callable, long submitTime, String traceId, KsetContextSnapshot contextSnapshot) {
             super(callable);
             this.submitTime = submitTime;
             this.traceId = traceId;
+            this.contextSnapshot = contextSnapshot;
         }
 
         TimedFutureTask(Runnable runnable, T result, long submitTime, String traceId) {
+            this(runnable, result, submitTime, traceId, KsetContext.capture());
+        }
+
+        TimedFutureTask(Runnable runnable, T result, long submitTime, String traceId, KsetContextSnapshot contextSnapshot) {
             super(runnable, result);
             this.submitTime = submitTime;
             this.traceId = traceId;
+            this.contextSnapshot = contextSnapshot;
         }
     }
 
@@ -131,13 +152,19 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
         final int priority;
         final long sequence;
         final String traceId;
+        final KsetContextSnapshot contextSnapshot;
 
         PriorityRunnable(Runnable delegate, long submitTime, int priority, long sequence, String traceId) {
+            this(delegate, submitTime, priority, sequence, traceId, KsetContext.capture());
+        }
+
+        PriorityRunnable(Runnable delegate, long submitTime, int priority, long sequence, String traceId, KsetContextSnapshot contextSnapshot) {
             this.delegate = delegate;
             this.submitTime = submitTime;
             this.priority = priority;
             this.sequence = sequence;
             this.traceId = traceId;
+            this.contextSnapshot = contextSnapshot;
         }
 
         @Override
@@ -159,21 +186,32 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
         final int priority;
         final long sequence;
         final String traceId;
+        final KsetContextSnapshot contextSnapshot;
 
         PriorityFutureTask(Callable<T> callable, long submitTime, int priority, long sequence, String traceId) {
+            this(callable, submitTime, priority, sequence, traceId, KsetContext.capture());
+        }
+
+        PriorityFutureTask(Callable<T> callable, long submitTime, int priority, long sequence, String traceId, KsetContextSnapshot contextSnapshot) {
             super(callable);
             this.submitTime = submitTime;
             this.priority = priority;
             this.sequence = sequence;
             this.traceId = traceId;
+            this.contextSnapshot = contextSnapshot;
         }
 
         PriorityFutureTask(Runnable runnable, T result, long submitTime, int priority, long sequence, String traceId) {
+            this(runnable, result, submitTime, priority, sequence, traceId, KsetContext.capture());
+        }
+
+        PriorityFutureTask(Runnable runnable, T result, long submitTime, int priority, long sequence, String traceId, KsetContextSnapshot contextSnapshot) {
             super(runnable, result);
             this.submitTime = submitTime;
             this.priority = priority;
             this.sequence = sequence;
             this.traceId = traceId;
+            this.contextSnapshot = contextSnapshot;
         }
 
         @Override
@@ -190,6 +228,14 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
         if (r instanceof PriorityFutureTask) return ((PriorityFutureTask<?>) r).traceId;
         if (r instanceof TimedRunnable) return ((TimedRunnable) r).traceId;
         if (r instanceof TimedFutureTask) return ((TimedFutureTask<?>) r).traceId;
+        return null;
+    }
+
+    private static KsetContextSnapshot getContextSnapshot(Runnable r) {
+        if (r instanceof PriorityRunnable) return ((PriorityRunnable) r).contextSnapshot;
+        if (r instanceof PriorityFutureTask) return ((PriorityFutureTask<?>) r).contextSnapshot;
+        if (r instanceof TimedRunnable) return ((TimedRunnable) r).contextSnapshot;
+        if (r instanceof TimedFutureTask) return ((TimedFutureTask<?>) r).contextSnapshot;
         return null;
     }
 
@@ -572,6 +618,7 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
         }
         submittedCounter.incrementAndGet();
         String traceId = captureTraceId();
+        KsetContextSnapshot contextSnapshot = KsetContext.capture();
         long submitTime = System.currentTimeMillis();
         if (reporter != null) {
             reporter.onTaskSubmitted(poolName, traceId, command);
@@ -582,7 +629,7 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
         if (command instanceof TimedFutureTask) {
             super.execute(command);
         } else {
-            super.execute(new TimedRunnable(command, submitTime, traceId));
+            super.execute(new TimedRunnable(command, submitTime, traceId, contextSnapshot));
         }
     }
 
@@ -601,6 +648,7 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
         }
         submittedCounter.incrementAndGet();
         String traceId = captureTraceId();
+        KsetContextSnapshot contextSnapshot = KsetContext.capture();
         long submitTime = System.currentTimeMillis();
         long seq = sequenceGenerator.getAndIncrement();
         if (reporter != null) {
@@ -613,26 +661,28 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
         if (command instanceof PriorityFutureTask) {
             super.execute(command);
         } else {
-            super.execute(new PriorityRunnable(command, submitTime, priority, seq, traceId));
+            super.execute(new PriorityRunnable(command, submitTime, priority, seq, traceId, contextSnapshot));
         }
     }
 
     @Override
     protected <T> RunnableFuture<T> newTaskFor(Callable<T> callable) {
         String traceId = captureTraceId();
+        KsetContextSnapshot contextSnapshot = KsetContext.capture();
         if (priorityQueueEnabled) {
-            return new PriorityFutureTask<>(callable, System.currentTimeMillis(), defaultPriority, sequenceGenerator.getAndIncrement(), traceId);
+            return new PriorityFutureTask<>(callable, System.currentTimeMillis(), defaultPriority, sequenceGenerator.getAndIncrement(), traceId, contextSnapshot);
         }
-        return new TimedFutureTask<>(callable, System.currentTimeMillis(), traceId);
+        return new TimedFutureTask<>(callable, System.currentTimeMillis(), traceId, contextSnapshot);
     }
 
     @Override
     protected <T> RunnableFuture<T> newTaskFor(Runnable runnable, T value) {
         String traceId = captureTraceId();
+        KsetContextSnapshot contextSnapshot = KsetContext.capture();
         if (priorityQueueEnabled) {
-            return new PriorityFutureTask<>(runnable, value, System.currentTimeMillis(), defaultPriority, sequenceGenerator.getAndIncrement(), traceId);
+            return new PriorityFutureTask<>(runnable, value, System.currentTimeMillis(), defaultPriority, sequenceGenerator.getAndIncrement(), traceId, contextSnapshot);
         }
-        return new TimedFutureTask<>(runnable, value, System.currentTimeMillis(), traceId);
+        return new TimedFutureTask<>(runnable, value, System.currentTimeMillis(), traceId, contextSnapshot);
     }
 
     /**
@@ -643,7 +693,8 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
             throw new IllegalStateException("Priority queue not enabled for pool " + poolName);
         }
         String traceId = captureTraceId();
-        RunnableFuture<T> ftask = new PriorityFutureTask<>(task, System.currentTimeMillis(), priority, sequenceGenerator.getAndIncrement(), traceId);
+        KsetContextSnapshot contextSnapshot = KsetContext.capture();
+        RunnableFuture<T> ftask = new PriorityFutureTask<>(task, System.currentTimeMillis(), priority, sequenceGenerator.getAndIncrement(), traceId, contextSnapshot);
         execute(ftask);
         return ftask;
     }
@@ -656,7 +707,8 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
             throw new IllegalStateException("Priority queue not enabled for pool " + poolName);
         }
         String traceId = captureTraceId();
-        RunnableFuture<Void> ftask = new PriorityFutureTask<>(task, null, System.currentTimeMillis(), priority, sequenceGenerator.getAndIncrement(), traceId);
+        KsetContextSnapshot contextSnapshot = KsetContext.capture();
+        RunnableFuture<Void> ftask = new PriorityFutureTask<>(task, null, System.currentTimeMillis(), priority, sequenceGenerator.getAndIncrement(), traceId, contextSnapshot);
         execute(ftask);
         return ftask;
     }
@@ -669,7 +721,8 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
             throw new IllegalStateException("Priority queue not enabled for pool " + poolName);
         }
         String traceId = captureTraceId();
-        RunnableFuture<T> ftask = new PriorityFutureTask<>(task, result, System.currentTimeMillis(), priority, sequenceGenerator.getAndIncrement(), traceId);
+        KsetContextSnapshot contextSnapshot = KsetContext.capture();
+        RunnableFuture<T> ftask = new PriorityFutureTask<>(task, result, System.currentTimeMillis(), priority, sequenceGenerator.getAndIncrement(), traceId, contextSnapshot);
         execute(ftask);
         return ftask;
     }
@@ -703,6 +756,7 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
             waitTime = start - ((TimedRunnable) r).submitTime;
         }
 
+        currentContextScope.set(KsetContext.openScope(getContextSnapshot(r)));
         String traceId = getTraceId(r);
         if (traceContextAdapter != null && traceId != null) {
             traceContextAdapter.setTraceId(traceId);
@@ -787,6 +841,11 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
             startTimeHolder.remove();
             waitTimeHolder.remove();
             currentFutureTask.remove();
+            KsetContextScope contextScope = currentContextScope.get();
+            currentContextScope.remove();
+            if (contextScope != null) {
+                contextScope.close();
+            }
             if (traceContextAdapter != null) {
                 traceContextAdapter.clear();
             }
