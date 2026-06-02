@@ -1,36 +1,65 @@
-# kset-demo 示例工程
+# kset-demo
 
-两个独立示例，对应不同接入方式。各模块配置写在 **`src/main/resources/application.yaml`**；[env](env) 目录仅提供可复制的配置示例。
+Demo modules are examples and integration test carriers for KSet starters. They are isolated from the default root reactor, so framework packaging and publishing do not build or deploy demo artifacts unless a demo profile is enabled explicitly.
 
-## 1. 单机项目 — `demo-standalone-service`
+## Reactor Profiles
 
-| 项 | 说明 |
-|----|------|
-| 依赖 | web + datasource + PostgreSQL + redis + monitor |
-| 端口 | 18081 |
-| 中间件 | PostgreSQL（`127.0.0.1:5432/kset_demo`）、Redis |
-| 启动 | `mvn -pl kset-demo/demo-standalone-service spring-boot:run` |
+| Profile | Modules | Usage |
+|--------|---------|-------|
+| default | framework modules only | release/package/deploy path |
+| `with-demo` | all demo modules | full demo build or regression |
+| `demo-standalone` | `demo-standalone-service` | standalone service only |
+| `demo-micro` | `demo-micro-service` | micro-service demo only |
+| `demo-gateway` | `demo-gateway` | gateway demo only |
+| `demo-smoke` | test filter only | run `*ApplicationTest` smoke tests |
 
-- API：http://localhost:18081/api/users/1
-- 文档：http://localhost:18081/doc.html
+## Common Commands
 
-## 2. 微服务 Cloud — `demo-micro-service` / `demo-gateway`
-
-| 模块 | 端口 | 说明 |
-|------|------|------|
-| `demo-micro-service` | 18082 | 用户与订单微服务示例，包含 Dubbo Provider/Consumer + Redis（Nacos + Sentinel） |
-| `demo-gateway` | 8080 | 网关（starter-gateway + monitor） |
-
-中间件：PostgreSQL、Redis、Nacos（`NACOS_ADDR` 默认 `127.0.0.1:8848`）。
+Framework release path:
 
 ```bash
-mvn clean install
-mvn -pl kset-demo/demo-micro-service spring-boot:run
-mvn -pl kset-demo/demo-gateway spring-boot:run
+mvn test
+mvn package
+mvn deploy
 ```
 
-Gateway 路由样例：[docs/nacos/demo-gateway-routes.json](../docs/nacos/demo-gateway-routes.json)。
+Fast demo smoke:
 
-切换数据库或叠加组件时，从 [env/README.md](env/README.md) 复制示例到对应 `application.yaml`。
+```bash
+mvn test -Pwith-demo,demo-smoke
+```
 
-详见 [docs/getting-started.md](../docs/getting-started.md)。
+Full demo regression:
+
+```bash
+mvn test -Pwith-demo
+```
+
+Run one demo service:
+
+```bash
+mvn spring-boot:run -Pdemo-standalone -pl kset-demo/demo-standalone-service -am
+mvn spring-boot:run -Pdemo-micro -pl kset-demo/demo-micro-service -am
+mvn spring-boot:run -Pdemo-gateway -pl kset-demo/demo-gateway -am
+```
+
+Package one demo service without tests:
+
+```bash
+mvn package -Pdemo-micro -pl kset-demo/demo-micro-service -am -DskipTests
+```
+
+## Modules
+
+| Module | Port | Purpose |
+|--------|------|---------|
+| `demo-standalone-service` | 18081 | Web + datasource + Redis + monitor without cloud dependencies |
+| `demo-micro-service` | 18082 | Web service with Nacos, Dubbo, Sentinel, Redis, MQ, cache and framework integration tests |
+| `demo-gateway` | 8080 | Gateway + monitor example |
+
+## Environment
+
+Service runtime configuration lives in each module's `src/main/resources/application.yaml`.
+
+The [env](env) directory contains copyable component snippets only. It is not loaded automatically at runtime. Use it when switching middleware addresses, changing datasource type, or adding optional components.
+

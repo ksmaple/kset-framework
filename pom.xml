@@ -50,5 +50,23 @@
                 <module>kset-demo</module>
             </modules>
         </profile>
+        <profile>
+            <id>demo-standalone</id>
+            <modules>
+                <module>kset-demo/demo-standalone-service</module>
+            </modules>
+        </profile>
+        <profile>
+            <id>demo-micro</id>
+            <modules>
+                <module>kset-demo/demo-micro-service</module>
+            </modules>
+        </profile>
+        <profile>
+            <id>demo-gateway</id>
+            <modules>
+                <module>kset-demo/demo-gateway</module>
+            </modules>
+        </profile>
     </profiles>
 </project>

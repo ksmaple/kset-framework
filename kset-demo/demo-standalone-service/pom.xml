@@ -16,10 +16,6 @@
     <name>demo-standalone-service</name>
     <description>单机示例：web + datasource + PostgreSQL driver + redis，无 Nacos / Dubbo / Gateway</description>
 
-    <properties>
-        <kset.skipModuleTests>false</kset.skipModuleTests>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>com.kset</groupId>
@@ -47,12 +43,4 @@
         </dependency>
     </dependencies>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
 </project>

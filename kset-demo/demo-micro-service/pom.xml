@@ -15,10 +15,6 @@
     <packaging>jar</packaging>
     <name>demo-micro-service</name>
 
-    <properties>
-        <kset.skipModuleTests>false</kset.skipModuleTests>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>com.kset</groupId>
@@ -75,12 +71,4 @@
         </dependency>
     </dependencies>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
 </project>
