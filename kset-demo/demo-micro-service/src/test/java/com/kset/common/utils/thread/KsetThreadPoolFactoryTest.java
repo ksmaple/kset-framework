@@ -1,5 +1,6 @@
 package com.kset.common.utils.thread;
 
+import com.kset.common.monitor.Monitor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ public class KsetThreadPoolFactoryTest {
     @AfterEach
     public void tearDown() throws Exception {
         factory.shutdownAll();
+        Monitor.clear();
         // 反射重置 globalShutdown，避免单例状态污染后续测试
         java.lang.reflect.Field field = KsetThreadPoolFactory.class.getDeclaredField("globalShutdown");
         field.setAccessible(true);
@@ -421,11 +423,13 @@ public class KsetThreadPoolFactoryTest {
 
     @Test
     public void testMdcThreadPoolTraceAdapter() {
-        // 未引入 slf4j 时，应静默返回 null，不抛异常
         MdcThreadPoolTraceAdapter adapter = new MdcThreadPoolTraceAdapter();
+        Monitor.clear();
+
         assertNull(adapter.getTraceId());
-        adapter.setTraceId("test"); // 不应抛异常
-        adapter.clear(); // 不应抛异常
+        adapter.setTraceId("test");
+        assertEquals("test", adapter.getTraceId());
+        adapter.clear();
+        assertNull(adapter.getTraceId());
     }
 }
-

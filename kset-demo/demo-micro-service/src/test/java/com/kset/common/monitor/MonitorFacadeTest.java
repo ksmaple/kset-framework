@@ -1,5 +1,7 @@
 package com.kset.common.monitor;
 
+import com.kset.common.context.KsetContext;
+import com.kset.common.context.KsetContextKeys;
 import com.kset.common.monitor.internal.NoOpMonitorFacade;
 import com.kset.common.monitor.facade.MonitorFacade;
 import com.kset.common.monitor.facade.MetricKind;
@@ -11,19 +13,24 @@ import com.kset.common.monitor.backend.LogBackend;
 import com.kset.common.monitor.reporter.DefaultMetricAggregator;
 import com.kset.common.monitor.reporter.NoOpMetricAggregator;
 import com.kset.common.monitor.sampler.RateSampler;
+import com.kset.common.trace.TraceHeaders;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MonitorFacadeTest {
 
     @AfterEach
     void resetFacade() {
+        Monitor.clear();
         Monitor.install(new NoOpMonitorFacade());
     }
 
@@ -98,8 +105,44 @@ class MonitorFacadeTest {
 
         HttpTraceBinding binding = Monitor.bindHttpIncoming("trace-fallback");
 
-        assertTrue(Monitor.currentTraceId().isPresent());
-        assertTrue(Monitor.currentTraceId().get().equals(binding.getTraceId()));
+        assertEquals("trace-fallback", binding.getTraceId());
+        assertEquals(binding.getTraceId(), Monitor.currentTraceId().orElseThrow());
+        assertEquals(binding.getTraceId(), KsetContext.get(KsetContextKeys.TRACE_ID).orElseThrow());
+        assertEquals(binding.getSpanId(), KsetContext.get(KsetContextKeys.SPAN_ID).orElseThrow());
+    }
+
+    @Test
+    void facadeFailureKeepsDubboProviderContextFallback() {
+        Monitor.install(new FailingMonitorFacade());
+        Map<String, String> attachments = new HashMap<>();
+        attachments.put(TraceHeaders.TRACE_ID_KEY, "trace-dubbo");
+        attachments.put(TraceHeaders.GRAY_TAG_KEY, "gray-dubbo");
+
+        Monitor.bindDubboProvider(new MapDubboAttachmentAccessor(attachments), "gray-default");
+
+        assertEquals("trace-dubbo", Monitor.currentTraceId().orElseThrow());
+        assertEquals("trace-dubbo", KsetContext.get(KsetContextKeys.TRACE_ID).orElseThrow());
+        assertEquals("gray-dubbo", Monitor.currentGrayTag().orElseThrow());
+        assertEquals("gray-dubbo", KsetContext.get(KsetContextKeys.GRAY_TAG).orElseThrow());
+    }
+
+    static class MapDubboAttachmentAccessor implements DubboAttachmentAccessor {
+
+        private final Map<String, String> attachments;
+
+        MapDubboAttachmentAccessor(Map<String, String> attachments) {
+            this.attachments = attachments;
+        }
+
+        @Override
+        public String getAttachment(String key) {
+            return attachments.get(key);
+        }
+
+        @Override
+        public void setAttachment(String key, String value) {
+            attachments.put(key, value);
+        }
     }
 
     static class FailingMonitorFacade implements MonitorFacade {

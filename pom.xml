@@ -41,6 +41,14 @@
         <module>kset-starter-mq</module>
         <module>kset-starter-gateway</module>
         <module>kset-starter-monitor</module>
-        <module>kset-demo</module>
     </modules>
+
+    <profiles>
+        <profile>
+            <id>with-demo</id>
+            <modules>
+                <module>kset-demo</module>
+            </modules>
+        </profile>
+    </profiles>
 </project>

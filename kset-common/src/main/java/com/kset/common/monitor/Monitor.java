@@ -297,6 +297,8 @@ public final class Monitor {
         String spanId = localGenerateSpanId();
         localSet(TraceHeaders.TRACE_ID_KEY, traceId);
         localSet(TraceHeaders.SPAN_ID_KEY, spanId);
+        putTraceContext(KsetContextKeys.TRACE_ID, traceId);
+        putTraceContext(KsetContextKeys.SPAN_ID, spanId);
         return new HttpTraceBinding(traceId, spanId);
     }
 
@@ -357,13 +359,19 @@ public final class Monitor {
         attachments.setAttachment(TraceHeaders.GRAY_TAG_KEY, grayTag);
         localSet(TraceHeaders.TRACE_ID_KEY, traceId);
         localSet(TraceHeaders.GRAY_TAG_KEY, grayTag);
+        putTraceContext(KsetContextKeys.TRACE_ID, traceId);
+        putTraceContext(KsetContextKeys.GRAY_TAG, grayTag);
     }
 
     private static void localBindDubboProvider(DubboAttachmentAccessor attachments, String defaultGray) {
         String traceId = attachments != null ? attachments.getAttachment(TraceHeaders.TRACE_ID_KEY) : null;
         String grayTag = attachments != null ? attachments.getAttachment(TraceHeaders.GRAY_TAG_KEY) : null;
-        localSet(TraceHeaders.TRACE_ID_KEY, firstNonBlank(traceId, localGenerateTraceId()));
-        localSet(TraceHeaders.GRAY_TAG_KEY, firstNonBlank(grayTag, defaultGray));
+        String resolvedTraceId = firstNonBlank(traceId, localGenerateTraceId());
+        String resolvedGrayTag = firstNonBlank(grayTag, defaultGray);
+        localSet(TraceHeaders.TRACE_ID_KEY, resolvedTraceId);
+        localSet(TraceHeaders.GRAY_TAG_KEY, resolvedGrayTag);
+        putTraceContext(KsetContextKeys.TRACE_ID, resolvedTraceId);
+        putTraceContext(KsetContextKeys.GRAY_TAG, resolvedGrayTag);
     }
 
     private static void localSet(String key, String value) {
