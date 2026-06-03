@@ -84,8 +84,8 @@
         <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
         <ip2region.version>2.7.0</ip2region.version>
 
-        <!-- 框架库单元测试由 kset-demo 的服务模块承载；库模块默认跳过 surefire -->
-        <kset.skipModuleTests>true</kset.skipModuleTests>
+        <!-- Framework module tests run in their owning modules. Use -DskipTests for release packaging when needed. -->
+        <kset.skipModuleTests>false</kset.skipModuleTests>
 
         <!-- Nexus 发布（-Pnexus；可用 -Dkset.nexus.url 覆盖） -->
         <kset.nexus.url>http://192.168.53.5:8081</kset.nexus.url>

@@ -1,13 +1,13 @@
 # 快速开始
 
-kset-framework 提供两类典型接入方式，对应 **两个示例工程**：
+kset-framework 提供两类典型接入方式：
 
-配置示例见 [kset-demo/env](../kset-demo/env)：`component-*.yml` 为各组件配置模板，复制到业务 `application.yaml` 使用；demo 服务已内置默认配置。
+配置模板见 [env](../env)：`component-*.yml` 为各组件配置模板，复制到业务 `application.yaml` 使用。
 
-| 场景 | 示例模块 | 依赖中间件 | 说明 |
-|------|----------|------------|------|
-| **单机项目** | [demo-standalone-service](../kset-demo/demo-standalone-service) | MySQL/PostgreSQL/SQLite、Redis | Web + DB + 缓存，无注册中心 |
-| **微服务 Cloud** | demo-user / demo-order / demo-gateway | MySQL/PostgreSQL/SQLite、Redis、Nacos | Nacos + Dubbo + Gateway + 灰度 |
+| 场景 | 依赖中间件 | 说明 |
+|------|------------|------|
+| **单机项目** | MySQL/PostgreSQL/SQLite、Redis | Web + DB + 缓存，无注册中心 |
+| **微服务 Cloud** | MySQL/PostgreSQL/SQLite、Redis、Nacos | Nacos + Dubbo + Gateway + 灰度 |
 
 业务项目均继承 `kset-parent`：
 
@@ -172,20 +172,6 @@ logging:
       max-history: 7
 ```
 
-### 运行示例工程
-
-```bash
-mvn clean install
-mvn -pl kset-demo/demo-standalone-service spring-boot:run
-```
-
-| 项 | 地址 |
-|----|------|
-| API | http://localhost:18081/api/users/1 |
-| Knife4j | http://localhost:18081/doc.html |
-
----
-
 ## 二、微服务 Cloud 项目
 
 适用于多服务注册发现、RPC、网关统一入口、Nacos 配置与 Sentinel/灰度治理。
@@ -296,22 +282,7 @@ dubbo:
     port: -1
 ```
 
-Nacos 规则与 Gateway 路由见 [README Nacos 约定](../README.md#nacos-规则配置约定) 与 [docs/nacos/demo-gateway-routes.json](nacos/demo-gateway-routes.json)。
-
-### 运行 Cloud 示例工程
-
-```bash
-mvn clean install
-# 终端 1 - 用户服务
-mvn -pl kset-demo/demo-micro-service spring-boot:run
-# 终端 2 - 网关
-mvn -pl kset-demo/demo-gateway spring-boot:run
-```
-
-| 服务 | 端口 | API 示例 | Knife4j |
-|------|------|----------|---------|
-| demo-micro-service | 18082 | `/api/users/1`、`/api/orders/1` | http://localhost:18082/doc.html |
-| demo-gateway | 见 gateway 配置 | 经网关访问 | 无（不用 starter-web） |
+Nacos 规则与 Gateway 路由格式见 [README Nacos 约定](../README.md#nacos-规则配置约定)。
 
 ---
 

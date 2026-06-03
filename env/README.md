@@ -125,7 +125,6 @@ Linux/macOS/Git Bash：
 | 配置源 | 同步目标 |
 |--------|----------|
 | `env/.env.example` | `env/.env`，仅当 `.env` 不存在时初始化 |
-| `env/cat/client/client.xml` | `kset-demo/env/cat/client.xml` |
 | `env/cat/client/client.xml` | `/data/appdatas/cat/client.xml` |
 
 单独同步：

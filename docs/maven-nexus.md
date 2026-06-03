@@ -24,16 +24,16 @@
 
 ## 3. 发布命令
 
-在仓库根目录执行（**跳过 demo 示例工程**，demo 已配置 `maven.deploy.skip`）：
+在仓库根目录执行：
 
 ```bash
-mvn clean deploy -Pnexus -pl !kset-demo -am
+mvn clean deploy -Pnexus
 ```
 
 默认发布到 `http://192.168.53.5:8081`。临时改用其他 Nexus：
 
 ```bash
-mvn clean deploy -Pnexus -Dkset.nexus.url=http://other-nexus:8081 -pl !kset-demo -am
+mvn clean deploy -Pnexus -Dkset.nexus.url=http://other-nexus:8081
 ```
 
 ## 4. 配置位置

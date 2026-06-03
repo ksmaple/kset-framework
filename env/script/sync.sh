@@ -42,5 +42,4 @@ if [[ ! -f "${ENV_DIR}/.env" && -f "${ENV_DIR}/.env.example" ]]; then
   info "init: env/.env.example -> env/.env"
 fi
 
-sync_file "env/cat/client/client.xml" "kset-demo/env/cat/client.xml"
 sync_file "env/cat/client/client.xml" "/data/appdatas/cat/client.xml"

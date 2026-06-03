@@ -49,5 +49,4 @@ if (-not (Test-Path $envTarget) -and (Test-Path $envExample)) {
     Write-Info "init: env/.env.example -> env/.env"
 }
 
-Sync-ConfigFile "env/cat/client/client.xml" "kset-demo/env/cat/client.xml"
 Sync-ConfigFile "env/cat/client/client.xml" "/data/appdatas/cat/client.xml"

@@ -10,12 +10,6 @@
 | OpenAPI JSON | `/v3/api-docs` |
 | 默认分组 | `/v3/api-docs/default` |
 
-kset-demo：
-
-- 单机（18081）：http://localhost:18081/doc.html — `demo-standalone-service`
-- 用户服务（18082）：http://localhost:18082/doc.html — Cloud 示例
-- 订单服务（18083）：http://localhost:18083/doc.html — Cloud 示例
-
 > Gateway 不使用 `starter-web`，无 Knife4j 页面；文档在各业务微服务上查看。
 
 ## 配置
