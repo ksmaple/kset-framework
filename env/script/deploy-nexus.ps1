@@ -5,6 +5,7 @@ param(
     [string]$ReleaseRepository = "maven-releases",
     [string]$SnapshotRepository = "maven-snapshots",
     [switch]$SkipTests,
+    [switch]$RunTests,
     [switch]$KeepSettings
 )
 
@@ -58,8 +59,8 @@ $mvnArgs = @(
     "-Dkset.nexus.snapshot.repository=$SnapshotRepository"
 )
 
-if ($SkipTests) {
-    $mvnArgs += "-DskipTests"
+if (-not $RunTests) {
+    $mvnArgs += @("-DskipTests", "-Dmaven.test.skip=true")
 }
 
 Push-Location $RepoRoot

@@ -582,7 +582,7 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <configuration>
                         <skip>${kset.skipModuleTests}</skip>
-                        <argLine>-Dfile.encoding=UTF-8</argLine>
+                        <argLine>-Dfile.encoding=UTF-8 -Xshare:off -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                     </configuration>
                 </plugin>
                 <plugin>
