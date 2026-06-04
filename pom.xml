@@ -7,7 +7,7 @@
 
     <groupId>com.kset</groupId>
     <artifactId>kset-framework</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>${revision}</version>
     <packaging>pom</packaging>
 
     <name>kset-framework</name>
@@ -22,6 +22,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <revision>0.0.1-SNAPSHOT</revision>
         <!-- 根聚合 POM 本身不发布 -->
         <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
