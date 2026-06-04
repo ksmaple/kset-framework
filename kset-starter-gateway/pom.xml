@@ -8,7 +8,7 @@
     <parent>
         <groupId>com.kset</groupId>
         <artifactId>kset-parent</artifactId>
-        <version>${revision}</version>
+        <version>0.0.1-SNAPSHOT</version>
         <relativePath>../kset-parent/pom.xml</relativePath>
     </parent>
 

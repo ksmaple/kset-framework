@@ -14,7 +14,7 @@
 
     <groupId>com.kset</groupId>
     <artifactId>kset-parent</artifactId>
-    <version>${revision}</version>
+    <version>0.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>kset-parent</name>
@@ -27,12 +27,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
-        <revision>0.0.1-SNAPSHOT</revision>
-
-        <!-- KSet module versions -->
-        <kset-common.version>${revision}</kset-common.version>
-        <kset-cloud.version>${revision}</kset-cloud.version>
-        <kset-starter.version>${revision}</kset-starter.version>
 
         <!-- Spring Cloud / Alibaba -->
         <spring-cloud.version>2025.0.2</spring-cloud.version>
@@ -90,6 +84,8 @@
 
         <!-- Nexus 发布（-Pnexus；可用 -Dkset.nexus.url 覆盖） -->
         <kset.nexus.url>http://192.168.53.5:8081</kset.nexus.url>
+        <kset.nexus.username>admin</kset.nexus.username>
+        <kset.nexus.password>12345678</kset.nexus.password>
         <kset.nexus.release.repository>maven-releases</kset.nexus.release.repository>
         <kset.nexus.snapshot.repository>maven-snapshots</kset.nexus.snapshot.repository>
     </properties>
@@ -100,67 +96,67 @@
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-common</artifactId>
-                <version>${kset-common.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-cloud</artifactId>
-                <version>${kset-cloud.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-web</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-datasource</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-cache</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-auth</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-redis</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-nacos</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-sentinel</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-dubbo</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-mq</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-gateway</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-monitor</artifactId>
-                <version>${kset-starter.version}</version>
+                <version>${project.version}</version>
             </dependency>
 
             <!-- Spring Cloud BOM -->
