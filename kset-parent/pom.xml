@@ -11,7 +11,7 @@
 
     <groupId>com.kset</groupId>
     <artifactId>kset-parent</artifactId>
-    <version>0.0.2-SNAPSHOT</version>
+    <version>0.0.2</version>
     <packaging>pom</packaging>
 
     <name>kset-parent</name>
@@ -637,4 +637,8 @@
             </distributionManagement>
         </profile>
     </profiles>
+
+  <scm>
+    <tag>v0.0.2</tag>
+  </scm>
 </project>
