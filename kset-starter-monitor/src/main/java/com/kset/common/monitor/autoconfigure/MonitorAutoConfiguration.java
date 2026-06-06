@@ -1,6 +1,7 @@
 package com.kset.common.monitor.autoconfigure;
 
 import com.kset.common.monitor.aop.MonitorAspect;
+import com.kset.common.monitor.aop.ScheduledMonitorAspect;
 import com.kset.common.monitor.interceptor.MvcMonitorInterceptor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -19,6 +20,16 @@ public class MonitorAutoConfiguration {
     @ConditionalOnClass(name = "org.aspectj.lang.annotation.Aspect")
     public MonitorAspect monitorAspect() {
         return new MonitorAspect();
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "kset.monitor.scheduled", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnClass(name = {
+            "org.aspectj.lang.annotation.Aspect",
+            "org.springframework.scheduling.annotation.Scheduled"
+    })
+    public ScheduledMonitorAspect scheduledMonitorAspect() {
+        return new ScheduledMonitorAspect();
     }
 
     @Bean

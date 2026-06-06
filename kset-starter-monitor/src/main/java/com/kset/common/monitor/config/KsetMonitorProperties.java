@@ -22,6 +22,7 @@ public class KsetMonitorProperties {
     private final Redis redis = new Redis();
     private final ThreadPool threadPool = new ThreadPool();
     private final Async async = new Async();
+    private final Scheduled scheduled = new Scheduled();
 
     public boolean isEnabled() {
         return enabled;
@@ -85,6 +86,10 @@ public class KsetMonitorProperties {
 
     public Async getAsync() {
         return async;
+    }
+
+    public Scheduled getScheduled() {
+        return scheduled;
     }
 
     public static class Web {
@@ -232,6 +237,18 @@ public class KsetMonitorProperties {
     }
 
     public static class Async {
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+    }
+
+    public static class Scheduled {
         private boolean enabled = true;
 
         public boolean isEnabled() {

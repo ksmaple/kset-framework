@@ -30,26 +30,30 @@ public class DubboTraceFilter implements Filter {
     public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
         RpcContext context = RpcContext.getServiceContext();
         TraceSnapshot previous = Monitor.capture();
+        String side = resolveSide(context);
         boolean tracePropagationEnabled = properties.getDubbo().isTracePropagationEnabled();
         if (tracePropagationEnabled) {
             String defaultGray = properties.getDubbo().getDefaultGrayTag();
-            if (context.isConsumerSide()) {
+            if ("consumer".equals(side)) {
                 Monitor.bindDubboConsumer(new DubboInvocationAttachments(invocation, false), defaultGray);
-            } else if (context.isProviderSide()) {
+            } else if ("provider".equals(side)) {
                 Monitor.bindDubboProvider(new DubboInvocationAttachments(invocation, true), defaultGray);
             }
         }
 
         String serviceName = invoker.getInterface().getSimpleName();
         String txName = serviceName + "." + invocation.getMethodName();
-        InvocationContext ctx = new InvocationContext("Dubbo", MonitorTypes.RPC, txName);
+        String txType = resolveTransactionType(side);
+        InvocationContext ctx = new InvocationContext("Dubbo", txType, txName);
         ctx.setAttribute("component", "dubbo");
+        ctx.setAttribute("side", side);
         ctx.setAttribute("service", invoker.getInterface().getName());
         ctx.setAttribute("method", invocation.getMethodName());
         MonitorInterceptorRegistry.notifyBefore(ctx);
-        MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.RPC, txName);
+        MonitorTransaction tx = Monitor.newTransaction(txType, txName);
         try {
             tx.addData("component", "dubbo");
+            tx.addData("side", side);
             tx.addData("service", invoker.getInterface().getName());
             tx.addData("method", invocation.getMethodName());
             Result result = invoker.invoke(invocation);
@@ -77,5 +81,25 @@ public class DubboTraceFilter implements Filter {
             tx.close();
             Monitor.restore(previous);
         }
+    }
+
+    static String resolveSide(RpcContext context) {
+        if (context != null && context.isConsumerSide()) {
+            return "consumer";
+        }
+        if (context != null && context.isProviderSide()) {
+            return "provider";
+        }
+        return "unknown";
+    }
+
+    static String resolveTransactionType(String side) {
+        if ("consumer".equals(side)) {
+            return MonitorTypes.RPC_CONSUMER;
+        }
+        if ("provider".equals(side)) {
+            return MonitorTypes.RPC_PROVIDER;
+        }
+        return MonitorTypes.RPC;
     }
 }
