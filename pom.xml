@@ -10,6 +10,13 @@
     <name>kset-framework</name>
     <description>KSet framework aggregator (parent BOM and starters)</description>
 
+    <scm>
+        <connection>scm:git:git@github.com:ksmaple/kset-framework.git</connection>
+        <developerConnection>scm:git:git@github.com:ksmaple/kset-framework.git</developerConnection>
+        <url>https://github.com/ksmaple/kset-framework</url>
+        <tag>HEAD</tag>
+    </scm>
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
