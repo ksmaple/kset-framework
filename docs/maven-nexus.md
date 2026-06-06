@@ -46,7 +46,10 @@ mvn -s /path/to/settings-nexus.xml -DskipTests deploy -Pnexus
 
 适合正式版本，例如 `0.0.3`。
 
+发布前不要通过 `JDK_JAVA_OPTIONS` 注入 Maven 编码参数。JDK 会把 `Picked up JDK_JAVA_OPTIONS` 写到 stderr，`release:perform` 的外层 Maven 可能把它显示成 `[ERROR] NOTE...`。仓库 [.mvn/jvm.config](../.mvn/jvm.config) 已经设置 UTF-8，发布命令不需要再依赖 `JDK_JAVA_OPTIONS`。
+
 ```bash
+unset JDK_JAVA_OPTIONS
 mvn release:clean
 mvn release:prepare \
   -DreleaseVersion=0.0.3 \
@@ -61,6 +64,8 @@ mvn release:perform \
 Windows PowerShell 写法：
 
 ```powershell
+$oldJdkJavaOptions = $env:JDK_JAVA_OPTIONS
+Remove-Item Env:JDK_JAVA_OPTIONS -ErrorAction SilentlyContinue
 mvn release:clean
 mvn release:prepare `
   "-DreleaseVersion=0.0.3" `
@@ -70,6 +75,7 @@ mvn release:prepare `
 mvn release:perform `
   -Pnexus `
   "-Darguments=-q -DskipTests -Pnexus"
+$env:JDK_JAVA_OPTIONS = $oldJdkJavaOptions
 ```
 
 `release:prepare` 会做这些事：
@@ -181,4 +187,5 @@ git status --short
 | `Repository does not allow updating assets` | release 仓库通常不允许覆盖同版本；需要换新版本号 |
 | `distributionManagement missing` | 发布命令缺少 `-Pnexus` |
 | `Connection refused` | 检查 Nexus 地址、网络和仓库名 |
+| `[ERROR] NOTE: Picked up JDK_JAVA_OPTIONS...` | 不是构建错误，是 JDK 把环境变量提示写到 stderr；发布前临时清理 `JDK_JAVA_OPTIONS` |
 | `Unknown lifecycle phase ".version"` | PowerShell 下带点号的 Maven 参数要加引号，例如 `"-Dexpression=project.version"` |
