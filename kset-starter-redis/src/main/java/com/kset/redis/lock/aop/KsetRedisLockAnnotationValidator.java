@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.context.ApplicationContext;
+import org.springframework.util.ClassUtils;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -36,6 +37,18 @@ public class KsetRedisLockAnnotationValidator implements SmartInitializingSingle
         if (!enabled) {
             return;
         }
+        List<String> issues = collectIssues();
+        if (!issues.isEmpty()) {
+            for (String issue : issues) {
+                log.warn("[kset-redis-lock] {}", issue);
+            }
+        }
+        if (!issues.isEmpty() || hasAnyKsetLockedBean()) {
+            log.info("[kset-redis-lock] {}", SELF_INVOKE_HINT);
+        }
+    }
+
+    List<String> collectIssues() {
         List<String> issues = new ArrayList<>();
         for (String beanName : applicationContext.getBeanDefinitionNames()) {
             Object bean;
@@ -44,11 +57,13 @@ public class KsetRedisLockAnnotationValidator implements SmartInitializingSingle
             } catch (Exception ex) {
                 continue;
             }
-            Class<?> targetClass = AopUtils.getTargetClass(bean);
+            Class<?> targetClass = resolveTargetClass(bean);
+            boolean hasLockedMethod = false;
             for (Method method : targetClass.getDeclaredMethods()) {
                 if (!method.isAnnotationPresent(KsetLocked.class)) {
                     continue;
                 }
+                hasLockedMethod = true;
                 String location = targetClass.getSimpleName() + "#" + method.getName();
                 if (!Modifier.isPublic(method.getModifiers())) {
                     issues.add(location + ": 方法非 public，@KsetLocked 不会生效");
@@ -60,24 +75,17 @@ public class KsetRedisLockAnnotationValidator implements SmartInitializingSingle
                     issues.add(location + ": final 方法可能无法被 CGLIB 增强");
                 }
             }
-            if (Modifier.isFinal(targetClass.getModifiers())) {
+            if (hasLockedMethod && Modifier.isFinal(targetClass.getModifiers())) {
                 issues.add(targetClass.getName() + ": 类为 final，CGLIB 代理可能失败");
             }
         }
-        if (!issues.isEmpty()) {
-            for (String issue : issues) {
-                log.warn("[kset-redis-lock] {}", issue);
-            }
-        }
-        if (!issues.isEmpty() || hasAnyKsetLockedBean()) {
-            log.info("[kset-redis-lock] {}", SELF_INVOKE_HINT);
-        }
+        return issues;
     }
 
     private boolean hasAnyKsetLockedBean() {
         for (String beanName : applicationContext.getBeanDefinitionNames()) {
             try {
-                Class<?> targetClass = AopUtils.getTargetClass(applicationContext.getBean(beanName));
+                Class<?> targetClass = resolveTargetClass(applicationContext.getBean(beanName));
                 for (Method method : targetClass.getDeclaredMethods()) {
                     if (method.isAnnotationPresent(KsetLocked.class)) {
                         return true;
@@ -88,5 +96,9 @@ public class KsetRedisLockAnnotationValidator implements SmartInitializingSingle
             }
         }
         return false;
+    }
+
+    private static Class<?> resolveTargetClass(Object bean) {
+        return ClassUtils.getUserClass(AopUtils.getTargetClass(bean));
     }
 }
