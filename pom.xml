@@ -14,8 +14,8 @@
         <connection>scm:git:git@github.com:ksmaple/kset-framework.git</connection>
         <developerConnection>scm:git:git@github.com:ksmaple/kset-framework.git</developerConnection>
         <url>https://github.com/ksmaple/kset-framework</url>
-      <tag>HEAD</tag>
-  </scm>
+        <tag>HEAD</tag>
+    </scm>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -24,8 +24,6 @@
         <maven.deploy.skip>true</maven.deploy.skip>
         <!-- Nexus publish config (-Pnexus; can be overridden with -Dkset.nexus.url). -->
         <kset.nexus.url>http://192.168.53.5:8081</kset.nexus.url>
-        <kset.nexus.username>admin</kset.nexus.username>
-        <kset.nexus.password>12345678</kset.nexus.password>
         <kset.nexus.release.repository>maven-releases</kset.nexus.release.repository>
         <kset.nexus.snapshot.repository>maven-snapshots</kset.nexus.snapshot.repository>
     </properties>
@@ -56,7 +54,7 @@
                 <configuration>
                     <tagNameFormat>v@{project.version}</tagNameFormat>
                     <autoVersionSubmodules>true</autoVersionSubmodules>
-                    <arguments>-DskipTests -Dmaven.test.skip=true</arguments>
+                    <arguments>-q -DskipTests -Dmaven.test.skip=true -Pnexus</arguments>
                 </configuration>
             </plugin>
         </plugins>

@@ -81,8 +81,6 @@
 
         <!-- Nexus 发布（-Pnexus；可用 -Dkset.nexus.url 覆盖） -->
         <kset.nexus.url>http://192.168.53.5:8081</kset.nexus.url>
-        <kset.nexus.username>admin</kset.nexus.username>
-        <kset.nexus.password>12345678</kset.nexus.password>
         <kset.nexus.release.repository>maven-releases</kset.nexus.release.repository>
         <kset.nexus.snapshot.repository>maven-snapshots</kset.nexus.snapshot.repository>
     </properties>

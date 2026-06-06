@@ -15,7 +15,7 @@ mvn -q -DskipTests compile
 
 ## 2. Maven 凭据
 
-`deploy` 使用 `distributionManagement.repository.id` 到 Maven `settings.xml` 查找凭据。仓库 POM 里的 `kset.nexus.username` / `kset.nexus.password` 只是属性，不会自动成为 deploy 凭据。
+`deploy` 使用 `distributionManagement.repository.id` 到 Maven `settings.xml` 查找凭据。不要把 Nexus 用户名和密码写进仓库 POM；POM 只维护 Nexus 地址和仓库名。
 
 将 [settings-nexus.example.xml](maven/settings-nexus.example.xml) 中的 `<servers>` 合并到本机 `~/.m2/settings.xml`，不要把真实密码提交到 Git。
 
@@ -55,7 +55,7 @@ mvn release:prepare \
   -Darguments="-DskipTests"
 mvn release:perform \
   -Pnexus \
-  -Darguments="-DskipTests -Pnexus"
+  -Darguments="-q -DskipTests -Pnexus"
 ```
 
 Windows PowerShell 写法：
@@ -69,7 +69,7 @@ mvn release:prepare `
   "-Darguments=-DskipTests"
 mvn release:perform `
   -Pnexus `
-  "-Darguments=-DskipTests -Pnexus"
+  "-Darguments=-q -DskipTests -Pnexus"
 ```
 
 `release:prepare` 会做这些事：
@@ -81,6 +81,21 @@ mvn release:perform `
 - 将版本推进到下一个 SNAPSHOT
 
 `release:perform` 会检出 tag 并执行 `deploy`，把正式制品发布到 Nexus。
+
+### Release 日志为什么会嵌套
+
+`release:perform` 会启动两层 Maven：
+
+1. 外层 Maven 运行 `maven-release-plugin`。
+2. 插件从 release tag 检出一份干净源码，再在 `target/checkout` 中启动内层 Maven 执行 `deploy`。
+
+因此控制台可能出现两层日志前缀：
+
+```text
+[INFO] [INFO] kset-framework ..................................... SUCCESS
+```
+
+第一个 `[INFO]` 来自外层 Maven，第二个 `[INFO]` 是内层 Maven 的原始输出。这样做是为了确保发布制品来自 Git tag，而不是当前可能有本地改动的工作区。上面的命令已在 `-Darguments` 中加入 `-q`，可以减少内层 Maven 输出。
 
 ## 4. 直接发布当前版本
 
