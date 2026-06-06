@@ -92,10 +92,19 @@ public class KsetAuthProperties {
     }
 
     public static class Session {
+        private StoreType storeType = StoreType.AUTO;
         private String keyPrefix = "kset:auth:session:";
         private Duration ttl = Duration.ofHours(2);
         private boolean slidingRefreshEnabled = true;
         private Duration refreshThreshold = Duration.ofMinutes(30);
+
+        public StoreType getStoreType() {
+            return storeType;
+        }
+
+        public void setStoreType(StoreType storeType) {
+            this.storeType = storeType != null ? storeType : StoreType.AUTO;
+        }
 
         public String getKeyPrefix() {
             return keyPrefix;
@@ -494,5 +503,10 @@ public class KsetAuthProperties {
     public enum Mode {
         REDIS,
         TRUSTED_HEADER
+    }
+
+    public enum StoreType {
+        AUTO,
+        REDIS
     }
 }

@@ -10,12 +10,9 @@ import com.kset.auth.core.SessionAuthenticator;
 import com.kset.auth.core.SignatureAuthenticator;
 import com.kset.auth.core.TrustedHeaderAuthenticator;
 import com.kset.auth.session.LoginSessionStore;
-import com.kset.auth.session.RedisLoginSessionStore;
 import com.kset.auth.spi.Authenticator;
 import com.kset.auth.spi.LoginUserHeaderCodec;
-import com.kset.redis.core.KsetRedisService;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -24,7 +21,9 @@ import org.springframework.context.annotation.Bean;
 
 import java.util.List;
 
-@AutoConfiguration
+@AutoConfiguration(afterName = {
+        "com.kset.redis.autoconfigure.KsetRedisAutoConfiguration"
+})
 @ConditionalOnProperty(prefix = "kset.auth", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(KsetAuthProperties.class)
 public class KsetAuthAutoConfiguration {
@@ -33,13 +32,6 @@ public class KsetAuthAutoConfiguration {
     @ConditionalOnMissingBean
     public LoginUserHeaderCodec loginUserHeaderCodec() {
         return new DefaultLoginUserHeaderCodec();
-    }
-
-    @Bean
-    @ConditionalOnClass(KsetRedisService.class)
-    @ConditionalOnMissingBean
-    public LoginSessionStore loginSessionStore(KsetRedisService redisService, KsetAuthProperties properties) {
-        return new RedisLoginSessionStore(redisService, properties);
     }
 
     @Bean

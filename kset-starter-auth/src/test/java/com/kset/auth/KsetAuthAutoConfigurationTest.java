@@ -4,13 +4,16 @@ import com.kset.auth.autoconfigure.KsetAuthAopAutoConfiguration;
 import com.kset.auth.autoconfigure.KsetAuthAutoConfiguration;
 import com.kset.auth.autoconfigure.KsetAuthDubboAutoConfiguration;
 import com.kset.auth.autoconfigure.KsetAuthGatewayAutoConfiguration;
+import com.kset.auth.autoconfigure.KsetAuthRedisSessionAutoConfiguration;
 import com.kset.auth.autoconfigure.KsetAuthWebAutoConfiguration;
 import com.kset.auth.core.AuthRuleResolver;
 import com.kset.auth.core.AppTokenAuthenticator;
 import com.kset.auth.core.LoginAuthService;
 import com.kset.auth.core.SignatureAuthenticator;
 import com.kset.auth.session.LoginSessionStore;
+import com.kset.auth.session.RedisLoginSessionStore;
 import com.kset.auth.spi.PermissionChecker;
+import com.kset.redis.core.KsetRedisService;
 import com.kset.auth.web.LoginAuthFilter;
 import com.kset.common.auth.LoginUser;
 import org.apache.dubbo.rpc.Filter;
@@ -27,6 +30,7 @@ import java.time.Duration;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class KsetAuthAutoConfigurationTest {
 
@@ -84,6 +88,44 @@ class KsetAuthAutoConfigurationTest {
                 .withUserConfiguration(TestSessionStoreConfiguration.class)
                 .run(context -> assertThat(context).hasBean("loginAuthAspect")
                         .hasSingleBean(PermissionChecker.class));
+    }
+
+    @Test
+    void startsWithoutSessionStoreWhenNoStoreComponentPresent() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        KsetAuthAutoConfiguration.class,
+                        KsetAuthRedisSessionAutoConfiguration.class))
+                .run(context -> assertThat(context)
+                        .hasSingleBean(LoginAuthService.class)
+                        .doesNotHaveBean(LoginSessionStore.class));
+    }
+
+    @Test
+    void createsRedisSessionStoreWhenRedisBeanExists() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        KsetAuthAutoConfiguration.class,
+                        KsetAuthRedisSessionAutoConfiguration.class))
+                .withBean(KsetRedisService.class, () -> mock(KsetRedisService.class))
+                .run(context -> assertThat(context)
+                        .hasSingleBean(LoginSessionStore.class)
+                        .getBean(LoginSessionStore.class)
+                        .isInstanceOf(RedisLoginSessionStore.class));
+    }
+
+    @Test
+    void createsRedisSessionStoreWhenExplicitlyConfigured() {
+        new ApplicationContextRunner()
+                .withPropertyValues("kset.auth.session.store-type=redis")
+                .withConfiguration(AutoConfigurations.of(
+                        KsetAuthAutoConfiguration.class,
+                        KsetAuthRedisSessionAutoConfiguration.class))
+                .withBean(KsetRedisService.class, () -> mock(KsetRedisService.class))
+                .run(context -> assertThat(context)
+                        .hasSingleBean(LoginSessionStore.class)
+                        .getBean(LoginSessionStore.class)
+                        .isInstanceOf(RedisLoginSessionStore.class));
     }
 
     @Configuration

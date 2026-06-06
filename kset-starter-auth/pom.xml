@@ -23,6 +23,7 @@
         <dependency>
             <groupId>com.kset</groupId>
             <artifactId>kset-starter-redis</artifactId>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.kset</groupId>

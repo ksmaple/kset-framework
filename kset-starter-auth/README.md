@@ -12,7 +12,7 @@
 
 ## 快速接入
 
-业务服务和网关都引入 auth starter。默认 Redis session 实现依赖 `kset-starter-redis`。
+业务服务和网关都引入 auth starter。session 存储默认 `auto`：存在 Redis Bean 时使用 Redis；没有 Redis 时不注册默认 session 存储，可由业务自定义 `LoginSessionStore`。
 
 ```xml
 <dependency>
@@ -249,6 +249,7 @@ X-Admin-Session-Token: admin-token
 kset:
   auth:
     session:
+      store-type: auto # auto / redis
       key-prefix: kset:auth:session:
       ttl: 2h
       sliding-refresh-enabled: true
@@ -261,7 +262,7 @@ Redis key 默认格式：
 kset:auth:session:{token}
 ```
 
-可通过自定义 Bean 替换默认 Redis session 实现：
+无 Redis 或需要接入其他存储时，可通过自定义 Bean 替换默认 session 实现：
 
 ```java
 @Bean
@@ -272,7 +273,7 @@ public LoginSessionStore loginSessionStore() {
 
 ## Web 与 Gateway 模式
 
-Web 默认按 `session` 查询 Redis。若服务只信任 Gateway 透传，可切换为 trusted-header：
+Web 默认按 `session` 查询 LoginSessionStore。若服务只信任 Gateway 透传，可切换为 trusted-header：
 
 ```yaml
 kset:
@@ -329,7 +330,7 @@ Dubbo 规则：
 
 | SPI | 用途 |
 |-----|------|
-| `LoginSessionStore` | 替换 Redis session 读写 |
+| `LoginSessionStore` | 替换 session 读写 |
 | `Authenticator` | 扩展新的认证方案，如 OAuth2、自定义 JWT |
 | `LoginUserHeaderCodec` | 自定义 Gateway/Dubbo 登录上下文编解码 |
 | `PermissionChecker` | 自定义角色、权限、数据权限判断 |
@@ -439,6 +440,7 @@ kset:
           - /api/public/**
         scheme: none
     session:
+      store-type: auto
       key-prefix: kset:auth:session:
       ttl: 2h
       sliding-refresh-enabled: true
@@ -484,7 +486,7 @@ kset:
 
 - 引入 `kset-starter-web`
 - 引入 `kset-starter-auth`
-- 引入 `kset-starter-redis`
+- 默认有 Redis 时使用 `kset-starter-redis`；无 Redis 时提供自定义 `LoginSessionStore`
 - 客户端直接传 `X-Session-Token`
 
 微服务业务服务：
