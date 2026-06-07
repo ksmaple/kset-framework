@@ -118,6 +118,10 @@ public class GlobalExceptionHandler {
     }
 
     private int businessCode(BusinessException ex) {
+        Integer code = ex.getCode();
+        if (code != null) {
+            return code;
+        }
         String errorCode = ex.getErrorCode();
         if (!properties.isParseBusinessErrorCode() || errorCode == null || errorCode.isBlank()) {
             return properties.getDefaultBusinessCode();

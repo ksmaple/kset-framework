@@ -1,6 +1,7 @@
 package com.kset.web;
 
 import com.kset.common.exception.BusinessException;
+import com.kset.common.exception.BizErrorCode;
 import com.kset.web.config.KsetWebProperties;
 import com.kset.web.handler.GlobalExceptionHandler;
 import com.kset.web.response.ApiResponse;
@@ -28,6 +29,28 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getCode()).isEqualTo(1001);
         assertThat(response.getBody().getMessage()).isEqualTo("name exists");
+    }
+
+    @Test
+    void handlesBusinessErrorCodeEnum() {
+        ResponseEntity<ApiResponse<Void>> response =
+                handler.handleBusinessException(new BusinessException(TestErrorCode.NAME_EXISTS));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo(1002);
+        assertThat(response.getBody().getMessage()).isEqualTo("name exists");
+    }
+
+    @Test
+    void canOverrideBusinessErrorCodeMessage() {
+        ResponseEntity<ApiResponse<Void>> response =
+                handler.handleBusinessException(new BusinessException(TestErrorCode.NAME_EXISTS, "custom message"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo(1002);
+        assertThat(response.getBody().getMessage()).isEqualTo("custom message");
     }
 
     @Test
@@ -74,5 +97,27 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getCode()).isEqualTo(400);
+    }
+
+    private enum TestErrorCode implements BizErrorCode {
+        NAME_EXISTS(1002, "name exists");
+
+        private final int code;
+        private final String message;
+
+        TestErrorCode(int code, String message) {
+            this.code = code;
+            this.message = message;
+        }
+
+        @Override
+        public int code() {
+            return code;
+        }
+
+        @Override
+        public String message() {
+            return message;
+        }
     }
 }

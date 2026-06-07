@@ -2,7 +2,7 @@
 
 ## 规则
 
-- [kaka-project-rules](rules/kaka-project-rules.md)（含 R021–R029 书写约定；R030 改码授权；R036–R038 脚本与编码）
+- [kaka-project-rules](rules/kaka-project-rules.md)（含 R021–R029 书写约定；R030 改码授权；R036–R038 脚本与编码；R048 代码变更同步文档）
 
 ## 技能
 

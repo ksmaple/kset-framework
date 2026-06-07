@@ -9,18 +9,35 @@ package com.kset.common.exception;
 public class BusinessException extends RuntimeException {
 
     private final String errorCode;
+    private final Integer code;
 
     public BusinessException(String message) {
         super(message);
         this.errorCode = null;
+        this.code = null;
     }
 
     public BusinessException(String errorCode, String message) {
         super(message);
         this.errorCode = errorCode;
+        this.code = null;
+    }
+
+    public BusinessException(BizErrorCode errorCode) {
+        this(errorCode, errorCode != null ? errorCode.message() : null);
+    }
+
+    public BusinessException(BizErrorCode errorCode, String message) {
+        super(message);
+        this.errorCode = errorCode != null ? String.valueOf(errorCode.code()) : null;
+        this.code = errorCode != null ? errorCode.code() : null;
     }
 
     public String getErrorCode() {
         return errorCode;
+    }
+
+    public Integer getCode() {
+        return code;
     }
 }

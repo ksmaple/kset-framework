@@ -41,7 +41,7 @@
 - **Lombok**：由 `kset-parent` 以 `provided` 继承；Gateway 等模块若 IDE 未识别可显式声明同坐标（`provided`，不传递下游）。子模块勿用 `optional` 覆盖。
 - **规范来源**：仅引用本仓 `.claude/skills/`，禁止写死平台仓 `kset-developer` 绝对路径。
 - **日志**：`@Slf4j` 声明 Logger；结构化用 **`StructLog.of(X.class)` 绑定一次**；脱敏用 `LogMaskingUtil`；统一 logback 在 `kset-common`（见 log-spec L012–L013）。
-- **文档**：组件能力文档就近写入对应模块 `README.md`；`docs/` 仅保留跨组件指南、发布说明与共享样例，禁止在 `docs/` 继续新增单组件说明。
+- **文档**：组件能力文档就近写入对应模块 `README.md`；`docs/` 仅保留跨组件指南、发布说明与共享样例，禁止在 `docs/` 继续新增单组件说明；修改源码、配置、API、Starter 能力或用户可见行为时，同步更新对应模块 `README.md`、根 `README.md` 或约定说明文档，确无文档影响时在收尾说明中声明。
 
 ## 4. 命令
 
