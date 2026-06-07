@@ -1,5 +1,6 @@
 package com.kset.auth;
 
+import com.kset.auth.annotation.SkipAuth;
 import com.kset.auth.annotation.RequirePermission;
 import com.kset.auth.annotation.RequireRole;
 import com.kset.auth.aop.LoginAuthAspect;
@@ -71,8 +72,28 @@ class LoginAuthAspectTest {
         assertThatThrownBy(service::admin).isInstanceOf(LoginRequiredException.class);
     }
 
+    @Test
+    void skipAuthBypassesMethodPermissionCheck() {
+        TestService service = proxy();
+
+        assertThat(service.publicCreateOrder()).isEqualTo("ok");
+    }
+
+    @Test
+    void skipAuthBypassesClassPermissionCheck() {
+        PublicTestService service = publicProxy();
+
+        assertThat(service.admin()).isEqualTo("ok");
+    }
+
     private TestService proxy() {
         AspectJProxyFactory factory = new AspectJProxyFactory(new TestService());
+        factory.addAspect(new LoginAuthAspect(new DefaultPermissionChecker()));
+        return factory.getProxy();
+    }
+
+    private PublicTestService publicProxy() {
+        AspectJProxyFactory factory = new AspectJProxyFactory(new PublicTestService());
         factory.addAspect(new LoginAuthAspect(new DefaultPermissionChecker()));
         return factory.getProxy();
     }
@@ -90,6 +111,20 @@ class LoginAuthAspectTest {
 
         @RequirePermission(value = "cms:user:update", subject = "admin")
         String updateCmsUser() {
+            return "ok";
+        }
+
+        @SkipAuth
+        @RequirePermission("order:create")
+        String publicCreateOrder() {
+            return "ok";
+        }
+    }
+
+    @SkipAuth
+    static class PublicTestService {
+        @RequireRole("admin")
+        String admin() {
             return "ok";
         }
     }

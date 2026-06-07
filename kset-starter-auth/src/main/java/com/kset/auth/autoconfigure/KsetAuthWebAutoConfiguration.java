@@ -15,6 +15,9 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.Ordered;
+import org.springframework.web.servlet.HandlerMapping;
+
+import java.util.List;
 
 @AutoConfiguration(after = KsetAuthAutoConfiguration.class)
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -27,8 +30,9 @@ public class KsetAuthWebAutoConfiguration {
     @ConditionalOnProperty(prefix = "kset.auth.web", name = "enabled", havingValue = "true", matchIfMissing = true)
     public LoginAuthFilter loginAuthFilter(KsetAuthProperties properties,
                                            LoginAuthService authService,
-                                           ServletAuthFailureHandler failureHandler) {
-        return new LoginAuthFilter(properties, authService, failureHandler);
+                                           ServletAuthFailureHandler failureHandler,
+                                           List<HandlerMapping> handlerMappings) {
+        return new LoginAuthFilter(properties, authService, failureHandler, handlerMappings);
     }
 
     @Bean

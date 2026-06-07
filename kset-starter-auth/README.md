@@ -189,6 +189,18 @@ public void auditOrder(String orderId) {
 }
 ```
 
+需要跳过登录和权限注解校验的接口，可在 Controller 类或方法上标注 `@SkipAuth`：
+
+```java
+@SkipAuth
+@GetMapping("/api/public/ping")
+public String ping() {
+    return "ok";
+}
+```
+
+`@SkipAuth` 仅对 Servlet Web 和方法级注解校验生效；Gateway 入口仍通过 `kset.auth.gateway.public-paths` 或 `scheme=none` 规则跳过。
+
 确实需要限定后台或 App 身份时再写 `subject`：
 
 ```java

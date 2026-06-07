@@ -1,6 +1,7 @@
 package com.kset.auth.web;
 
 import com.kset.auth.config.KsetAuthProperties;
+import com.kset.auth.core.AuthAnnotationSupport;
 import com.kset.auth.core.AuthRequest;
 import com.kset.auth.core.AuthResult;
 import com.kset.auth.core.AuthRuleResolver;
@@ -11,10 +12,14 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.servlet.HandlerExecutionChain;
+import org.springframework.web.servlet.HandlerMapping;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -23,13 +28,22 @@ public class LoginAuthFilter extends OncePerRequestFilter {
     private final KsetAuthProperties properties;
     private final LoginAuthService authService;
     private final ServletAuthFailureHandler failureHandler;
+    private final List<HandlerMapping> handlerMappings;
 
     public LoginAuthFilter(KsetAuthProperties properties,
                            LoginAuthService authService,
                            ServletAuthFailureHandler failureHandler) {
+        this(properties, authService, failureHandler, List.of());
+    }
+
+    public LoginAuthFilter(KsetAuthProperties properties,
+                           LoginAuthService authService,
+                           ServletAuthFailureHandler failureHandler,
+                           List<HandlerMapping> handlerMappings) {
         this.properties = properties;
         this.authService = authService;
         this.failureHandler = failureHandler;
+        this.handlerMappings = handlerMappings != null ? List.copyOf(handlerMappings) : List.of();
     }
 
     @Override
@@ -41,6 +55,10 @@ public class LoginAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         if (LoginContext.currentUser().isPresent()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        if (shouldSkipAuth(request)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -65,6 +83,22 @@ public class LoginAuthFilter extends OncePerRequestFilter {
         } finally {
             LoginContext.restore(previous);
         }
+    }
+
+    private boolean shouldSkipAuth(HttpServletRequest request) throws ServletException {
+        for (HandlerMapping handlerMapping : handlerMappings) {
+            HandlerExecutionChain chain;
+            try {
+                chain = handlerMapping.getHandler(request);
+            } catch (Exception e) {
+                throw new ServletException("Failed to resolve auth handler", e);
+            }
+            if (chain == null || !(chain.getHandler() instanceof HandlerMethod handlerMethod)) {
+                continue;
+            }
+            return AuthAnnotationSupport.shouldSkipAuth(handlerMethod.getMethod(), handlerMethod.getBeanType());
+        }
+        return false;
     }
 
     private static Map<String, String> queryParams(HttpServletRequest request) {

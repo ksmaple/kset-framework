@@ -10,6 +10,7 @@ import com.kset.auth.core.AppTokenAuthenticator;
 import com.kset.auth.core.SessionAuthenticator;
 import com.kset.auth.core.SignatureAuthenticator;
 import com.kset.auth.core.TrustedHeaderAuthenticator;
+import com.kset.auth.annotation.SkipAuth;
 import com.kset.common.utils.sign.KsetSignUtil;
 import com.kset.auth.session.LoginSessionStore;
 import com.kset.auth.web.DefaultServletAuthFailureHandler;
@@ -24,7 +25,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.HandlerExecutionChain;
+import org.springframework.web.servlet.HandlerMapping;
 
+import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.List;
 import java.util.Map;
@@ -145,6 +150,23 @@ class LoginAuthFilterTest {
     }
 
     @Test
+    void skipAuthMethodBypassesSessionValidation() throws Exception {
+        LoginSessionStore store = mock(LoginSessionStore.class);
+        PublicController controller = new PublicController();
+        Method method = PublicController.class.getDeclaredMethod("ping");
+        HandlerMapping handlerMapping = mock(HandlerMapping.class);
+        when(handlerMapping.getHandler(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new HandlerExecutionChain(new HandlerMethod(controller, method)));
+        LoginAuthFilter filter = filter(new KsetAuthProperties(), store, List.of(handlerMapping));
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(new MockHttpServletRequest("GET", "/api/orders"), new MockHttpServletResponse(), chain);
+
+        assertThat(chain.getRequest()).isNotNull();
+        verify(store, never()).findByToken(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void existingLoginContextBypassesSessionValidation() throws Exception {
         LoginSessionStore store = mock(LoginSessionStore.class);
         LoginAuthFilter filter = filter(new KsetAuthProperties(), store);
@@ -205,6 +227,10 @@ class LoginAuthFilterTest {
     }
 
     private LoginAuthFilter filter(KsetAuthProperties properties, LoginSessionStore store) {
+        return filter(properties, store, List.of());
+    }
+
+    private LoginAuthFilter filter(KsetAuthProperties properties, LoginSessionStore store, List<HandlerMapping> handlerMappings) {
         return new LoginAuthFilter(properties,
                 new LoginAuthService(store,
                         new AuthRuleResolver(properties),
@@ -213,7 +239,8 @@ class LoginAuthFilterTest {
                                 new SignatureAuthenticator(properties),
                                 new AppTokenAuthenticator(properties),
                                 new NoneAuthenticator())),
-                new DefaultServletAuthFailureHandler());
+                new DefaultServletAuthFailureHandler(),
+                handlerMappings);
     }
 
     private KsetAuthProperties appKeyProperties(String appKey, String secret, String token) {
@@ -242,6 +269,12 @@ class LoginAuthFilterTest {
             subjectType = user != null ? user.getSubjectType() : null;
             deviceId = user != null ? user.getDeviceId() : null;
             language = user != null ? user.getLanguage() : null;
+        }
+    }
+
+    private static class PublicController {
+        @SkipAuth
+        void ping() {
         }
     }
 }
