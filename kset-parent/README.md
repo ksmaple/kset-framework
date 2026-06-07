@@ -8,7 +8,7 @@
 <parent>
     <groupId>com.kset</groupId>
     <artifactId>kset-parent</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.4-SNAPSHOT</version>
 </parent>
 ```
 
@@ -29,6 +29,8 @@
 ## 依赖管理
 
 `dependencyManagement` 管理全部 KSet 模块版本，以及 MyBatis-Plus、dynamic-datasource、RocketMQ、Redis、OkHttp、Caffeine、Fastjson2、MapStruct、Knife4j、POI、Tika、BouncyCastle 等常用依赖。
+
+KSet 自身模块版本由 `kset-framework.version` 固定管理，不使用业务工程的 `project.version`；三方依赖继续使用各自版本属性。
 
 公共工具库统一由 `kset-common` 声明和传递；业务引入任意 `kset-starter-*` 后一般无需重复声明 Guava、Commons、OkHttp、Jackson、Fastjson2、TTL 等基础工具。
 

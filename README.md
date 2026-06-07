@@ -227,7 +227,7 @@ mvn dependency:tree -Dverbose | findstr "omitted for conflict"
 <parent>
     <groupId>com.kset</groupId>
     <artifactId>kset-parent</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.4-SNAPSHOT</version>
 </parent>
 ```
 
@@ -296,13 +296,13 @@ mvn dependency:tree -Dverbose | findstr "omitted for conflict"
 
 ### kset-parent：版本与构建基线
 
-业务工程继承 `kset-parent` 后，Java 21、UTF-8、Spring Boot / Spring Cloud / Alibaba / Dubbo / MyBatis-Plus / RocketMQ 等版本均由 BOM 管理，子模块依赖无需再写 `version`。
+业务工程继承 `kset-parent` 后，Java 21、UTF-8、Spring Boot / Spring Cloud / Alibaba / Dubbo / MyBatis-Plus / RocketMQ 等版本均由 BOM 管理，子模块依赖无需再写 `version`。KSet 自身模块版本由 `kset-framework.version` 固定管理，不随业务工程的 `project.version` 变化。
 
 ```xml
 <parent>
     <groupId>com.kset</groupId>
     <artifactId>kset-parent</artifactId>
-    <version>1.0.2-SNAPSHOT</version>
+    <version>1.0.4-SNAPSHOT</version>
 </parent>
 ```
 

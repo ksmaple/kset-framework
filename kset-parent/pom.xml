@@ -25,6 +25,9 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
 
+        <!-- KSet framework modules use this fixed version instead of project.version. -->
+        <kset-framework.version>1.0.4-SNAPSHOT</kset-framework.version>
+
         <!-- Spring Cloud / Alibaba -->
         <spring-cloud.version>2025.0.2</spring-cloud.version>
         <spring-cloud-alibaba.version>2025.0.0.0</spring-cloud-alibaba.version>
@@ -91,67 +94,67 @@
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-common</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-cloud</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-web</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-datasource</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-cache</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-auth</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-redis</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-nacos</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-sentinel</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-dubbo</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-mq</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-gateway</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
                 <artifactId>kset-starter-monitor</artifactId>
-                <version>${project.version}</version>
+                <version>${kset-framework.version}</version>
             </dependency>
 
             <!-- Spring Cloud BOM -->
