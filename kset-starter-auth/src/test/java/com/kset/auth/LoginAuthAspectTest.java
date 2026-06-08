@@ -1,6 +1,7 @@
 package com.kset.auth;
 
 import com.kset.auth.annotation.SkipAuth;
+import com.kset.auth.annotation.SkipLoginAuth;
 import com.kset.auth.annotation.RequirePermission;
 import com.kset.auth.annotation.RequireRole;
 import com.kset.auth.aop.LoginAuthAspect;
@@ -80,6 +81,13 @@ class LoginAuthAspectTest {
     }
 
     @Test
+    void skipLoginAuthBypassesMethodPermissionCheck() {
+        TestService service = proxy();
+
+        assertThat(service.publicLoginCreateOrder()).isEqualTo("ok");
+    }
+
+    @Test
     void skipAuthBypassesClassPermissionCheck() {
         PublicTestService service = publicProxy();
 
@@ -117,6 +125,12 @@ class LoginAuthAspectTest {
         @SkipAuth
         @RequirePermission("order:create")
         String publicCreateOrder() {
+            return "ok";
+        }
+
+        @SkipLoginAuth
+        @RequirePermission("order:create")
+        String publicLoginCreateOrder() {
             return "ok";
         }
     }

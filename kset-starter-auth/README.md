@@ -189,7 +189,7 @@ public void auditOrder(String orderId) {
 }
 ```
 
-需要跳过登录和权限注解校验的接口，可在 Controller 类或方法上标注 `@SkipAuth`：
+需要整条跳过登录和权限注解校验的接口，可在 Controller 类或方法上标注 `@SkipAuth`：
 
 ```java
 @SkipAuth
@@ -199,7 +199,27 @@ public String ping() {
 }
 ```
 
-`@SkipAuth` 仅对 Servlet Web 和方法级注解校验生效；Gateway 入口仍通过 `kset.auth.gateway.public-paths` 或 `scheme=none` 规则跳过。
+需要按鉴权方案细粒度跳过时，可使用 `@SkipLoginAuth`、`@SkipSignatureAuth`，或通用 `@SkipAuthScheme`：
+
+```java
+@SkipLoginAuth
+@GetMapping("/api/callback/no-session")
+public String noSession() {
+    return "ok";
+}
+
+@SkipSignatureAuth
+@PostMapping("/openapi/callback")
+public String callback() {
+    return "ok";
+}
+```
+
+- `@SkipLoginAuth`：跳过 `session`、`trusted-header` 登录态校验，并同步跳过 `@RequireLogin`、`@RequireRole`、`@RequirePermission`。
+- `@SkipSignatureAuth`：仅跳过 `signature` 验签，不影响其他鉴权方案。
+- `@SkipAuthScheme({"app-token"})`：按 scheme 名称扩展跳过规则，适合自定义认证方案。
+- `@SkipAuth`、`@SkipLoginAuth`、`@SkipSignatureAuth` 仅对 Servlet Web 和方法级注解校验生效。
+- Gateway 入口仍通过 `kset.auth.gateway.public-paths` 或 `scheme=none` 规则跳过。
 
 确实需要限定后台或 App 身份时再写 `subject`：
 

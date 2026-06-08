@@ -38,11 +38,18 @@ public class LoginAuthService {
         return sessionStore.findByToken(token);
     }
 
+    public AuthRuleMatch resolve(AuthRequest request) {
+        return ruleResolver != null ? ruleResolver.resolve(request) : null;
+    }
+
     public AuthResult authenticate(AuthRequest request) {
-        if (ruleResolver == null) {
+        return authenticate(request, resolve(request));
+    }
+
+    public AuthResult authenticate(AuthRequest request, AuthRuleMatch match) {
+        if (match == null) {
             return AuthResult.failure(401, "未登录");
         }
-        AuthRuleMatch match = ruleResolver.resolve(request);
         Authenticator authenticator = authenticators.get(normalize(match.getScheme()));
         if (authenticator == null) {
             return AuthResult.failure(401, "未登录");

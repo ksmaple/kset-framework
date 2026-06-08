@@ -4,6 +4,7 @@ import com.kset.auth.config.KsetAuthProperties;
 import com.kset.auth.core.AuthAnnotationSupport;
 import com.kset.auth.core.AuthRequest;
 import com.kset.auth.core.AuthResult;
+import com.kset.auth.core.AuthRuleMatch;
 import com.kset.auth.core.AuthRuleResolver;
 import com.kset.auth.core.LoginAuthService;
 import com.kset.common.auth.LoginContext;
@@ -12,8 +13,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerExecutionChain;
 import org.springframework.web.servlet.HandlerMapping;
 
@@ -58,18 +59,25 @@ public class LoginAuthFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        if (shouldSkipAuth(request)) {
+        HandlerMethod handlerMethod = resolveHandlerMethod(request);
+        if (shouldSkipAuth(handlerMethod)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+        AuthRequest authRequest = new AuthRequest(
+                request.getRequestURI(),
+                request::getHeader,
+                AuthRuleResolver.SOURCE_WEB,
+                request.getMethod(),
+                queryParams(request));
+        AuthRuleMatch match = authService.resolve(authRequest);
+        if (shouldSkipAuthScheme(handlerMethod, match)) {
             filterChain.doFilter(request, response);
             return;
         }
         LoginContextSnapshot previous = LoginContext.capture();
         try {
-            AuthResult result = authService.authenticate(new AuthRequest(
-                    request.getRequestURI(),
-                    request::getHeader,
-                    AuthRuleResolver.SOURCE_WEB,
-                    request.getMethod(),
-                    queryParams(request)));
+            AuthResult result = authService.authenticate(authRequest, match);
             if (result.isPermitAll()) {
                 filterChain.doFilter(request, response);
                 return;
@@ -85,7 +93,7 @@ public class LoginAuthFilter extends OncePerRequestFilter {
         }
     }
 
-    private boolean shouldSkipAuth(HttpServletRequest request) throws ServletException {
+    private HandlerMethod resolveHandlerMethod(HttpServletRequest request) throws ServletException {
         for (HandlerMapping handlerMapping : handlerMappings) {
             HandlerExecutionChain chain;
             try {
@@ -96,9 +104,21 @@ public class LoginAuthFilter extends OncePerRequestFilter {
             if (chain == null || !(chain.getHandler() instanceof HandlerMethod handlerMethod)) {
                 continue;
             }
-            return AuthAnnotationSupport.shouldSkipAuth(handlerMethod.getMethod(), handlerMethod.getBeanType());
+            return handlerMethod;
         }
-        return false;
+        return null;
+    }
+
+    private boolean shouldSkipAuth(HandlerMethod handlerMethod) {
+        return handlerMethod != null
+                && AuthAnnotationSupport.shouldSkipAuth(handlerMethod.getMethod(), handlerMethod.getBeanType());
+    }
+
+    private boolean shouldSkipAuthScheme(HandlerMethod handlerMethod, AuthRuleMatch match) {
+        return handlerMethod != null
+                && match != null
+                && AuthAnnotationSupport.shouldSkipScheme(
+                handlerMethod.getMethod(), handlerMethod.getBeanType(), match.getScheme());
     }
 
     private static Map<String, String> queryParams(HttpServletRequest request) {

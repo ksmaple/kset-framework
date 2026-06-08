@@ -11,6 +11,8 @@ import com.kset.auth.core.SessionAuthenticator;
 import com.kset.auth.core.SignatureAuthenticator;
 import com.kset.auth.core.TrustedHeaderAuthenticator;
 import com.kset.auth.annotation.SkipAuth;
+import com.kset.auth.annotation.SkipLoginAuth;
+import com.kset.auth.annotation.SkipSignatureAuth;
 import com.kset.common.utils.sign.KsetSignUtil;
 import com.kset.auth.session.LoginSessionStore;
 import com.kset.auth.web.DefaultServletAuthFailureHandler;
@@ -167,6 +169,68 @@ class LoginAuthFilterTest {
     }
 
     @Test
+    void skipLoginAuthBypassesSessionValidation() throws Exception {
+        LoginSessionStore store = mock(LoginSessionStore.class);
+        PublicLoginController controller = new PublicLoginController();
+        Method method = PublicLoginController.class.getDeclaredMethod("ping");
+        HandlerMapping handlerMapping = mock(HandlerMapping.class);
+        when(handlerMapping.getHandler(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new HandlerExecutionChain(new HandlerMethod(controller, method)));
+        LoginAuthFilter filter = filter(new KsetAuthProperties(), store, List.of(handlerMapping));
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(new MockHttpServletRequest("GET", "/api/orders"), new MockHttpServletResponse(), chain);
+
+        assertThat(chain.getRequest()).isNotNull();
+        verify(store, never()).findByToken(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void skipSignatureAuthBypassesSignatureValidation() throws Exception {
+        KsetAuthProperties properties = appKeyProperties("partner-app", "app-secret", "app-token");
+        KsetAuthProperties.AuthRule rule = new KsetAuthProperties.AuthRule();
+        rule.setName("partner-sign");
+        rule.setPaths(List.of("/openapi/**"));
+        rule.setSubject("partner");
+        rule.setScheme("signature");
+        properties.setRules(List.of(rule));
+        SignatureController controller = new SignatureController();
+        Method method = SignatureController.class.getDeclaredMethod("callback");
+        HandlerMapping handlerMapping = mock(HandlerMapping.class);
+        when(handlerMapping.getHandler(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new HandlerExecutionChain(new HandlerMethod(controller, method)));
+        LoginAuthFilter filter = filter(properties, mock(LoginSessionStore.class), List.of(handlerMapping));
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(new MockHttpServletRequest("GET", "/openapi/orders"), new MockHttpServletResponse(), chain);
+
+        assertThat(chain.getRequest()).isNotNull();
+        assertThat(LoginContext.currentUser()).isEmpty();
+    }
+
+    @Test
+    void skipSignatureAuthDoesNotBypassAppTokenValidation() throws Exception {
+        KsetAuthProperties properties = appKeyProperties("partner-app", "app-secret", "app-token");
+        KsetAuthProperties.AuthRule rule = new KsetAuthProperties.AuthRule();
+        rule.setName("partner-token");
+        rule.setPaths(List.of("/openapi/**"));
+        rule.setSubject("partner");
+        rule.setScheme("app-token");
+        properties.setRules(List.of(rule));
+        SignatureController controller = new SignatureController();
+        Method method = SignatureController.class.getDeclaredMethod("callback");
+        HandlerMapping handlerMapping = mock(HandlerMapping.class);
+        when(handlerMapping.getHandler(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new HandlerExecutionChain(new HandlerMethod(controller, method)));
+        LoginAuthFilter filter = filter(properties, mock(LoginSessionStore.class), List.of(handlerMapping));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(new MockHttpServletRequest("GET", "/openapi/orders"), response, new MockFilterChain());
+
+        assertThat(response.getContentAsString()).contains("\"code\":401");
+    }
+
+    @Test
     void existingLoginContextBypassesSessionValidation() throws Exception {
         LoginSessionStore store = mock(LoginSessionStore.class);
         LoginAuthFilter filter = filter(new KsetAuthProperties(), store);
@@ -275,6 +339,18 @@ class LoginAuthFilterTest {
     private static class PublicController {
         @SkipAuth
         void ping() {
+        }
+    }
+
+    private static class PublicLoginController {
+        @SkipLoginAuth
+        void ping() {
+        }
+    }
+
+    private static class SignatureController {
+        @SkipSignatureAuth
+        void callback() {
         }
     }
 }

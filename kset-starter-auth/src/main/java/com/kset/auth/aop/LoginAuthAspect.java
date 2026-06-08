@@ -9,9 +9,9 @@ import com.kset.common.auth.LoginContext;
 import com.kset.common.auth.LoginUser;
 import com.kset.common.auth.PermissionDeniedException;
 import org.aspectj.lang.ProceedingJoinPoint;
-import org.aspectj.lang.reflect.MethodSignature;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.aop.support.AopUtils;
 
 import java.lang.reflect.Method;
@@ -28,7 +28,7 @@ public class LoginAuthAspect {
 
     @Around("@annotation(requireLogin)")
     public Object requireLogin(ProceedingJoinPoint joinPoint, RequireLogin requireLogin) throws Throwable {
-        if (shouldSkipAuth(joinPoint)) {
+        if (shouldSkipLogin(joinPoint)) {
             return joinPoint.proceed();
         }
         LoginContext.requireUser(requireLogin.subject());
@@ -37,7 +37,7 @@ public class LoginAuthAspect {
 
     @Around("@annotation(requireRole)")
     public Object requireRole(ProceedingJoinPoint joinPoint, RequireRole requireRole) throws Throwable {
-        if (shouldSkipAuth(joinPoint)) {
+        if (shouldSkipLogin(joinPoint)) {
             return joinPoint.proceed();
         }
         LoginUser user = LoginContext.requireUser(requireRole.subject());
@@ -51,7 +51,7 @@ public class LoginAuthAspect {
 
     @Around("@annotation(requirePermission)")
     public Object requirePermission(ProceedingJoinPoint joinPoint, RequirePermission requirePermission) throws Throwable {
-        if (shouldSkipAuth(joinPoint)) {
+        if (shouldSkipLogin(joinPoint)) {
             return joinPoint.proceed();
         }
         LoginUser user = LoginContext.requireUser(requirePermission.subject());
@@ -72,14 +72,14 @@ public class LoginAuthAspect {
                 : Arrays.stream(values).anyMatch(checker::has);
     }
 
-    private boolean shouldSkipAuth(ProceedingJoinPoint joinPoint) {
+    private boolean shouldSkipLogin(ProceedingJoinPoint joinPoint) {
         if (!(joinPoint.getSignature() instanceof MethodSignature signature)) {
             return false;
         }
         Method method = signature.getMethod();
         Class<?> targetClass = joinPoint.getTarget() != null ? joinPoint.getTarget().getClass() : method.getDeclaringClass();
         Method specificMethod = AopUtils.getMostSpecificMethod(method, targetClass);
-        return AuthAnnotationSupport.shouldSkipAuth(specificMethod, targetClass);
+        return AuthAnnotationSupport.shouldSkipLogin(specificMethod, targetClass);
     }
 
     private interface Checker {
