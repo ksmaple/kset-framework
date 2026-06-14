@@ -84,7 +84,7 @@ Step 5: 实现阶段移交 {proj}-coder；修错移交 {proj}-fixer
 |------|------|
 | 写业务代码 | `{proj}-coder` + project-spec + 本技能 references |
 | 修错落地 | `{proj}-fixer` + fix-spec |
-| 复制到业务仓 | `kaka-utils-project-init` → `npm --prefix scripts run copy:init-skills`（含 `kaka-util-git-commit`） |
+| 复制到业务仓 | `kaka-utils-project-init` → `python scripts/py/init.py copy`（含 `kaka-util-git-commit`） |
 | 域间依赖与 HTTP/幂等口径 | [coordination.md](references/coordination.md) |
 | 提交代码 | `kaka-util-git-commit`（仅用户明确要求时） |
 

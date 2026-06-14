@@ -1,0 +1,17 @@
+{
+  "autoApprove": {
+    "readFiles": true,
+    "editFiles": true,
+    "writeFiles": true,
+    "deleteFiles": true,
+    "runCommands": true,
+    "runTests": true,
+    "useMcp": true
+  },
+  "requireApproval": {
+    "planMode": true,
+    "workflows": true,
+    "externalServices": true,
+    "sensitiveFiles": true
+  }
+}

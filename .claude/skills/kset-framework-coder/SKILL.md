@@ -5,7 +5,7 @@ description: "KSet 公共框架（框架库）研发，proj=kset-framework。触
 
 # kset-framework-coder
 
-> 层级见 [SKILL-HIERARCHY.md](../SKILL-HIERARCHY.md)。[project-spec.md](references/project-spec.md) + `.claude/skills/kaka-coder-designer/references/`（init 已复制）。
+> 层级见 [SKILL-HIERARCHY.md](../SKILL-HIERARCHY.md)。[project-spec.md](references/project-spec.md) + `.claude/skills/kaka-coder-designer/references/`
 
 | 项 | 值 |
 |----|-----|
@@ -46,7 +46,7 @@ Step 5: 用户明确要求时交 kaka-util-git-commit
 | 文件 | 说明 |
 |------|------|
 | [project-spec.md](references/project-spec.md) | 项目差异与约定 |
-| [coordination.md](../kaka-coder-designer/references/coordination.md) | 域协作 · 写码编排（codegen/compile/test） |
+| [coordination.md](../kaka-coder-designer/references/coordination.md) | 域协作 · 写码编排 |
 
 ## Collaboration
 
@@ -54,4 +54,4 @@ Step 5: 用户明确要求时交 kaka-util-git-commit
 |------|------|
 | 规范设计 | `kaka-coder-designer` |
 | 修错 | `kset-framework-fixer` |
-| Git 提交 | `.claude/skills/kaka-util-git-commit/`（用户要求 commit/push 时） |
+| Git 提交 | `kaka-util-git-commit`（用户要求 commit/push 时） |
