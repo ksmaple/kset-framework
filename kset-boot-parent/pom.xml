@@ -10,11 +10,11 @@
     </parent>
 
     <groupId>com.kset</groupId>
-    <artifactId>kset-parent</artifactId>
+    <artifactId>kset-boot-parent</artifactId>
     <version>1.0.7-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>kset-parent</name>
+    <name>kset-boot-parent</name>
     <description>KSet Spring Boot Parent - unified version management and dependencies</description>
 
     <properties>

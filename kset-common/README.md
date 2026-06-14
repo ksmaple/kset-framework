@@ -298,7 +298,7 @@ boolean ok = signer.verifySha1(params);  // 或 checkSign()
 </dependency>
 ```
 
-`kset-parent` BOM 已管理 OkHttp、Guava、commons-lang3 等版本，**无需** 再引入 `joda-time`。
+`kset-boot-parent` BOM 已管理 OkHttp、Guava、commons-lang3 等版本，**无需** 再引入 `joda-time`。
 ## KsetContext（`com.kset.common.context`）
 
 统一请求上下文门面，底层使用 Alibaba `TransmittableThreadLocal`，用于在当前请求、线程池任务和 RPC 调用中承载登录态、trace、灰度、租户、语言等轻量上下文。

@@ -29,7 +29,7 @@
     </properties>
 
     <modules>
-        <module>kset-parent</module>
+        <module>kset-boot-parent</module>
         <module>kset-common</module>
         <module>kset-cloud</module>
         <module>kset-starter-web</module>
