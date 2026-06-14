@@ -3,19 +3,19 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.kset</groupId>
-        <artifactId>kset-dependencies</artifactId>
-        <version>1.0.6-SNAPSHOT</version>
-        <relativePath>../kset-dependencies/pom.xml</relativePath>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.14</version>
+        <relativePath />
     </parent>
 
     <groupId>com.kset</groupId>
-    <artifactId>kset-parent</artifactId>
+    <artifactId>kset-boot-parent</artifactId>
     <version>1.0.6-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>kset-parent</name>
-    <description>KSet parent for non-Spring-Boot modules - Java baseline, build plugins and test stack</description>
+    <name>kset-boot-parent</name>
+    <description>KSet Spring Boot Parent - unified starter dependencies and build conventions</description>
 
     <properties>
         <java.version>21</java.version>
@@ -25,8 +25,17 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
 
-        <!-- Framework module tests run in their owning modules. -->
+        <!-- KSet framework modules use this fixed version instead of project.version. -->
+        <kset-framework.version>1.0.6-SNAPSHOT</kset-framework.version>
+
+        <!-- Framework module tests run in their owning modules. Use -DskipTests for release packaging when needed. -->
         <kset.skipModuleTests>false</kset.skipModuleTests>
+
+        <!-- Plugin versions -->
+        <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
+        <maven-enforcer-plugin.version>3.5.0</maven-enforcer-plugin.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
+        <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
 
         <!-- Nexus 发布（-Pnexus；可用 -Dkset.nexus.url 覆盖） -->
         <kset.nexus.url>http://192.168.53.5:8081</kset.nexus.url>
@@ -34,12 +43,20 @@
         <kset.nexus.snapshot.repository>maven-snapshots</kset.nexus.snapshot.repository>
     </properties>
 
-    <!--
-        dependencyManagement 与所有版本属性继承自 kset-dependencies。
-        此处不再显式声明，避免与 BOM 重复维护。
-    -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- KSet framework dependencies BOM -->
+            <dependency>
+                <groupId>com.kset</groupId>
+                <artifactId>kset-dependencies</artifactId>
+                <version>${project.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
-    <!-- 子模块统一继承：Lombok、非 Boot 测试栈 -->
+    <!-- 子模块统一继承：Lombok、Spring Boot 测试栈 -->
     <dependencies>
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -47,28 +64,8 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-test</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -76,6 +73,10 @@
     <build>
         <pluginManagement>
             <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -113,10 +114,9 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>${maven-surefire-plugin.version}</version>
                     <configuration>
                         <skip>${kset.skipModuleTests}</skip>
-                        <argLine>-Dfile.encoding=UTF-8 -Xshare:off</argLine>
+                        <argLine>-Dfile.encoding=UTF-8 -Xshare:off -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
                     </configuration>
                 </plugin>
                 <plugin>

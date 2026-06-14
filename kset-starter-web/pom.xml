@@ -4,9 +4,9 @@
 
     <parent>
         <groupId>com.kset</groupId>
-        <artifactId>kset-parent</artifactId>
+        <artifactId>kset-boot-parent</artifactId>
         <version>1.0.6-SNAPSHOT</version>
-        <relativePath>../kset-parent/pom.xml</relativePath>
+        <relativePath>../kset-boot-parent/pom.xml</relativePath>
     </parent>
 
     <artifactId>kset-starter-web</artifactId>
