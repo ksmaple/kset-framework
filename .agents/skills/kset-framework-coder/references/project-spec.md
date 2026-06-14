@@ -22,7 +22,7 @@
 | API | 需调整 | `@GetMapping`/`@PostMapping`、路径参数；统一 `ApiResponse` | references/api-spec.md |
 | Frontend | 待生成 | 本仓无前端 | references/frontend-spec.md |
 | SQL | 部分整合 | MyBatis-Plus、`@TableLogic`、`IdType.AUTO`；方言 MySQL | references/sql-spec.md |
-| Conversion | 已整合 | MapStruct 1.5.5；`com.kset.common.convert.KsetMapperConfig` 全局配置；依赖与注解处理器见 `kset-boot-parent` / `kset-parent` / `kset-common` | references/conversion-spec.md |
+| Conversion | 已整合 | MapStruct 1.5.5；`com.kset.common.convert.KsetMapperConfig` 全局配置；依赖与注解处理器见 `kset-parent` / `kset-common` | references/conversion-spec.md |
 | Event | 按需 | 部分能力在 starter 中（按模块阅读） | references/event-spec.md |
 | Cache | 部分整合 | Redis starter；按模块配置 | references/cache-spec.md |
 | Orchestration | 部分整合 | Dubbo、Gateway、Nacos、Sentinel 等云原生组件 | references/orchestration-spec.md |
@@ -36,9 +36,9 @@
 - **模块边界**：无 Servlet/AOP 的工具与监控门面 API 进 `kset-common`；Servlet Filter、OpLog、Web 工具进对应 `kset-starter-*`；云相关进 `kset-cloud`；示例仅放 `kset-demo`。
 - **监控**：统一包根 `com.kset.common.monitor`；业务代码使用静态入口 `com.kset.common.monitor.Monitor` 与 `facade.MonitorFacade`；默认后端 `backend.LogBackend`（本地 SLF4J）。
 - **依赖**：常用工具库（Commons / Guava / OkHttp / Jackson / Fastjson2 / TTL 等）**仅**在 `kset-common` 声明；`kset-cloud` 与各 `kset-starter-*` **必须**依赖 `kset-common`，禁止重复声明上述工具依赖；领域能力（MyBatis、Redis、Nacos 等）在对应 starter 声明。
-- **版本**：子模块版本由 `kset-dependencies` BOM 统一管理，通过 `kset-parent`（非 Boot）/ `kset-boot-parent`（Boot）继承或导入使用，勿在子模块随意覆盖 Spring Boot 主版本。
-- **测试依赖**：`spring-boot-starter-test` 由 `kset-boot-parent` 以 `test` scope 统一继承；非 Boot 的 `kset-parent` 提供 JUnit/AssertJ/Mockito/Spring Test 测试栈。子模块勿重复声明，新增测试能力（如 Testcontainers）在对应 parent 集中维护。
-- **Lombok**：由 `kset-boot-parent` / `kset-parent` 以 `provided` 继承；Gateway 等模块若 IDE 未识别可显式声明同坐标（`provided`，不传递下游）。子模块勿用 `optional` 覆盖。
+- **版本**：子模块版本由根 `kset-parent` / `kset-framework` BOM 统一管理，勿在子模块随意覆盖 Spring Boot 主版本。
+- **测试依赖**：`spring-boot-starter-test` 由 `kset-parent` 以 `test` scope 统一继承；子模块勿重复声明，新增测试能力（如 Testcontainers）在 parent 集中维护。
+- **Lombok**：由 `kset-parent` 以 `provided` 继承；Gateway 等模块若 IDE 未识别可显式声明同坐标（`provided`，不传递下游）。子模块勿用 `optional` 覆盖。
 - **规范来源**：仅引用本仓 `.claude/skills/`，禁止写死平台仓 `kset-developer` 绝对路径。
 - **日志**：`@Slf4j` 声明 Logger；结构化用 **`StructLog.of(X.class)` 绑定一次**；脱敏用 `LogMaskingUtil`。
 - **文档**：组件能力文档就近写入对应模块 `README.md`；`docs/` 仅保留跨组件指南、发布说明与共享样例，禁止在 `docs/` 继续新增单组件说明。

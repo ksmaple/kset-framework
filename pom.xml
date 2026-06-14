@@ -8,7 +8,7 @@
     <packaging>pom</packaging>
 
     <name>kset-framework</name>
-    <description>KSet framework aggregator (dependencies BOM, parent and boot parent, starters)</description>
+    <description>KSet framework aggregator (parent BOM and starters)</description>
 
     <scm>
         <connection>scm:git:git@github.com:ksmaple/kset-framework.git</connection>
@@ -29,9 +29,7 @@
     </properties>
 
     <modules>
-        <module>kset-dependencies</module>
         <module>kset-parent</module>
-        <module>kset-boot-parent</module>
         <module>kset-common</module>
         <module>kset-cloud</module>
         <module>kset-starter-web</module>

@@ -1,8 +1,6 @@
-# kset-parent
+# KSet Parent
 
-`kset-parent` 是 KSet 框架面向非 Spring Boot 体系的 Maven parent，继承 `kset-dependencies` BOM，统一 Java 21、编码、编译插件与通用测试依赖。
-
-纯库或非 Boot 业务工程可继承本模块。
+`kset-parent` 是业务工程继承的 Maven parent / BOM，统一 Java、编码、插件和三方依赖版本。仓库根聚合 `kset-framework` 不发布，业务项目应继承本模块。
 
 ## 继承方式
 
@@ -10,12 +8,11 @@
 <parent>
     <groupId>com.kset</groupId>
     <artifactId>kset-parent</artifactId>
-    <version>1.0.6-SNAPSHOT</version>
-    <relativePath/>
+    <version>1.0.4-SNAPSHOT</version>
 </parent>
 ```
 
-继承后，依赖 KSet 模块或 BOM 中管理的三方库时通常不需要再写 `version`。
+继承后，业务依赖 KSet 模块或 BOM 中管理的三方库时通常不需要再写 `version`。
 
 ## 基线
 
@@ -23,32 +20,23 @@
 |----|-------------|
 | Java | 21 |
 | Maven | 3.9+ |
-| Spring Boot Dependencies BOM | 3.5.14（仅用于版本管理，不引入 Boot 父 POM） |
+| Spring Boot | 3.5.14 |
 | Spring Cloud | 2025.0.2 |
 | Spring Cloud Alibaba | 2025.0.0.0 |
 | Apache Dubbo | 3.3.6 |
 | 编码 | UTF-8 |
 
-## 与 kset-boot-parent 的关系
+## 依赖管理
 
-- `kset-parent`：不继承 `spring-boot-starter-parent`，适合纯库、非 Boot 项目。
-- `kset-boot-parent`：继承 `spring-boot-starter-parent`，适合 Spring Boot 业务服务与 `kset-starter-*`。
-- 两者都通过 `kset-dependencies` 统一管理 KSet 模块与三方组件版本。
+`dependencyManagement` 管理全部 KSet 模块版本，以及 MyBatis-Plus、dynamic-datasource、RocketMQ、Redis、OkHttp、Caffeine、Fastjson2、MapStruct、Knife4j、POI、Tika、BouncyCastle 等常用依赖。
 
-## 测试栈
+KSet 自身模块版本由 `kset-framework.version` 固定管理，不使用业务工程的 `project.version`；三方依赖继续使用各自版本属性。
 
-本 parent 为子模块统一提供：
-
-- JUnit 5（`junit-jupiter`）
-- AssertJ（`assertj-core`）
-- Mockito（`mockito-core`、`mockito-junit-jupiter`）
-- Spring Test（`spring-test`，提供 `MockEnvironment` 等测试工具）
-
-版本由 `kset-dependencies` 中导入的 `spring-boot-dependencies` BOM 管理。
+公共工具库统一由 `kset-common` 声明和传递；业务引入任意 `kset-starter-*` 后一般无需重复声明 Guava、Commons、OkHttp、Jackson、Fastjson2、TTL 等基础工具。
 
 ## 发布
 
-启用 `nexus` profile 时，本模块与各模块发布到配置的 Nexus 仓库：
+启用 `nexus` profile 时，`kset-parent` 与各模块发布到配置的 Nexus 仓库：
 
 ```bash
 mvn -q -DskipTests deploy -Pnexus
