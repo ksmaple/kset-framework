@@ -4,9 +4,9 @@
 
     <parent>
         <groupId>com.kset</groupId>
-        <artifactId>kset-parent</artifactId>
+        <artifactId>kset-boot-parent</artifactId>
         <version>1.0.6-SNAPSHOT</version>
-        <relativePath>../kset-parent/pom.xml</relativePath>
+        <relativePath>../kset-boot-parent/pom.xml</relativePath>
     </parent>
 
     <artifactId>kset-common</artifactId>
@@ -66,7 +66,7 @@
             <artifactId>transmittable-thread-local</artifactId>
         </dependency>
 
-        <!-- Object mapping (MapStruct); version & annotation processor in kset-parent -->
+        <!-- Object mapping (MapStruct); version & annotation processor in kset-boot-parent -->
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
