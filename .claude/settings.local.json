@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(py *)",
+      "Bash(git *)",
+      "Bash(mvn *)",
+      "Bash(npm *)",
+      "Bash(node *)",
+      "Bash(cd *)",
+      "Bash(dir *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(type *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(rm *)",
+      "Bash(rmdir *)",
+      "Bash(del *)",
+      "Bash(mkdir *)",
+      "Bash(md *)",
+      "Bash(copy *)",
+      "Bash(cp *)",
+      "Bash(move *)",
+      "Bash(mv *)",
+      "Bash(ren *)",
+      "Bash(python -c *)",
+      "Bash(powershell.exe *)",
+      "Bash(pwsh *)",
+      "Bash(chcp *)",
+      "Read(*)",
+      "Edit(*)",
+      "Write(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "TaskCreate(*)",
+      "TaskUpdate(*)",
+      "TaskList(*)",
+      "TaskGet(*)"
+    ]
+  }
+}

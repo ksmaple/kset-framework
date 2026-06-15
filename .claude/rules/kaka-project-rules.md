@@ -56,11 +56,23 @@ R037b: 在 PowerShell 中执行 `python scripts/py/…` 且输出含中文时，
 R037c: 在 Bash 中执行 `python scripts/py/…` 且输出含中文时，建议设置 `LC_ALL=C.UTF-8` 或等效 UTF-8 locale
 R037d: 仓库根须提供 `.editorconfig`，对 `scripts/**`、`.claude/**` 下 Markdown 与规则文件统一 `charset = utf-8`
 R037e: `.claude/rules`、`.claude/skills` 及 init 同步到业务项目的文本文件须 UTF-8 无 BOM 保存，禁止 EF BB BF 文件头
-R037f: `python scripts/py/init.py copy` 复制文本文件须经 `io.copyFileUtf8NoBom` 写出，确保目标无 BOM
+R037f: `python scripts/py/init.py copy` 复制文本文件须经 `scripts/lib/kaka_scripts/io.copy_file_utf8_nobom` 写出，确保目标无 BOM
 R037g: 可提供 `python scripts/py/check.py utf8` 扫描 `.claude/**` 与 `scripts/**`；`--fix` 去除已存在的 BOM
 R038: `scripts/README.md` 须含「运行环境」节，声明 Python 版本要求（≥3.10），版本号与实现一致
 R038a: `scripts/README.md` 须含「常见异常」节，列典型现象、成因与处理，随脚本行为变更同步更新；文件编码/路径类问题与 `kaka-project-rules`「文件常见问题」表互补
 R038b: 可提供 `python scripts/py/check.py env` 检测 Python/git 可用性；新增或升级 Python 版本要求时须同步 README 与检测逻辑
+
+## 脚本使用（R048–R049）
+
+R048: AI 或自动化任务在仓库内执行文件批量操作、init 子步骤、质量检查、Git 辅助（非 commit/push）时，须**优先**使用 `scripts/py/` 已有 Python 子命令；权威场景表见 `kaka-util-scripts/references/script-usage-spec.md` 与 `scripts/README.md`「使用场景」
+R048a: 已有内置子命令时，禁止用手工 shell 拼凑、根目录临时脚本或 `.ps1`/`.sh` 薄封装实现同等逻辑（与 R036b 一致）；无覆盖场景且非一次性只读探索时，须先扩展 `scripts/` 并注册文档，禁止写仓库外或散落脚本
+R048b: 下列可豁免 R048，但须在引用声明写明「豁免 R048」：用户明确要求其他工具；只读单行 `git`；内置无子命令且任务为一次性只读探索；Git commit/push 全流程（以 `kaka-util-git-commit` 为准）
+R049: 执行或推荐上述内置脚本时，须引用技能 `kaka-util-scripts`；init 流程编排仍以 `kaka-utils-project-init` 为准，其 Step 内脚本调用须符合 script-usage-spec
+
+## init 与前后端契约（R050–R050a）
+
+R050: `kaka-utils-project-init` 写 `project-spec` 时须登记前后端 DateTime 映射（wire 格式、时区、epoch 单位、后端序列化、前端日期库）；默认 API JSON 为 `yyyy-MM-dd HH:mm:ss` 字符串，后端 Jackson（api A027、A029、frontend F011）
+R050a: 已有存量项目 init 时，若探测到与默认 DateTime 约定不一致，须写入 project-spec 差异项与「时间格式（前后端）」节，禁止静默按默认覆盖导致前后端或 DB 偏移
 
 ## 文件与路径（R040–R047）
 
@@ -83,6 +95,7 @@ R047: 禁止将编译产物、运行日志、数据库转储提交入库；`tmp/
 | `git diff --check` 报 trailing whitespace | 行尾空格未清理 | R043；编辑器开启 trim；保存前自检 |
 | 业务仓规则/技能落后于平台 | 未重跑 init 复制 | `python scripts/py/init.py copy <path> --force`（R037f） |
 | 三端技能内容不一致 | `.agents`/`.cursor` 实体副本未改链接 | R046；`python scripts/py/init.py links` |
+| 用手工命令代替内置脚本 | 未查 script-usage-spec | R048；引用 `kaka-util-scripts` 后用 `python scripts/py/…` |
 | 误提交 `.env`/密钥 | 未排除敏感路径 | R044；`kaka-util-git-commit` 敏感文件确认 |
 | 根目录堆积 `NOTES.md`/临时 md | 未用约定目录 | R045；移入 `.claude/design/` 或 `tmp/` |
 | `init.py copy` 退出码 2 | 目标技能/规则已存在 | 加 `--force` 或先备份后覆盖 |

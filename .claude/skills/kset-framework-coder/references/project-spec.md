@@ -29,6 +29,18 @@
 | Log | 已整合 | SLF4J+Logback+logstash-encoder；`@Slf4j`+`LogUtil`；TraceId/MDC 见 cloud/starter | references/log-spec.md |
 | Engineering | 按需 | 熔断/容量等见 starter 与 cloud 模块 | references/engineering-spec.md |
 
+## 2.5 时间格式（前后端）
+
+| 项 | 约定 | 探测来源 / 说明 |
+| --- | --- | --- |
+| API wire 格式 | `yyyy-MM-dd HH:mm:ss` | `KsetWebMvcConfigurer` 配置 Jackson simpleDateFormat 与 MVC `DateTimeFormatter` |
+| 时区策略 | 服务器本地时区；跨时区用 `DateZoneHelper` 显式转换 | `DateHelper` 维护本地 `LocalDateTime`，`DateZoneHelper` 支持 CN/SAU 等墙钟转换 |
+| Epoch 单位（若用） | 毫秒优先，秒仅在明确方法名中使用 | `DateHelper` 同时提供 epoch 毫秒与秒；`DateZoneHelper.of(long)` 按毫秒解析 |
+| 后端序列化 | Jackson + `JavaTimeModule` + `yyyy-MM-dd HH:mm:ss` | `kset-starter-web` 统一配置 |
+| 前端日期库 | N/A | 本仓为框架库，无前端 |
+| SQL 列类型 | MySQL `datetime` / Java `LocalDateTime` | MyBatis-Plus 自动填充 `createTime`、`updateTime` |
+| 存量差异 | 框架需兼容下游时区策略 | 公共 API 字段命名须体现秒/毫秒/墙钟语义，禁止含糊 timestamp |
+
 ## 3. 差异项
 
 - **API**：禁止将 demo/对外 HTTP 改为「全 POST + ApiResult」；保持 REST 动词与 `com.kset.web.response.ApiResponse`；`@OpLog` 在 `com.kset.web.annotation`。

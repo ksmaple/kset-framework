@@ -41,6 +41,7 @@ fix、engineering：修错或运维调参时单独打开
 | traceId | api A010 + log L001 + event E004：全链路一致 |
 | 缓存返回集合 | cache K011 + coding C001：禁止原地变更，须拷贝或 new |
 | 金额 | naming N012 + sql S007：BIGINT 分 |
+| DateTime wire | naming N029 + api A027–A029 + frontend F011–F013 + conversion V012 + sql S026–S027 + coding C032；差异项见 project-spec「时间格式」 |
 | 工程调节幅度 | orchestration O006 + engineering G010：单次调整 ≤20% |
 
 ## 与项目技能分工

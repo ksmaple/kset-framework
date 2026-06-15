@@ -33,3 +33,4 @@ C030: 不产出 design/coding 文档；落地以代码与审查清单为准
 C031: 禁止在业务代码体内使用类型或成员的全称限定引用（如 Java `com.foo.Bar`、Python `pkg.module.func`），须在文件头 import/using/from 引入后使用简单名
 C031a: 简单名冲突时优先 import 别名（Java `import … as`、TypeScript `import { X as Y }` 等），仅当无法别名化时对其中一个类型保留全称并加行内注释说明
 C031b: 本约束不适用于代码生成模板、单行注释中的文档链接、以及框架要求的注解全限定名（如 `@org.springframework…` 若项目惯例允许可保留，新增代码优先短名 + import）
+C032: 前后端 DateTime 须单一 wire 约定（默认 api A027：`yyyy-MM-dd HH:mm:ss` + Jackson）；禁止后端 LocalDateTime 无时区、前端按 ISO 或本地隐式解析、DB 存 UTC 三套混用且无 project-spec 说明

@@ -25,3 +25,5 @@ S022: sql 为少数可产出 design 文档的类型之一
 S023: 业务查询默认过滤 deleted 等于 0，除非 project-spec 差异
 S024: 外键列 {ref}_id，与 naming 外键语义 {entity}Id 机械映射
 S025: ver 默认 0、deleted 默认 0；非空列须 NOT NULL 与 DEFAULT
+S026: 审计与业务时刻列默认 DATETIME/TIMESTAMP（MySQL）或 TIMESTAMPTZ（PostgreSQL，见 S018）；禁止同一表混用 INT epoch 与 DATETIME 存同一语义
+S027: JDBC/MyBatis 读写 DateTime 须与 Entity 类型及 api JSON wire 格式一致；方言差异在 project-spec SQL 差异项登记

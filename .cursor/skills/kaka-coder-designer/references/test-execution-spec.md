@@ -6,9 +6,10 @@
 
 ## 1. 测试执行时机
 
-- **编译校验通过后，自动进入测试执行阶段。**
-- 测试是代码落地的最后一步（POST-COMPILE），只有编译通过且测试通过的代码才视为可交付。
-- 若编译失败，不进入测试阶段，直接返回编译错误信息。
+- **测试执行不是默认流程，必须在编排中显式声明（`runTests=true` 或独立 `TASK-TEST-EXECUTE`）才会触发。**
+- 显式声明后，测试在编译校验通过后执行，作为代码落地的最后一步（POST-COMPILE）；只有编译通过且测试通过的代码才视为可交付。
+- 若编译失败，已声明的测试任务置为 `BLOCKED`，直接返回编译错误信息。
+- 未声明测试任务时，测试执行阶段状态为 `SKIPPED`。
 
 ---
 
@@ -58,6 +59,12 @@
 - 构造请求参数时，仅填充接口要求的必填字段。
 - 选填字段、复杂业务字段尽量简化，降低测试准备成本。
 - 若必填字段依赖前置数据（如 ID），通过流程测试前置步骤提供。
+
+### R006: 默认跳过与显式触发
+
+- 未显式声明测试任务时，不生成也不执行测试用例，测试报告状态为 `SKIPPED`。
+- 显式声明的测试任务执行完成后，输出 `PASSED` / `FAILED` / `PARTIAL`。
+- `SKIPPED` 状态的代码不可视为最终可交付，进入 CI / 合并前须补跑测试。
 
 ---
 
@@ -142,7 +149,7 @@ public class {Domain}ApiTest {
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `testExecutionId` | String | 测试执行唯一标识 |
-| `status` | String | 整体状态：`PASSED`（全部通过）、`FAILED`（全部失败）、`PARTIAL`（部分通过） |
+| `status` | String | 整体状态：`PASSED`（全部通过）、`FAILED`（全部失败）、`PARTIAL`（部分通过）、`SKIPPED`（未显式声明测试任务） |
 | `compileCheckId` | String | 关联的编译检查 ID |
 | `durationMs` | Long | 测试执行耗时（毫秒） |
 | `apiTests.total` | Integer | API 测试总数 |
@@ -205,9 +212,9 @@ public class {Domain}ApiTest {
         ↓
 [COMPILE] 编译校验
         ↓
-[TEST] 执行测试（本规范定义的阶段）
+[TEST] 执行测试（仅在显式声明时触发）
         ↓
-[REPORT] 输出测试执行报告
+[REPORT] 输出测试执行报告（或 SKIPPED 报告）
 ```
 
 ---

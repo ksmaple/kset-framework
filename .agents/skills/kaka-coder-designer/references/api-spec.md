@@ -26,3 +26,6 @@ A023: 新增变更接口由 proj-coder 实现
 A024: 单项目单 API 风格，默认 Full POST；禁止与 REST 混用，除非 project-spec 明确
 A025: 默认 Body Content-Type application/json；文件上传用 multipart/form-data
 A026: 分页请求含 pageNum、pageSize；分页响应含 total 与 data 列表
+A027: API JSON 中 DateTime 默认 `yyyy-MM-dd HH:mm:ss` 字符串（24 小时制，分秒为小写 mm/ss），如 2026-06-15 08:30:00；禁止同一项目混用该格式与 ISO-8601 T 分隔符或裸数字时间戳
+A028: 裸 epoch 须 project-spec 差异项明确单位（秒或毫秒）与字段后缀（如 createdAtMs）；默认禁止在对外 DTO 使用裸 long 时间戳
+A029: 后端默认 Jackson 序列化：`spring.jackson.date-format=yyyy-MM-dd HH:mm:ss`、`spring.jackson.time-zone` 与 project-spec 时区一致；DTO 字段可用 `@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")`；须启用 JavaTimeModule（LocalDateTime 等）；配置须与 project-spec 及前端 types 一致，禁止与前端各配一套且无文档

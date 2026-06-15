@@ -13,6 +13,7 @@
 
 - [ ] Controller/DTO 符合 `kaka-coder-designer/references/api-spec.md`
 - [ ] TS service/types 与 API JSON、DDD 语义一致
+- [ ] DateTime 字段类型与 project-spec「时间格式」及 api A027、frontend F011 一致
 - [ ] Converter 双层 MapStruct，字段与 ddd/sql 一致
 
 ## 索引
