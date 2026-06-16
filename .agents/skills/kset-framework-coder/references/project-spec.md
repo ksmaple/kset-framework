@@ -19,7 +19,7 @@
 |------|------|----------|--------|
 | Naming | 部分整合 | Java 驼峰；表/字段 demo 用 `createTime`/`deleted`（非 `created_at`）；名称与入参/出参须简单易懂（N028） | references/naming-spec.md |
 | DDD | 不适用 | Starter/工具库为主；demo 为 Entity + Mapper，无 domain/application 分层 | references/ddd-spec.md |
-| API | 需调整 | `@GetMapping`/`@PostMapping`、路径参数；统一 `ApiResponse` | references/api-spec.md |
+| API | 已整合 | `@GetMapping`/`@PostMapping`、路径参数；统一 `ApiResponse` | references/api-spec.md |
 | Frontend | 待生成 | 本仓无前端 | references/frontend-spec.md |
 | SQL | 部分整合 | MyBatis-Plus、`@TableLogic`、`IdType.AUTO`；方言 MySQL | references/sql-spec.md |
 | Conversion | 已整合 | MapStruct 1.5.5；`com.kset.common.convert.KsetMapperConfig` 全局配置；依赖与注解处理器见 `kset-boot-parent` / `kset-common` | references/conversion-spec.md |
