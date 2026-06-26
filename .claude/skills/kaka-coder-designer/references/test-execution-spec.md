@@ -1,4 +1,4 @@
-# 测试执行规范（可调用性验证）
+# 测试执行规范（Controller 优先单点调用验证）
 
 > kaka-coder-designer · 编译通过后由 `{proj}-coder` / `{proj}-fixer` 按需执行；任务编排见 [codegen-task-spec.md](codegen-task-spec.md)。
 
@@ -6,228 +6,167 @@
 
 ## 1. 测试执行时机
 
-- **测试执行不是默认流程，必须在编排中显式声明（`runTests=true` 或独立 `TASK-TEST-EXECUTE`）才会触发。**
-- 显式声明后，测试在编译校验通过后执行，作为代码落地的最后一步（POST-COMPILE）；只有编译通过且测试通过的代码才视为可交付。
-- 若编译失败，已声明的测试任务置为 `BLOCKED`，直接返回编译错误信息。
-- 未声明测试任务时，测试执行阶段状态为 `SKIPPED`。
+R001: 代码开发完成后默认只做编译校验，未收到用户、任务或 CI 显式测试要求时禁止生成、补充或执行测试用例。
+R002: 显式测试要求仅包括用户明确要求测试、编排参数 `runTests=true`、独立 `TASK-TEST-EXECUTE` 或 CI 明确要求测试。
+R003: 显式测试任务须在编译校验通过后执行；编译失败时测试任务置为 `BLOCKED`，禁止执行测试用例。
+R004: 未显式声明测试任务时，测试执行阶段状态为 `SKIPPED`，报告须说明“未显式声明测试任务”。
 
 ---
 
-## 2. 测试类型
+## 2. 测试范围
 
-### 2.1 API 可调用性测试
-
-- 每个 Controller 接口生成一个简单调用测试。
-- 只验证：**可调用、不报错、返回格式正确**。
-- 不验证业务逻辑正确性、不验证数据准确性。
-
-### 2.2 流程可调用性测试
-
-- 针对核心业务场景，编排多步骤调用。
-- 验证流程可以完整走完，各步骤之间衔接正常。
-- 同样只验证可调用性，不验证业务结果正确性。
+R005: 显式测试默认只针对单个 Controller 接口做单点调用验证。
+R006: 仅当无可调用 Controller 或用户明确点名 Service 时，才允许单个 Service 方法测试。
+R007: 每个测试方法只调用一个目标方法，禁止在同一个 `@Test` 中串联多个业务动作。
+R008: 禁止编排多接口、多服务、多步骤串联的整体流程测试。
+R009: 禁止为测试额外串接口、查库准备数据、构造多阶段流程或清理流程数据。
+R010: 测试目标是确认真实代码可调用、入参可构造、日志结果可见，禁止扩展为业务正确性验收。
 
 ---
 
-## 3. 核心规范（R001-R005）
+## 3. 真实环境约束
 
-### R001: 基于生成的 Controller 和 API 设计文档生成测试
-
-- 测试代码必须依据代码生成阶段产出的 Controller 类和 API 设计文档自动生成。
-- 测试类作为 `TASK-CONTROLLER` 的附属输出，与 Controller 代码同步生成。
-
-### R002: 禁止使用 Mock，必须真实可调用
-
-- 测试必须启动真实的 Spring Boot 应用上下文。
-- 使用 `TestRestTemplate` 或真实 HTTP 客户端发送请求。
-- 禁止 Mockito、@MockBean 等任何形式的 Mock。
-
-### R003: 禁止使用断言（assert），使用日志输出代替
-
-- 禁止使用 JUnit 的 `assertEquals`、`assertTrue` 等断言方法。
-- 使用日志输出记录请求、响应、状态码和判定结果。
-- 测试方法本身不抛异常即视为可调用性通过。
-
-### R004: 只验证接口可调用性，不验证业务逻辑正确性
-
-- 不校验返回数据的业务含义是否正确。
-- 不校验数据库数据是否按预期变更。
-- 仅验证：HTTP 请求能发出去、接口能响应、返回格式符合 `ApiResult` 约定。
-
-### R005: 使用最小必要参数调用
-
-- 构造请求参数时，仅填充接口要求的必填字段。
-- 选填字段、复杂业务字段尽量简化，降低测试准备成本。
-- 若必填字段依赖前置数据（如 ID），通过流程测试前置步骤提供。
-
-### R006: 默认跳过与显式触发
-
-- 未显式声明测试任务时，不生成也不执行测试用例，测试报告状态为 `SKIPPED`。
-- 显式声明的测试任务执行完成后，输出 `PASSED` / `FAILED` / `PARTIAL`。
-- `SKIPPED` 状态的代码不可视为最终可交付，进入 CI / 合并前须补跑测试。
+R011: Java Spring 测试须启动真实 Spring Boot 上下文，使用项目实际启动类配置 `@SpringBootTest(classes = {...})`。
+R012: JUnit 4 项目优先使用 `@RunWith(SpringRunner.class)`；项目已统一 JUnit 5 时使用等价的 Spring Extension。
+R013: 测试须注入真实 Controller 或兜底 Service Bean 后直接调用方法，禁止使用 Mockito、`@MockBean`、stub、fake 或内存替身。
+R014: 禁止用 `TestRestTemplate`、MockMvc 或随机端口 HTTP 调用替代同进程真实 Bean 方法调用，除非项目现有测试规范明确只允许 HTTP 入口。
+R015: 测试依赖数据库、Redis、MQ 等中间件时须使用项目真实测试环境配置，禁止为了跑通测试临时 mock 外部依赖。
 
 ---
 
-## 4. 测试类模板（Java + Spring Boot）
+## 4. 入参与输出
 
-### 4.1 API 测试模板
+R016: 测试方法须在调用前使用日志框架输出目标类、目标方法和完整输入入参。
+R017: 测试方法须在调用后使用日志框架输出完整返回结果；返回对象优先使用项目已有 JSON 工具序列化。
+R018: 测试方法设置登录态、租户、SessionUID 或 ThreadLocal 上下文时须使用日志框架输出上下文入参。
+R019: 测试入参只填本次目标方法调用所需的最小必要字段，禁止为覆盖边界值或异常分支扩大数据准备范围。
+R020: 测试禁止使用 JUnit Assert、Hamcrest、AssertJ 或 Spring ResultMatcher 等断言类 API。
+R021: 测试结果只能通过日志框架输出，禁止使用断言、返回值判定或测试框架 matcher 表达业务结果。
+
+---
+
+## 5. 测试代码模板（Java + Spring Boot）
+
+### 5.1 Controller 单点调用模板
 
 ```java
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@RunWith(SpringRunner.class)
+@SpringBootTest(classes = {PlatformWealthServer.class})
 @Slf4j
-public class {Domain}ApiTest {
+public class CashControllerTest {
+
     @Resource
-    private TestRestTemplate restTemplate;
+    private CashController cashController;
 
     @Test
-    public void test{Action}{Entity}() {
-        // 准备最小请求参数
-        {Command} command = new {Command}();
-        // 设置必要字段...
+    public void getWithdrawTiers() {
+        Long uid = 2000029L;
+        SessionUID.setUid(uid);
 
-        // 发送请求
-        ResponseEntity<ApiResult> response = restTemplate.postForEntity(
-            "/{module}/{action}", command, ApiResult.class);
-
-        // 日志输出
-        log.info("[Test] URL: /{module}/{action}");
-        log.info("[Test] Request: {}", JSON.toJSONString(command));
-        log.info("[Test] Response: {}", JSON.toJSONString(response.getBody()));
-        log.info("[Test] Status: {}", response.getStatusCodeValue());
-        log.info("[Test] Result: {}", response.getStatusCode().is2xxSuccessful() ? "PASS" : "FAIL");
+        Object request = null;
+        log.info("target=CashController#getWithdrawTiers");
+        log.info("context.uid={}", uid);
+        log.info("request={}", JSON.toJSONString(request));
+        log.info("response={}", JSON.toJSONString(cashController.getWithdrawTiers(request)));
     }
 }
 ```
 
-### 4.2 模板变量说明
+### 5.2 Service 兜底单点调用模板
+
+> 仅当无可调用 Controller 或用户明确点名 Service 时使用。
+
+```java
+@RunWith(SpringRunner.class)
+@SpringBootTest(classes = {PlatformWealthServer.class})
+@Slf4j
+public class CashServiceTest {
+
+    @Resource
+    private CashService cashService;
+
+    @Test
+    public void findWithdrawTiers() {
+        Long uid = 2000029L;
+        WithdrawTierQuery query = new WithdrawTierQuery();
+        query.setUid(uid);
+
+        log.info("target=CashService#findWithdrawTiers");
+        log.info("request={}", JSON.toJSONString(query));
+        log.info("response={}", JSON.toJSONString(cashService.findWithdrawTiers(query)));
+    }
+}
+```
+
+### 5.3 模板变量说明
 
 | 变量 | 说明 | 示例 |
 |---|---|---|
-| `{Domain}` | 领域名称 | `Order`、`User` |
-| `{Action}` | 操作动作 | `Create`、`Query`、`Cancel` |
-| `{Entity}` | 实体名称 | `Order`、`UserProfile` |
-| `{Command}` | 请求参数类型 | `CreateOrderCommand`、`QueryUserCommand` |
-| `{module}` | 模块路径 | `order`、`user` |
-| `{action}` | 接口动作路径 | `create`、`query` |
+| `{SpringBootApplication}` | 项目真实启动类 | `PlatformWealthServer` |
+| `{TargetClass}` | 被测 Controller 或兜底 Service | `CashController` |
+| `{targetMethod}` | 被测单个接口或方法 | `getWithdrawTiers` |
+| `{context}` | 登录态、租户、SessionUID 等上下文 | `SessionUID.setUid(2000029L)` |
+| `{request}` | 单点调用入参 | `null`、`WithdrawTierQuery` |
 
 ---
 
-## 5. 测试执行报告格式
+## 6. 测试执行摘要
 
-测试执行完成后，输出如下 JSON 格式的测试报告：
+显式测试执行完成后，仅输出轻量摘要：
 
 ```json
 {
   "testExecutionId": "test-20240523-001",
-  "status": "PASSED|FAILED|PARTIAL",
-  "compileCheckId": "compile-20240523-001",
-  "durationMs": 30000,
-  "apiTests": {
-    "total": 10,
-    "passed": 10,
-    "failed": 0,
-    "details": [
-      {
-        "testName": "testCreateOrder",
-        "url": "/order/create",
-        "status": "PASS",
-        "httpStatus": 200,
-        "responsePreview": "{\"errCode\":0,...}"
-      }
-    ]
-  },
-  "flowTests": {
-    "total": 2,
-    "passed": 2,
-    "failed": 0
-  }
+  "status": "DONE|SKIPPED|BLOCKED",
+  "target": "CashController#getWithdrawTiers",
+  "context": "{\"uid\":2000029}",
+  "input": "{\"request\":null}",
+  "output": "{\"errCode\":0,...}",
+  "error": null
 }
 ```
 
-### 5.1 字段说明
+### 6.1 字段说明
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `testExecutionId` | String | 测试执行唯一标识 |
-| `status` | String | 整体状态：`PASSED`（全部通过）、`FAILED`（全部失败）、`PARTIAL`（部分通过）、`SKIPPED`（未显式声明测试任务） |
-| `compileCheckId` | String | 关联的编译检查 ID |
-| `durationMs` | Long | 测试执行耗时（毫秒） |
-| `apiTests.total` | Integer | API 测试总数 |
-| `apiTests.passed` | Integer | API 测试通过数 |
-| `apiTests.failed` | Integer | API 测试失败数 |
-| `apiTests.details` | Array | 单个 API 测试详情 |
-| `flowTests.total` | Integer | 流程测试总数 |
-| `flowTests.passed` | Integer | 流程测试通过数 |
-| `flowTests.failed` | Integer | 流程测试失败数 |
+| `status` | String | 状态：`DONE`、`SKIPPED` 或 `BLOCKED` |
+| `target` | String | 本次单点调用目标 |
+| `context` | String | 上下文摘要 |
+| `input` | String | 入参摘要 |
+| `output` | String | 返回结果摘要 |
+| `error` | String | 异常摘要，无异常时为 `null` |
 
 ---
 
-## 6. 测试失败处理
+## 7. 测试失败处理
 
-### 6.1 单接口调用失败
-
-- 记录失败日志，包含：接口 URL、请求参数、响应状态码、异常信息。
-- **不影响其他接口测试的继续执行。**
-- 在测试报告中标记为 `FAIL`，并附上 `responsePreview` 或错误摘要。
-
-### 6.2 全部接口失败
-
-- 触发全局故障排查：
-  1. 检查服务是否正常启动（端口监听、Spring Boot 上下文加载）。
-  2. 检查数据库连接是否正常（连接池、网络、认证）。
-  3. 检查必要的中间件（Redis、MQ 等）是否可达。
-  4. 检查生成的代码是否存在基础配置错误（如 `application.yml` 缺失关键配置）。
-
-### 6.3 流程测试失败
-
-- 检查前置步骤是否成功执行（流程测试的每一步都依赖前一步的结果）。
-- 检查测试数据是否清理（避免脏数据影响后续流程）。
-- 输出流程执行步骤日志，标注失败节点。
+R022: 单点调用失败时须记录目标类、目标方法、上下文、入参、异常信息和已打印返回内容。
+R023: 单点调用失败不得自动扩大为整体流程测试，须先确认真实测试环境、环境数据和目标方法依赖。
+R024: 多个单点测试独立执行；一个单点失败不得影响其他已声明单点测试继续执行。
+R025: 因真实环境不可用导致测试无法执行时，状态置为 `BLOCKED` 并输出缺失的环境项。
 
 ---
 
-## 7. 与代码生成的关系
+## 8. 与代码生成的关系
 
-### 7.1 测试代码自动生成
+R026: 测试代码仅在显式测试要求下生成或补充，禁止作为 `TASK-CONTROLLER` 默认附属输出。
+R027: 测试类放在项目现有 `src/test/java` 包结构下，并按目标类命名为 `{TargetClass}Test.java`。
+R028: 生成测试时须优先读取目标 Controller 真实方法签名，按方法签名构造最小必要入参。
+R029: 仅在无可调用 Controller 或用户明确点名 Service 时，才读取目标 Service 真实方法签名生成测试。
+R030: 测试执行摘要须保留目标、上下文、入参、返回结果或异常摘要，便于用户直接查看本次真实调用情况。
 
-- 测试代码由代码生成阶段自动产出，作为 `TASK-CONTROLLER` 的附属输出。
-- 生成测试时，读取同阶段产出的 Controller 类和 API 设计文档，自动填充模板变量。
-
-### 7.2 测试代码存放位置
-
-- 测试类放在 `src/test/java/{basePackage}/interfaces/` 目录下。
-- 保持与主代码的包结构对应，便于维护。
-
-### 7.3 测试类命名规范
-
-- 测试类命名格式：`{Domain}ApiTest.java`
-- 示例：`OrderApiTest.java`、`UserApiTest.java`、`PaymentApiTest.java`
-
-### 7.4 生成时序
+### 8.1 生成时序
 
 ```
-[TASK-CONTROLLER] 生成 Controller 代码
-        ↓
-[TASK-CONTROLLER] 同步生成 {Domain}ApiTest.java
+[CODE] 完成业务代码
         ↓
 [COMPILE] 编译校验
         ↓
-[TEST] 执行测试（仅在显式声明时触发）
+[TEST?] 未显式声明 → SKIPPED
         ↓
-[REPORT] 输出测试执行报告（或 SKIPPED 报告）
+[TEST] 显式声明 → 生成或补充 Controller 优先单点测试 → 真实 Spring 环境执行
+        ↓
+[REPORT] 输出目标、上下文、入参、日志结果或异常摘要
 ```
-
----
-
-## 8. 附录：与测试设计规范的关系
-
-| 维度 | kaka-coder-designer / 项目测试约定 | 本文档（可调用性验证） |
-|---|---|---|
-| 阶段 | 设计阶段 | 代码生成后（POST-COMPILE） |
-| 目标 | 验证业务逻辑正确性 | 验证接口真实可调用 |
-| 是否用 Mock | 视场景允许 | **禁止** |
-| 是否用断言 | 允许 | **禁止** |
-| 参数策略 | 覆盖边界值、异常值 | **最小必要参数** |
-| 输出物 | 测试用例文档 | 自动执行的测试类 + 执行报告 |
-
-> 本文档聚焦「代码生成后可调用性验证」，与平台测试设计技能解耦，确保生成的代码真实可运行。

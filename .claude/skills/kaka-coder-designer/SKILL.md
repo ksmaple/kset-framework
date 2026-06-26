@@ -41,7 +41,7 @@ R004: 默认 Full POST + HTTP 200 + `errCode`（api 域）；网关/服务间 42
 R005: SQL 从 DDD 机械映射 snake_case；写 DDL 前读 `sql-dialect.json`（sql 域）
 R006: 除 sql（及项目约定的 ddd 文档路径）外，**不产出** `design/*` 文档；落地以代码为准
 R007: 事件跨边界、Outbox、幂等见 event 域；Saga 发事件须 Outbox
-R008: 修复最小变更、须编译与相关测试通过（fix 域）；实现由 `{proj}-fixer` 执行
+R008: 修复最小变更、须编译通过；相关测试仅在显式要求时执行并通过（fix 域）；实现由 `{proj}-fixer` 执行
 R009: 正文禁止内联大段规范；细则只在 `references/*-spec.md`
 R010: 禁止引用**平台仓库外**绝对路径；业务项目内用 `.claude/skills/kaka-coder-designer/`
 R011: 复杂或有争议设计须先与用户确认（ddd D016）

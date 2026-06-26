@@ -5,7 +5,7 @@
     "writeFiles": true,
     "deleteFiles": true,
     "runCommands": true,
-    "runTests": true,
+    "runTests": false,
     "useMcp": true
   },
   "requireApproval": {
