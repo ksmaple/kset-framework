@@ -11,7 +11,7 @@
 
     <groupId>com.kset</groupId>
     <artifactId>kset-boot-parent</artifactId>
-    <version>1.0.8-SNAPSHOT</version>
+    <version>1.0.8</version>
     <packaging>pom</packaging>
 
     <name>kset-boot-parent</name>
@@ -26,7 +26,7 @@
         <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
 
         <!-- KSet framework modules use this fixed version instead of project.version. -->
-        <kset-framework.version>1.0.8-SNAPSHOT</kset-framework.version>
+        <kset-framework.version>1.0.8</kset-framework.version>
 
         <!-- Spring Cloud / Alibaba -->
         <spring-cloud.version>2025.0.2</spring-cloud.version>
@@ -638,4 +638,8 @@
             </distributionManagement>
         </profile>
     </profiles>
+
+  <scm>
+    <tag>v1.0.8</tag>
+  </scm>
 </project>
