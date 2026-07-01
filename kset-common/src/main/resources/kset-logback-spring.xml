@@ -20,9 +20,11 @@
         </encoder>
     </appender>
 
-    <springProfile name="prod,test">
-        <include resource="kset-logback-file-appenders.xml"/>
+    <include resource="kset-logback-file-appenders.xml"/>
 
+    <logger name="com.kset" level="INFO"/>
+
+    <springProfile name="prod,test">
         <root level="${ROOT_LEVEL}">
             <appender-ref ref="KSET_INFO_FILE"/>
             <appender-ref ref="KSET_WARN_FILE"/>
@@ -31,8 +33,10 @@
     </springProfile>
 
     <springProfile name="dev,default">
-        <logger name="com.kset" level="DEBUG"/>
         <root level="${ROOT_LEVEL}">
+            <appender-ref ref="KSET_INFO_FILE"/>
+            <appender-ref ref="KSET_WARN_FILE"/>
+            <appender-ref ref="KSET_ERROR_FILE"/>
             <appender-ref ref="KSET_TEXT_CONSOLE"/>
         </root>
     </springProfile>

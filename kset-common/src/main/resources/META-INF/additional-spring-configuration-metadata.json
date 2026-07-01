@@ -25,6 +25,17 @@
       "description": "未设置 spring.profiles.active/default 时使用的默认 profile。"
     },
     {
+      "name": "kset.logging.business-debug.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "是否为业务侧包名开启 DEBUG 日志；dev/default 默认开启，test/prod 默认关闭。"
+    },
+    {
+      "name": "kset.logging.business-debug.packages",
+      "type": "java.lang.String",
+      "description": "业务侧 Logger 包名，多个包名使用英文逗号分隔；开启后仅这些包默认注入 logging.level.<package>=DEBUG。"
+    },
+    {
       "name": "kset.event.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,

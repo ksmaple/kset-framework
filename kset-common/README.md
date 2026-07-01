@@ -170,6 +170,19 @@ factory.execute("order-payment", () -> {
 | `OpLogContext` | 操作人（MDC `operator` 键） |
 | `LogMaskingUtil` | 敏感字段脱敏 |
 
+默认日志配置由 `kset-logback-spring.xml` 注入：`dev/default` 写文件并输出控制台，`test/prod` 仅写文件。框架包 `com.kset` 默认保持 `INFO`，避免框架层 DEBUG 淹没本地调试日志。
+
+业务侧 DEBUG 通过显式包名开启：
+
+```yaml
+kset:
+  logging:
+    business-debug:
+      packages: com.example.order,com.example.user
+```
+
+`dev/default` 默认开启 `kset.logging.business-debug.enabled`，配置包名后会注入 `logging.level.<业务包名>=DEBUG`；`test/prod` 默认关闭，如需临时开启需显式设置 `enabled=true`。
+
 ```java
 import com.kset.common.logging.FlowLogContext;
 import com.kset.common.logging.FlowLogContext.FlowEventType;
