@@ -1,11 +1,12 @@
 package com.kset.common.utils.date;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
@@ -182,45 +183,10 @@ public class DateZoneHelper {
     }
 
     /**
-     * 将 {@code localDateTime} 视为 {@code zone} 下的墙钟时间。
-     */
-    public static DateZoneHelper of(LocalDateTime localDateTime, ZoneId zone) {
-        return new DateZoneHelper(localDateTime.atZone(zone));
-    }
-
-    /**
-     * 将墙钟时间视为整小时偏移时区下的时刻。
-     */
-    public static DateZoneHelper of(LocalDateTime localDateTime, int offsetHours) {
-        return of(localDateTime, zoneOf(offsetHours));
-    }
-
-    /**
-     * 将墙钟时间视为内置枚举时区下的时刻。
-     */
-    public static DateZoneHelper of(LocalDateTime localDateTime, DateZone zone) {
-        return of(localDateTime, zone.toZoneId());
-    }
-
-    /**
-     * 将 {@link DateHelper} 本地墙钟时间视为系统默认时区下的时刻。
+     * 由 {@link DateHelper} 保存的时刻构造。
      */
     public static DateZoneHelper ofLocal(DateHelper local) {
-        return new DateZoneHelper(local.toLocalDateTime().atZone(ZoneId.systemDefault()));
-    }
-
-    /**
-     * 将指定时区墙钟时间解析为带时区时刻。
-     */
-    public static DateZoneHelper ofWallClock(LocalDateTime wallClock, DateZone zone) {
-        return of(wallClock, zone);
-    }
-
-    /**
-     * 将沙特墙钟时间解析为带时区时刻。
-     */
-    public static DateZoneHelper ofSau(LocalDateTime sauWallClock) {
-        return ofWallClock(sauWallClock, DateZone.SAU);
+        return of(local.toDate());
     }
 
     /**
@@ -286,65 +252,21 @@ public class DateZoneHelper {
      * 转为服务器本地 {@link DateHelper}（同一时刻）。
      */
     public DateHelper toLocal() {
-        return DateHelper.of(dateTime.withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime());
+        return DateHelper.of(toDate());
     }
 
     /**
-     * 转为指定时区墙钟时间（同一时刻）。
-     */
-    public LocalDateTime toWallClock(DateZone zone) {
-        return dateTime.withZoneSameInstant(zone.toZoneId()).toLocalDateTime();
-    }
-
-    /**
-     * 转为沙特墙钟时间（同一时刻）。
-     */
-    public LocalDateTime toSauWallClock() {
-        return toWallClock(DateZone.SAU);
-    }
-
-    // ── 墙钟 ⇄ 服务器本地 ─────────────────────────────────
-
-    /**
-     * 指定时区墙钟 → 服务器本地墙钟（同一时刻）。
-     */
-    public static DateHelper wallClockToLocal(LocalDateTime wallClock, DateZone zone) {
-        return ofWallClock(wallClock, zone).toLocal();
-    }
-
-    /**
-     * 指定整小时偏移墙钟 → 服务器本地墙钟（同一时刻）。
-     */
-    public static DateHelper wallClockToLocal(LocalDateTime wallClock, int offsetHours) {
-        return of(wallClock, offsetHours).toLocal();
-    }
-
-    /**
-     * 服务器本地墙钟 → 指定时区墙钟（同一时刻）。
-     */
-    public static LocalDateTime localToWallClock(DateHelper local, DateZone zone) {
-        return ofLocal(local).toWallClock(zone);
-    }
-
-    /**
-     * 服务器本地墙钟 → 整小时偏移墙钟（同一时刻）。
-     */
-    public static LocalDateTime localToWallClock(DateHelper local, int offsetHours) {
-        return ofLocal(local).toZone(offsetHours).toZonedDateTime().toLocalDateTime();
-    }
-
-    /**
-     * 沙特墙钟时间 → 服务器本地墙钟时间（同一时刻）。
-     */
-    public static DateHelper sauToLocal(LocalDateTime sauWallClock) {
-        return wallClockToLocal(sauWallClock, DateZone.SAU);
-    }
-
-    /**
-     * 按自定义格式解析沙特墙钟字符串，转为服务器本地 {@link DateHelper}。
+     * 按自定义格式将沙特墙钟字符串解析为时刻。
      */
     public static DateHelper sauToLocal(String time, String pattern) {
-        return sauToLocal(LocalDateTime.parse(time, DateTimeFormatter.ofPattern(pattern)));
+        SimpleDateFormat format = new SimpleDateFormat(pattern);
+        format.setLenient(false);
+        format.setTimeZone(TimeZone.getTimeZone(DateZone.SAU.toZoneId()));
+        try {
+            return DateHelper.of(format.parse(time));
+        } catch (ParseException e) {
+            throw new IllegalArgumentException("invalid date text: " + time, e);
+        }
     }
 
     /**
@@ -355,24 +277,10 @@ public class DateZoneHelper {
     }
 
     /**
-     * 服务器本地墙钟时间 → 沙特墙钟时间（同一时刻）。
-     */
-    public static LocalDateTime localToSau(DateHelper local) {
-        return localToWallClock(local, DateZone.SAU);
-    }
-
-    /**
-     * 服务器本地墙钟 {@link LocalDateTime} → 沙特墙钟时间（同一时刻）。
-     */
-    public static LocalDateTime localToSau(LocalDateTime localWallClock) {
-        return localToWallClock(DateHelper.of(localWallClock), DateZone.SAU);
-    }
-
-    /**
      * 服务器本地墙钟时间 → 沙特墙钟字符串（{@link DateHelper#PATTERN_DEF}）。
      */
     public static String localToSauDef(DateHelper local) {
-        return localToSau(local).format(DateTimeFormatter.ofPattern(DateHelper.PATTERN_DEF));
+        return ofLocal(local).formatZone(DateZone.SAU).format(DateHelper.PATTERN_DEF);
     }
 
     // ── 按目标时区格式化 ──────────────────────────────────
