@@ -2,7 +2,7 @@
 
 > init 生成。优先级：本文档 > `.claude/skills/kaka-coder-designer/references/`。
 
-**proj**：`kset-framework` · **backend** · 生成：2026-07-29 00:32:12
+**proj**：`kset-framework` · **backend** · 生成：2026-07-29 10:17:37
 
 ## 1. 画像
 

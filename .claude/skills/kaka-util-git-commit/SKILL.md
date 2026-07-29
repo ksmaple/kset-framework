@@ -55,5 +55,5 @@ Step 8: 自检清单（spec R110–R114）并输出分支、hash、推送结果�
 |------|------|
 | 业务代码 | `{proj}-coder` |
 | 修错后提交 | `{proj}-fixer` → 本技能（用户要求 commit/push 时） |
-| AI 改码 worktree 隔离 | `kaka-project-rules` R039；commit 前须在会话 worktree 内完成改码 |
+| AI 改码工作树 | `kaka-project-rules` R039；禁止使用 worktree，commit 前须确认当前工作树与目标仓库一致 |
 | 项目 init | `kaka-utils-project-init` → `python scripts/py/init.py copy` 复制本技能到业务 `.claude/skills/` |
