@@ -23,4 +23,8 @@ public class HttpConvertUtils {
                 .collect(Collectors.joining("&"));
     }
 
+    public static String convertMapToHttpFormBody(Map<String, String> params) {
+        return convertMapToHttpGetParams(params);
+    }
+
 }

@@ -1,7 +1,7 @@
 package com.kset.common.monitor.interceptor;
 
 /**
- * 框架监控扩展点（Dubbo / Redis / OkHttp 等插件注册）。
+ * 框架监控扩展点（Dubbo / Redis / HTTP 等插件注册）。
  */
 public interface FrameworkInterceptor {
 

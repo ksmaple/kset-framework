@@ -2,15 +2,13 @@ package com.kset.web.config;
 
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.format.datetime.standard.DateTimeFormatterRegistrar;
+import org.springframework.format.datetime.DateFormatter;
+import org.springframework.format.datetime.DateFormatterRegistrar;
 import org.springframework.format.FormatterRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-import java.time.format.DateTimeFormatter;
 
 @Configuration
 public class KsetWebMvcConfigurer implements WebMvcConfigurer {
@@ -21,22 +19,20 @@ public class KsetWebMvcConfigurer implements WebMvcConfigurer {
             SimpleModule longModule = new SimpleModule();
             longModule.addSerializer(Long.class, ToStringSerializer.instance);
             longModule.addSerializer(Long.TYPE, ToStringSerializer.instance);
-            builder.modulesToInstall(JavaTimeModule.class);
             builder.modulesToInstall(longModule);
             builder.simpleDateFormat("yyyy-MM-dd HH:mm:ss");
         };
     }
 
     @Bean
-    public DateTimeFormatterRegistrar ksetDateTimeFormatterRegistrar() {
-        DateTimeFormatterRegistrar registrar = new DateTimeFormatterRegistrar();
-        registrar.setDateFormatter(DateTimeFormatter.ISO_LOCAL_DATE);
-        registrar.setDateTimeFormatter(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    public DateFormatterRegistrar ksetDateFormatterRegistrar() {
+        DateFormatterRegistrar registrar = new DateFormatterRegistrar();
+        registrar.setFormatter(new DateFormatter("yyyy-MM-dd HH:mm:ss"));
         return registrar;
     }
 
     @Override
     public void addFormatters(FormatterRegistry registry) {
-        ksetDateTimeFormatterRegistrar().registerFormatters(registry);
+        ksetDateFormatterRegistrar().registerFormatters(registry);
     }
 }

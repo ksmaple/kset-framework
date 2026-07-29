@@ -22,7 +22,6 @@
 | `monitor-spring-boot-starter` | `kset-starter-monitor` |
 | `monitor-plugin-dubbo` | `kset-starter-monitor` Dubbo Filter |
 | `monitor-plugin-redis` | `kset-starter-redis` KSet Redis 门面、Lock、Rank |
-| `monitor-plugin-okhttp` | `kset-common` `OkHttpMonitorPlugin` |
 
 ## 统一门面
 
@@ -176,7 +175,7 @@ Spring 启动时 `Monitor.install(facade)` 会替换默认占位实现。
 
 ## 框架插件
 
-通过 `MonitorInterceptorRegistry.register(FrameworkInterceptor)` 注册；OkHttp 可调用 `OkHttpMonitorPlugin.register()`。
+HTTP 客户端由 `kset-common` 的 JDK `HttpClient` 统一执行并记录监控事务。
 
 ## 与 logging 协作
 

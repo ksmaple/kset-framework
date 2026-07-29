@@ -35,7 +35,7 @@ if (ListHelper.isNotEmpty(list)) { ... }
 
 ## DateHelper（`com.kset.common.utils.date`）
 
-链式日期时间 API，内部为服务器本地 `LocalDateTime`（不做跨时区转换）。
+链式日期时间 API，内部使用服务器本地 `Date`（不做跨时区转换）。
 
 ```java
 import com.kset.common.utils.date.DateHelper;
@@ -51,9 +51,8 @@ DateHelper.of(existingDate);
 // 链式调整
 DateHelper.parse("2024-06-07").withTime("15:30:00").addDay(1);
 
-// 与 java.time 互转
-DateHelper.parse("2024-06-07").toLocalDateTime();
-DateHelper.parse("2024-06-07").toLocalDate();
+// 转为原生 Date
+DateHelper.parse("2024-06-07").toDate();
 
 // ── 左闭右闭 [start, end] ──
 DateHelper.parse("2024-01-01 12:00:00").isRange(start, end);
@@ -99,9 +98,7 @@ DateZone.IN.toZoneId();        // GMT+05:30
 DateZoneHelper.of(epochMillis, 8).toZone(DateZone.SAU).format(DateHelper.PATTERN_DEF);
 DateZoneHelper.format(date, "GMT+8", DateHelper.PATTERN_DEF);
 
-// 墙钟 ⇄ 本地（同一时刻）
-DateHelper local = DateZoneHelper.wallClockToLocal(sauWall, DateZone.SAU);
-LocalDateTime cn = DateZoneHelper.localToWallClock(local, DateZone.CN);
+// 字符串按沙特时区解析为本地 Date
 DateZoneHelper.sauToLocalDef("2024-06-07 10:00:00");  // 沙特快捷
 ```
 
@@ -122,7 +119,7 @@ VersionUtil.inRange("1.5.0", "1.0.0", "2.0.0");
 
 ## KsetHttp（`com.kset.common.utils.http`）
 
-基于 OkHttp 的 HTTP 客户端封装（原 `DDKJHttp`）。
+基于 JDK 21 `HttpClient` 的 HTTP 客户端封装（原 `DDKJHttp`）。
 
 ```java
 import com.kset.common.utils.http.KsetHttp;
@@ -311,7 +308,7 @@ boolean ok = signer.verifySha1(params);  // 或 checkSign()
 </dependency>
 ```
 
-`kset-boot-parent` BOM 已管理 OkHttp、Guava、commons-lang3 等版本，**无需** 再引入 `joda-time`。
+`kset-boot-parent` BOM 已管理 Guava、commons-lang3 等版本，**无需** 再引入 `joda-time`。
 ## KsetContext（`com.kset.common.context`）
 
 统一请求上下文门面，底层使用 Alibaba `TransmittableThreadLocal`，用于在当前请求、线程池任务和 RPC 调用中承载登录态、trace、灰度、租户、语言等轻量上下文。

@@ -72,7 +72,6 @@
         <commons-io.version>2.18.0</commons-io.version>
         <commons-collections4.version>4.4</commons-collections4.version>
         <commons-codec.version>1.17.1</commons-codec.version>
-        <okhttp.version>4.12.0</okhttp.version>
         <caffeine.version>3.2.0</caffeine.version>
         <jjwt.version>0.12.6</jjwt.version>
         <easyexcel.version>4.0.3</easyexcel.version>
@@ -457,17 +456,6 @@
                 <version>${commons-codec.version}</version>
             </dependency>
 
-            <!-- OkHttp -->
-            <dependency>
-                <groupId>com.squareup.okhttp3</groupId>
-                <artifactId>okhttp</artifactId>
-                <version>${okhttp.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.squareup.okhttp3</groupId>
-                <artifactId>okhttp-sse</artifactId>
-                <version>${okhttp.version}</version>
-            </dependency>
 
             <!-- Caffeine -->
             <dependency>
