@@ -29,6 +29,17 @@ Thumbs.db
 # Logs
 *.log
 
+# Python
+__pycache__/
+*.py[cod]
+
+# Local AI worktrees
+.claude/worktrees/
+
+# AI skill directory links; .claude/skills is the tracked source.
+.agents/skills/
+.cursor/skills/
+
 # Local deploy env
 env/.env
 env/cat/.env

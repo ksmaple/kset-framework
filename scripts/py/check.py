@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import argparse
+import locale
+import os
 import platform
 import re
 import subprocess
@@ -17,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
 from kaka_scripts.cli import configure_utf8_streams, die
-from kaka_scripts.env import SCRIPT_RUNTIME, check_script_runtime
+from kaka_scripts.env import SCRIPT_RUNTIME, EnvCheckIssue, check_script_runtime
 from kaka_scripts.io import has_utf8_bom, strip_utf8_bom
 from kaka_scripts.paths import find_repo_root, rules_dir, scripts_dir, skills_dir
 from kaka_scripts.project_init import verify_init_outputs
@@ -46,6 +48,33 @@ def _run(cmd: list[str]) -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _is_utf8_encoding(value: str | None) -> bool:
+    if not value:
+        return False
+    normalized = value.lower().replace("-", "").replace("_", "")
+    return "utf8" in normalized or normalized == "65001"
+
+
+def _powershell_encoding_status() -> tuple[bool, str]:
+    if platform.system() != "Windows":
+        return True, "非 Windows 环境"
+
+    ok, out = _run(
+        [
+            "powershell",
+            "-Command",
+            "[Console]::OutputEncoding.WebName; $OutputEncoding.WebName",
+        ]
+    )
+    if not ok:
+        return False, f"无法检测 PowerShell 编码: {out}"
+
+    values = [line.strip() for line in out.splitlines() if line.strip()]
+    if values and all(_is_utf8_encoding(value) for value in values):
+        return True, " / ".join(values)
+    return False, " / ".join(values) if values else "(无输出)"
+
+
 def _walk_text_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for item in root.rglob("*"):
@@ -66,6 +95,12 @@ def cmd_env(args: argparse.Namespace) -> int:
 
     python_v = platform.python_version()
     git_ok, git_out = _run(["git", "--version"])
+    stdout_encoding = sys.stdout.encoding or "(unknown)"
+    stderr_encoding = sys.stderr.encoding or "(unknown)"
+    preferred_encoding = locale.getpreferredencoding(False)
+    python_utf8 = os.environ.get("PYTHONUTF8") or "(unset)"
+    python_io_encoding = os.environ.get("PYTHONIOENCODING") or "(unset)"
+    ps_encoding_ok, ps_encoding = _powershell_encoding_status()
 
     issues = check_script_runtime(
         python_version=python_v,
@@ -77,9 +112,32 @@ def cmd_env(args: argparse.Namespace) -> int:
 
     print("## scripts 运行环境检测\n")
     print(f"- Python: {python_v}（要求 >= {SCRIPT_RUNTIME['pythonMin']}，推荐 {SCRIPT_RUNTIME['pythonRecommended']}）")
+    print(f"- Python stdout/stderr: {stdout_encoding} / {stderr_encoding}")
+    print(f"- Python preferred encoding: {preferred_encoding}")
+    print(f"- PYTHONUTF8: {python_utf8}")
+    print(f"- PYTHONIOENCODING: {python_io_encoding}")
+    print(f"- PowerShell 输出编码: {ps_encoding}")
     print(f"- scripts 根: {scripts_root}")
     print(f"- 仓库根: {repo_root if repo_root_found else '(未识别)'}")
     print(f"- git: {git_out.splitlines()[0] if git_ok else '未找到'}\n")
+
+    if not _is_utf8_encoding(stdout_encoding) or not _is_utf8_encoding(preferred_encoding):
+        issues.append(
+            EnvCheckIssue(
+                level="warn",
+                message="Python 当前进程未完全使用 UTF-8，中文输出或文本读写可能乱码",
+                hint="Windows PowerShell 建议在 profile 设置 PYTHONUTF8=1，并将 Console/Input/OutputEncoding 设为 UTF-8",
+            )
+        )
+
+    if not ps_encoding_ok:
+        issues.append(
+            EnvCheckIssue(
+                level="warn",
+                message="PowerShell 输出编码未统一为 UTF-8，Get-Content/管道输出中文可能乱码",
+                hint="在 PowerShell profile 中设置 [Console]::OutputEncoding 与 $OutputEncoding 为 UTF-8",
+            )
+        )
 
     if not issues:
         print("环境检查通过。")

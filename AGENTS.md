@@ -1,18 +1,29 @@
-# Codex Project Context
+# kset-framework AI 协作配置
 
-> 本文件是 Codex 薄索引。完整 AI 协作配置以 [.claude/AGENTS.md](.claude/AGENTS.md) 为单源真相。
+> 本文件是 Codex 索引。完整 AI 协作配置以 [.claude/AGENTS.md](.claude/AGENTS.md) 为单源真相。
 
-## 先读
+## 规则
 
-| 需要 | 入口 |
-|------|------|
-| 总体协作说明 | [.claude/AGENTS.md](.claude/AGENTS.md) |
-| 全局规则 | [.claude/rules/kaka-project-rules.md](.claude/rules/kaka-project-rules.md) |
-| 技能快速选择 | [.claude/skills/README.md](.claude/skills/README.md) |
-| 架构与数据流 | [.claude/ARCHITECTURE.md](.claude/ARCHITECTURE.md) |
+- [kaka-project-rules](.claude/rules/kaka-project-rules.md)
 
-## 默认约束
+## 技能
 
-- Codex 从 `.agents/skills/` 读取技能；该目录应链接到 `.claude/skills/`。
-- 克隆或链接异常时执行 `python scripts/py/init.py links`。
-- 文档、规则、技能正文只维护在 `.claude/`。
+- 研发：`kset-framework-coder` → `.claude/skills/kset-framework-coder/`
+- 修复：`kset-framework-fixer` → `.claude/skills/kset-framework-fixer/`
+- 规范：`kaka-coder-designer` → `.claude/skills/kaka-coder-designer/`
+- Git 提交：`kaka-util-git-commit` → `.claude/skills/kaka-util-git-commit/`
+
+## 多环境
+
+| 环境 | 技能路径 | 索引 |
+|------|----------|------|
+| Claude | `.claude/skills/` | `CLAUDE.md` |
+| Codex | `.agents/skills/`（链接） | `AGENTS.md` |
+| Cursor | `.cursor/skills/`（链接） | `.cursor/CLAUDE.md` |
+
+## 使用指引
+
+- 实现代码 → `kset-framework-coder`
+- 修复 → `kset-framework-fixer`
+- 规范/API/DDD 设计 → `kaka-coder-designer`
+- Git 提交 → `kaka-util-git-commit`（仅用户明确要求 commit/push 时）

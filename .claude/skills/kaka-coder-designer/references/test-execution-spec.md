@@ -1,14 +1,14 @@
 # 测试执行规范（Controller 优先单点调用验证）
 
-> kaka-coder-designer · 编译通过后由 `{proj}-coder` / `{proj}-fixer` 按需执行；任务编排见 [codegen-task-spec.md](codegen-task-spec.md)。
+> kaka-coder-designer · 仅在用户、任务或 CI 显式要求测试时由 `{proj}-coder` / `{proj}-fixer` 按需执行；任务编排见 [codegen-task-spec.md](codegen-task-spec.md)。
 
 ---
 
 ## 1. 测试执行时机
 
-R001: 代码开发完成后默认只做编译校验，未收到用户、任务或 CI 显式测试要求时禁止生成、补充或执行测试用例。
+R001: 代码开发完成后默认只做文件逻辑完成与静态自查，未收到用户、任务或 CI 显式测试要求时禁止生成、补充或执行测试用例。
 R002: 显式测试要求仅包括用户明确要求测试、编排参数 `runTests=true`、独立 `TASK-TEST-EXECUTE` 或 CI 明确要求测试。
-R003: 显式测试任务须在编译校验通过后执行；编译失败时测试任务置为 `BLOCKED`，禁止执行测试用例。
+R003: 显式测试任务须先执行最小 compile-only 编译校验；编译失败时测试任务置为 `BLOCKED`，禁止执行测试用例。
 R004: 未显式声明测试任务时，测试执行阶段状态为 `SKIPPED`，报告须说明“未显式声明测试任务”。
 
 ---
@@ -162,11 +162,11 @@ R030: 测试执行摘要须保留目标、上下文、入参、返回结果或�
 ```
 [CODE] 完成业务代码
         ↓
-[COMPILE] 编译校验
+[CHECK] 文件逻辑完成与静态自查
         ↓
 [TEST?] 未显式声明 → SKIPPED
         ↓
-[TEST] 显式声明 → 生成或补充 Controller 优先单点测试 → 真实 Spring 环境执行
+[TEST] 显式声明 → 最小 compile-only 编译 → 生成或补充 Controller 优先单点测试 → 真实 Spring 环境执行
         ↓
 [REPORT] 输出目标、上下文、入参、日志结果或异常摘要
 ```

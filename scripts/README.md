@@ -91,6 +91,9 @@ cd scripts && python py/init.py guard --type init --proj my-proj
 
 - 脚本与说明统一 **UTF-8**（优先无 BOM）；读写走 `lib/kaka_scripts/io.py`。
 - Python 读取文本可用 `utf-8-sig` 自动去除 BOM，写入须用 `utf-8` 保证无 BOM。
+- Windows PowerShell 5.1 建议在 `$PROFILE` 中固定 UTF-8：
+  `[Console]::InputEncoding`、`[Console]::OutputEncoding`、`$OutputEncoding`、`PYTHONUTF8=1`。
+- 人工查看中文文件时，禁止把默认 `Get-Content` 乱码当作文本真相；使用 `Get-Content -Encoding utf8`、`rg` 或 Python UTF-8 读取确认。
 - 见仓库根 [`.editorconfig`](../.editorconfig)、[`.gitattributes`](../.gitattributes)。
 
 ## 常见异常（R038a）
@@ -105,7 +108,10 @@ cd scripts && python py/init.py guard --type init --proj my-proj
 | 守卫退出码 1 | 报告含 `[BLOCK]`，按 spec 处理 |
 | `init.py copy` 退出码 2 | 目标技能或规则已存在，加 `--force` |
 | `check.py utf8` 退出码 1 | 存在 UTF-8 BOM；加 `--fix` 去除 |
-| 控制台中文乱码 | PowerShell 代码页非 UTF-8 | `chcp 65001` 或 Windows Terminal；文件/文案仍错则 `kaka-project-rules` R020a 重新生成 |
+| 控制台中文乱码 | 运行 `python scripts/py/check.py env`；若提示 Python/PowerShell 非 UTF-8，重新打开 PowerShell 或检查 `$PROFILE` 编码初始化 |
+| `python -c "print('中文')"` 输出 `����` | 设置 `PYTHONUTF8=1`，并在 PowerShell profile 中设置 `PYTHONIOENCODING=utf-8` |
+| `Get-Content` 读取 Markdown 出现 `鍗忎綔`、`涓枃` | 使用 `Get-Content -Encoding utf8`；PowerShell profile 中配置 `$PSDefaultParameterValues['Get-Content:Encoding']='utf8'` |
+| 文件中已写入乱码字面量 | 按 `kaka-project-rules` R020a 从源码、配置或语义重新生成整段中文，禁止字符级替换乱码 |
 | `git diff --check` 失败 | 行尾空格；见 `kaka-project-rules` R043 与 `.editorconfig` |
 | 业务仓 `.claude` 与平台不一致 | 未同步；`python scripts/py/init.py copy <path> --force` |
 

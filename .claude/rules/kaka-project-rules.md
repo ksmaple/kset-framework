@@ -72,7 +72,7 @@ R049: 执行或推荐上述内置脚本时，须引用技能 `kaka-util-scripts`
 R050: `kaka-utils-project-init` 写 `project-spec` 时须登记前后端 DateTime 映射（wire 格式、时区、epoch 单位、后端序列化、前端日期库）；默认 API JSON 为 `yyyy-MM-dd HH:mm:ss` 字符串，后端 Jackson（api A027、A029、frontend F011）
 R050a: 已有存量项目 init 时，若探测到与默认 DateTime 约定不一致，须写入 project-spec 差异项与「时间格式（前后端）」节，禁止静默按默认覆盖导致前后端或 DB 偏移
 
-## 测试执行（R051–R060）
+## 测试与编译执行（R051–R063）
 
 R051: 代码开发完成后默认不执行测试，除用户、任务或 CI 显式要求外测试阶段为 `SKIPPED`
 R052: 显式测试默认只针对单个 Controller 接口做单点调用验证
@@ -84,6 +84,9 @@ R057: 显式测试结果须仅通过日志框架输出
 R058: 仅当无可调用 Controller 或用户明确点名 Service 时，才允许单个 Service 方法测试
 R059: 显式测试禁止编排前置业务流程准备数据
 R060: 显式测试报告只保留目标、上下文、入参、返回结果或异常摘要
+R061: `{proj}-coder` 默认验收标准为文件逻辑完成与静态自查
+R062: 编译验证仅在用户、任务或 CI 显式要求时执行
+R063: 显式编译验证默认只允许 compile-only 命令
 
 ## 文件与路径（R040–R047）
 

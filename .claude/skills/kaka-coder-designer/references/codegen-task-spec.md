@@ -22,7 +22,7 @@
 | L3 — 应用层（Application） | 应用服务、Command、DTO、Validator | 依赖 L1 + L2，同层内多个用例可并行 |
 | L4 — 接口层（Interface） | Controller、适配器、过滤器 | 依赖 L3，同层内多个接口可并行 |
 | L5 — 前端层（Frontend） | 类型、服务、Store、视图 | 依赖 L4 的 DTO 契约，同层内可并行 |
-| L6 — 编译校验层（Compile） | 对所有生成的代码执行编译/类型检查 | 所有代码生成完成后串行执行 |
+| L6 — 编译校验层（Compile） | 按需对生成代码执行最小 compile-only 检查 | **默认不执行**；显式声明 `runCompile=true` 或 `runTests=true` 后串行执行 |
 | L7 — 测试执行层（Test） | 运行 Controller 优先的单点真实调用测试 | **默认不执行**；显式声明 `runTests=true` 后串行执行；细则见 [test-execution-spec.md](test-execution-spec.md) |
 
 ### 1.2 按领域拆分独立任务
@@ -138,7 +138,7 @@
 | 属性 | 说明 |
 |---|---|
 | **输入** | 所有已生成的代码文件 |
-| **输出** | 编译报告（compile-check-report.json） |
+| **输出** | 编译报告（compile-check-report.json）；未触发时状态为 `SKIPPED` |
 | **依赖** | 所有代码生成任务（TASK-DDD-ENTITY, TASK-REPOSITORY, TASK-CONVERTER, TASK-APPLICATION, TASK-CONTROLLER, TASK-FRONTEND-*） |
 | **校验点** | 无语法错误、依赖完整、类型匹配、包依赖方向正确 |
 
@@ -146,9 +146,9 @@
 
 | 属性 | 说明 |
 |---|---|
-| **输入** | 编译通过的代码 + 显式测试时生成或补充的测试类；须同时收到 `runTests=true` 才会真正执行 |
+| **输入** | 显式测试时生成或补充的测试类；须同时收到 `runTests=true` 才会真正执行 |
 | **输出** | 测试执行摘要（test-execution-summary.json）；未触发时状态为 `SKIPPED` |
-| **依赖** | `TASK-COMPILE-CHECK`（状态必须为 PASSED）；仅在显式声明时调度 |
+| **依赖** | `TASK-COMPILE-CHECK`（显式测试时状态必须为 PASSED）；仅在显式声明时调度 |
 | **校验点** | 目标接口可调用，入参与日志结果可见 |
 
 ---
@@ -181,7 +181,7 @@
                                       │ 所有代码
                                       ▼
                               ┌───────────────┐
-                              │   编译校验     │
+                              │ 可选编译校验   │
                               │ (COMPILE-CHECK)│
                               └───────┬───────┘
                                       │
@@ -199,7 +199,7 @@
 - **后端并行**：同一层级内，不同聚合/模块的任务可并行。例如：订单实体的 `TASK-DDD-ENTITY` 与 用户实体的 `TASK-DDD-ENTITY` 可同时执行。
 - **前后端并行**：前端 `TASK-FRONTEND-TYPES` 需等待后端 `TASK-APPLICATION` 完成，但后端 `TASK-CONTROLLER` 与前端 `TASK-FRONTEND-TYPES` 可部分并行（若 DTO 契约已提前约定）。
 - **前端并行**：`TASK-FRONTEND-TYPES`、`TASK-FRONTEND-SERVICES`、`TASK-FRONTEND-STORE`、`TASK-FRONTEND-VIEWS` 在严格依赖链下顺序执行，但不同页面模块间可并行。
-- **编译校验串行**：`TASK-COMPILE-CHECK` 必须在所有代码生成任务（含前后端）完成后执行，作为统一前置步骤，不可与代码生成任务并行。
+- **编译校验可选**：`TASK-COMPILE-CHECK` 默认不调度；仅当编排参数 `runCompile=true` 或 `runTests=true` 时，才在所有代码生成任务完成后串行执行。
 - **测试执行可选**：`TASK-TEST-EXECUTE` 默认不调度；仅当编排参数 `runTests=true` 时，才在 `TASK-COMPILE-CHECK` 状态为 `PASSED` 后串行执行。
 
 ---
@@ -266,7 +266,7 @@
   ],
   "compileCheck": {
     "compileCheckId": "compile-20240523-001",
-    "status": "PASSED",
+    "status": "SKIPPED",
     "mode": "COMPILE_ONLY",
     "errors": [],
     "warnings": []
@@ -292,7 +292,7 @@
 | `ROLLED_BACK` | 因一致性校验失败，已回滚 |
 | `PASSED` | 编译校验或测试执行通过 |
 | `PARTIAL` | 测试执行部分通过（部分失败但不阻塞） |
-| `SKIPPED` | 测试任务未显式声明，未执行 |
+| `SKIPPED` | 编译或测试任务未显式声明，未执行 |
 
 ---
 
@@ -307,7 +307,7 @@
 | **字段一致性** | 生成的代码字段与输入设计文档是否一致 |
 | **命名规范** | 类名、方法名、变量名是否符合项目命名约定 |
 | **依赖可达** | 引用的类/接口是否存在于已完成的依赖任务输出中 |
-| **语法正确性** | 生成的源码是否能通过编译（或静态检查） |
+| **语法正确性** | 生成的源码是否通过文件级静态自查；编译仅在显式要求时执行 |
 | **契约对齐** | DTO / API 定义前后端是否一致 |
 
 校验报告格式：
@@ -375,7 +375,7 @@
 | `TASK-FRONTEND-SERVICES` | L5 前端层 | `TASK-FRONTEND-TYPES` | API 封装模块 |
 | `TASK-FRONTEND-STORE` | L5 前端层 | `TASK-FRONTEND-SERVICES` | Pinia Store |
 | `TASK-FRONTEND-VIEWS` | L5 前端层 | `TASK-FRONTEND-STORE` + `TASK-FRONTEND-TYPES` | 页面组件 |
-| `TASK-COMPILE-CHECK` | L6 编译校验层 | 所有代码生成任务 | 编译报告 |
+| `TASK-COMPILE-CHECK` | L6 编译校验层 | 所有代码生成任务（显式声明时） | 编译报告或 SKIPPED |
 | `TASK-TEST-EXECUTE` | L7 测试执行层 | `TASK-COMPILE-CHECK`（显式声明时） | Controller 优先单点调用摘要，未触发时为 `SKIPPED` |
 
 ### 状态流转图
@@ -392,7 +392,9 @@ PENDING ──→ READY ──→ RUNNING ──→ COMPLETED
 ### 编译校验状态流转
 
 ```
-PENDING ──→ READY ──→ RUNNING ──→ PASSED ──→ 默认结束
+PENDING ──→ SKIPPED（默认未显式声明）
+   │
+   └──→ READY ──→ RUNNING ──→ PASSED ──→ 结束
               │           │
               │           │                    （显式 runTests=true）
               │           │                           ↓

@@ -1,14 +1,14 @@
-# 编译校验规范
+# 按需编译校验规范
 
-> kaka-coder-designer · `{proj}-coder` / `{proj}-fixer` 生成或修复代码后执行
+> kaka-coder-designer · `{proj}-coder` / `{proj}-fixer` 仅在用户、任务或 CI 显式要求时执行
 
 ---
 
 ## R001 编译校验目的
 
-- 编译校验默认独立执行，确保生成的代码无语法错误、依赖完整、类型匹配。
-- 仅当显式声明 `runTests=true` 时，编译校验才作为测试执行的前置条件。
-- 编译不通过时，返回编译错误报告；未显式声明的测试任务不会触发。
+- 代码生成后的默认验收是文件逻辑完成与静态自查，不自动触发编译。
+- 仅当显式声明 `runCompile=true` 或 `runTests=true` 时，编译校验才进入执行流程。
+- 编译不通过时，返回编译错误报告；未显式声明的编译或测试任务不会触发。
 
 ---
 
@@ -17,20 +17,26 @@
 ### 2.1 后端编译
 - **构建工具**：Maven 或 Gradle
 - **校验命令**：
-  - Maven：`mvn compile`
-  - Gradle：`./gradlew compileJava`
+  - Maven：优先使用项目探测出的 compile-only 命令；未登记时使用 `mvn compile -DskipTests`
+  - Gradle：优先使用项目探测出的 compile-only 命令；未登记时使用 `./gradlew compileJava -x test`
+- **禁止范围**：默认不执行 `testCompile`、`compileTestJava`、`test`、`verify`、`package`、`install`、`check` 或全量聚合任务。
 
 ### 2.2 前端编译
 - **语言**：TypeScript
 - **校验命令**：
   - Vue 项目：`vue-tsc --noEmit`
   - 普通 TS 项目：`tsc --noEmit`
+- **禁止范围**：默认不执行测试、打包、端到端校验、覆盖率或生产构建。
+
+### 2.3 耗时控制
+- 编译校验只覆盖本次变更影响的最小模块；多模块项目优先使用 `-pl`、`:module:compileJava` 等单模块命令。
+- 发现默认命令会触发测试编译、打包或长时间全量构建时，须改用更小的 compile-only 命令或跳过并说明原因。
 
 ---
 
 ## R003 编译校验步骤
 
-1. **自动触发**：代码生成完成后，自动触发编译校验流程。
+1. **显式触发**：仅在用户、任务或 CI 明确要求时，触发最小 compile-only 编译校验流程。
 2. **输出收集**：收集编译输出（stdout / stderr）。
 3. **错误解析**：解析编译错误，定位到具体文件和行号。
 4. **报告生成**：根据解析结果生成结构化编译报告。
@@ -47,7 +53,7 @@
   "status": "PASSED|FAILED",
   "mode": "COMPILE_ONLY|COMPILE_AND_TEST",
   "module": "kset-rag-server",
-  "command": "mvn compile",
+  "command": "mvn compile -DskipTests",
   "durationMs": 15000,
   "errors": [
     {
@@ -97,15 +103,16 @@
 
 ## R006 与测试的关系
 
-- 默认模式下，编译校验是代码落地的最终检查点，完成后不进入测试执行阶段。
+- 默认模式下，编译校验不执行，代码落地以文件逻辑完成与静态自查为最终检查点。
 - 显式声明测试任务（`runTests=true`）且编译通过 → 进入测试执行阶段。
 - 显式声明测试任务但编译失败 → 返回编译错误报告，测试任务置为 `BLOCKED`，不执行任何测试用例。
 
 ## R007 运行模式与报告
 
-- 编译校验输入支持 `runTests` 开关，未显式指定时默认为 `false`。
+- 编译校验输入支持 `runCompile` 与 `runTests` 开关，未显式指定时均默认为 `false`。
 - 编译报告须包含 `mode` 字段，默认值为 `COMPILE_ONLY`，显式声明测试时为 `COMPILE_AND_TEST`。
 - `COMPILE_ONLY` 模式下，测试执行阶段输出 `SKIPPED`，不生成测试用例也不占用测试时间。
+- `COMPILE_ONLY` 模式下，命令须避免触发测试编译、打包、覆盖率、集成检查或生产构建。
 
 ---
 
@@ -116,13 +123,13 @@
     │
     ▼
 ┌─────────────┐
-│  编译校验    │
-│ (默认独立)  │
+│ 文件逻辑完成  │
+│  静态自查    │
 └──────┬──────┘
        │
-       ├─ 失败 ──→ 返回编译错误报告
+       ├─ 默认 ──→ 结束，不编译
        │
-       └─ 通过 ──→ 默认结束
+       └─ 显式 runCompile=true/runTests=true
               │
-              └─ 显式 runTests=true ──→ 进入测试执行阶段
+              └─ 最小 compile-only 编译校验
 ```
