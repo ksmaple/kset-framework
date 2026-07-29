@@ -84,7 +84,9 @@ public void writeAuditLog() {
 
 配置来源和含义：
 - `kset.datasource.enabled`：来源 KSet Datasource Starter，控制 KSet 数据源辅助自动装配，默认 `true`。
-- `kset.datasource.auto-fill`：来源 KSet Datasource Starter，控制 `createTime` / `updateTime` 自动填充处理器，默认 `true`。
+- `kset.datasource.auto-fill`：来源 KSet Datasource Starter，控制 `createTime` / `updateTime`、`createdAt` / `updatedAt`、`createDate` / `updateDate` 自动填充处理器，字段类型为 `Date`，默认 `true`。
+
+实体字段仍需按 MyBatis-Plus 约定配置 `@TableField(fill = FieldFill.INSERT)` 或 `FieldFill.INSERT_UPDATE`；未配置填充策略时，处理器不会覆盖业务赋值或数据库默认值。
 
 兼容说明：
 - 没有配置 `spring.datasource.dynamic.datasource.*` 时，KSet 会默认关闭 dynamic-datasource 自动配置，避免影响 Spring Boot 原生单数据源。

@@ -12,7 +12,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class KsetDatasourceProperties {
 
     private boolean enabled = true;
-    /** 是否注册 createTime / updateTime 自动填充处理器。 */
+    /** 是否注册 createTime / updateTime、createdAt / updatedAt、createDate / updateDate 自动填充处理器。 */
     private boolean autoFill = true;
 
     public boolean isEnabled() {
