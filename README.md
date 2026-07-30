@@ -80,7 +80,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | `kset-starter-web` | 全局异常、ApiResponse、OpLog AOP、可选 Knife4j/请求日志 | Spring MVC / Validation |
 | `kset-starter-auth` | 登录态、默认主体、多套鉴权规则、Gateway/Web/Dubbo 上下文透传、权限注解 | 可选 Redis session / Servlet / Gateway / Dubbo / AOP |
 | `kset-starter-monitor` | Servlet TraceId/灰度、Dubbo/Gateway 透传、线程池 MDC 传播（默认开启） | 按 classpath 条件装配 |
-| `kset-starter-datasource` | 逻辑删除约定、createTime/updateTime 自动填充、dynamic-datasource 单库默认关闭 | JDBC / MyBatis-Plus / dynamic-datasource |
+| `kset-starter-datasource` | 逻辑删除约定、多种常见创建/更新时间字段自动填充、dynamic-datasource 单库默认关闭 | JDBC / MyBatis-Plus / dynamic-datasource |
 | `kset-starter-cache` | KSet 自定义缓存注解、多级缓存、L1 Caffeine、L2 SPI、本地 single-flight | Caffeine / Spring AOP |
 | `kset-starter-redis` | JSON 序列化 RedisTemplate、Key 前缀、可选 Cache | Spring Data Redis |
 | `kset-starter-nacos` | Nacos 命名约定、灰度 LB（**不含** Web / Sentinel） | SCA Nacos |
@@ -517,7 +517,9 @@ kset:
     auto-fill: true
 ```
 
-`createTime` / `updateTime` 自动填充由 datasource starter 注册；逻辑删除、Mapper 扫描使用 MyBatis-Plus / Spring Boot 标准配置扩展。Flyway 不属于 datasource starter 默认能力，业务如需数据库迁移请自行显式引入 Flyway 依赖与配置。新增 KSet 数据源配置请使用 `kset.datasource.*`。
+`createTime` / `updateTime`、`createdAt` / `updatedAt`、`createDate` / `updateDate` 自动填充由 datasource starter 注册，字段类型为 `Date`；逻辑删除、Mapper 扫描使用 MyBatis-Plus / Spring Boot 标准配置扩展。Flyway 不属于 datasource starter 默认能力，业务如需数据库迁移请自行显式引入 Flyway 依赖与配置。新增 KSet 数据源配置请使用 `kset.datasource.*`。
+
+时间字段需按 MyBatis-Plus 约定配置 `@TableField(fill = FieldFill.INSERT)` 或 `FieldFill.INSERT_UPDATE`；未配置填充策略时，处理器不会覆盖业务赋值或数据库默认值。
 
 ### kset-starter-redis：缓存、锁、排行榜
 
