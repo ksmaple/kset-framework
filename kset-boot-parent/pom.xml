@@ -51,7 +51,6 @@
         <flyway.version>11.7.2</flyway.version>
         <resilience4j.version>2.1.0</resilience4j.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <knife4j.version>4.5.0</knife4j.version>
         <tika.version>2.9.1</tika.version>
         <flexmark.version>0.64.8</flexmark.version>
         <flying-saucer.version>9.4.0</flying-saucer.version>
@@ -310,13 +309,6 @@
                 <groupId>org.mapstruct</groupId>
                 <artifactId>mapstruct-processor</artifactId>
                 <version>${mapstruct.version}</version>
-            </dependency>
-
-            <!-- Knife4j -->
-            <dependency>
-                <groupId>com.github.xiaoymin</groupId>
-                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
-                <version>${knife4j.version}</version>
             </dependency>
 
             <!-- Apache Tika -->

@@ -35,7 +35,7 @@ kset:
 默认行为：
 
 - 普通接口未命中任何规则时，按 `app + session + X-Session-Token` 鉴权。
-- 公开路径默认放行：`/api/public/**`、`/actuator/health/**`、`/doc.html`、`/v3/api-docs/**`。
+- 公开路径默认放行：`/api/public/**`、`/actuator/health/**`。
 - 未登录返回 `{"code":401,"message":"未登录","data":null}`，HTTP 状态保持 `200`。
 - 无权限返回 `{"code":403,"message":"无权限","data":null}`，HTTP 状态保持 `200`。
 
@@ -497,16 +497,12 @@ kset:
       public-paths:
         - /api/public/**
         - /actuator/health/**
-        - /doc.html
-        - /v3/api-docs/**
     gateway:
       enabled: true
       token-header: X-Session-Token
       public-paths:
         - /api/public/**
         - /actuator/health/**
-        - /doc.html
-        - /v3/api-docs/**
     dubbo:
       enabled: true
       propagate-token: false

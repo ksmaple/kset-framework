@@ -351,9 +351,7 @@ public class KsetAuthProperties {
         private String tokenHeader = AuthHeaders.SESSION_TOKEN;
         private List<String> publicPaths = new ArrayList<>(List.of(
                 "/api/public/**",
-                "/actuator/health/**",
-                "/doc.html",
-                "/v3/api-docs/**"));
+                "/actuator/health/**"));
 
         public boolean isEnabled() {
             return enabled;
@@ -393,9 +391,7 @@ public class KsetAuthProperties {
         private String tokenHeader = AuthHeaders.SESSION_TOKEN;
         private List<String> publicPaths = new ArrayList<>(List.of(
                 "/api/public/**",
-                "/actuator/health/**",
-                "/doc.html",
-                "/v3/api-docs/**"));
+                "/actuator/health/**"));
 
         public boolean isEnabled() {
             return enabled;

@@ -20,7 +20,7 @@ import org.springframework.core.Ordered;
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @EnableConfigurationProperties(KsetWebProperties.class)
-@Import({KsetWebMvcConfigurer.class, KsetKnife4jAutoConfiguration.class, TraceIdResponseBodyAdvice.class})
+@Import({KsetWebMvcConfigurer.class, TraceIdResponseBodyAdvice.class})
 public class KsetWebAutoConfiguration {
 
     @Bean

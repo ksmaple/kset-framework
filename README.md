@@ -61,7 +61,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | [kset-boot-parent/README.md](kset-boot-parent/README.md) | Java 21、Spring Boot / Cloud / Alibaba / Dubbo 版本基线与发布 |
 | [kset-common/README.md](kset-common/README.md) | `ListHelper`、`DateHelper`（java.time）、`KsetHttp`、线程池、随机、签名 |
 | [kset-cloud/README.md](kset-cloud/README.md) | 云服务公共配置、Nacos 命名约定、灰度与规则 SPI |
-| [kset-starter-web/README.md](kset-starter-web/README.md) | API 文档（Knife4j / OpenAPI 3） |
+| [kset-starter-web/README.md](kset-starter-web/README.md) | Web、统一响应、异常、日志与 TraceId |
 | [kset-starter-auth/README.md](kset-starter-auth/README.md) | 登录态、项目默认鉴权、多套主体鉴权、Gateway/Web/Dubbo 上下文透传 |
 | [kset-starter-monitor/README.md](kset-starter-monitor/README.md) | 全链路监控门面层、无感知矩阵与配置 |
 | [kset-starter-datasource/README.md](kset-starter-datasource/README.md) | 数据源、MyBatis-Plus、dynamic-datasource |
@@ -77,7 +77,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 
 | Starter | KSet 定制能力 | 第三方默认行为 |
 |---------|--------------|----------------|
-| `kset-starter-web` | 全局异常、ApiResponse、OpLog AOP、可选 Knife4j/请求日志 | Spring MVC / Validation |
+| `kset-starter-web` | 全局异常、ApiResponse、OpLog AOP、请求日志、TraceId 响应 | Spring MVC / Validation |
 | `kset-starter-auth` | 登录态、默认主体、多套鉴权规则、Gateway/Web/Dubbo 上下文透传、权限注解 | 可选 Redis session / Servlet / Gateway / Dubbo / AOP |
 | `kset-starter-monitor` | Servlet TraceId/灰度、Dubbo/Gateway 透传、线程池 MDC 传播（默认开启） | 按 classpath 条件装配 |
 | `kset-starter-datasource` | 逻辑删除约定、多种常见创建/更新时间字段自动填充、dynamic-datasource 单库默认关闭 | JDBC / MyBatis-Plus / dynamic-datasource |
@@ -96,9 +96,8 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | 版本基线 | `kset-boot-parent` | Maven parent / BOM | 统一 Java 21、UTF-8、Boot/Cloud/Alibaba/Dubbo 等版本 |
 | 公共工具 | `kset-common` | `ListHelper`、`DateHelper`、`KsetHttp`、`KsetThreadPoolFactory`、`StructLog` | 也会由任意 starter 传递引入 |
 | 事件门面 | `kset-common` / `kset-starter-mq` | `EventFacade`、`EventHandler`、`SendCallback` | 默认 Spring 本地事件；引入 MQ 后自动切换 RocketMQ |
-| Web | `kset-starter-web` | `ApiResponse`、`@OpLog`、Controller | `knife4j.enable=true` 开启文档 |
+| Web | `kset-starter-web` | `ApiResponse`、`@OpLog`、Controller | 提供 Web 基础能力与统一响应 |
 | Auth | `kset-starter-auth` | `LoginContext`、`@RequireLogin`、`@RequirePermission`、`LoginSessionStore` | 默认 `app + session + X-Session-Token`，CMS 等差异化场景用 `kset.auth.rules` |
-| OpenAPI | `kset-starter-web` | `/doc.html`、`/v3/api-docs`、`@Operation` | 生产建议关闭或走网关鉴权 |
 | 监控 | `kset-starter-monitor` | `Monitor`、`@Monitored`、Trace Filter | 默认 log backend；CAT 需显式配置 |
 | 数据源公共能力 | `kset-starter-datasource` | MyBatis-Plus Mapper / Entity | 配置 `spring.datasource.*`、`kset.datasource.auto-fill` |
 | 多级缓存 | `kset-starter-cache` | `@KsetCacheable`、`KsetCache`、`KsetCacheFacade` | L1 Caffeine；L2 通过 SPI 接入 |
@@ -398,7 +397,7 @@ public class OrderCreatedHandler implements EventHandler<OrderCreatedEvent> {
 
 框架已在事件发布和消费路径接入 `Monitor`，监控异常会被捕获并记录错误日志，不影响业务发布和消费流程。
 
-### kset-starter-web：Web、统一响应、异常与 OpenAPI
+### kset-starter-web：Web、统一响应、异常与日志
 
 ```xml
 <dependency>
@@ -407,28 +406,9 @@ public class OrderCreatedHandler implements EventHandler<OrderCreatedEvent> {
 </dependency>
 ```
 
-```java
-@Tag(name = "用户")
-@RestController
-@RequestMapping("/api/users")
-public class UserController {
-    @Operation(summary = "按 ID 查询")
-    @GetMapping("/{id}")
-    public ApiResponse<UserEntity> get(@PathVariable Long id) {
-        return ApiResponse.success(userService.getById(id));
-    }
-}
-```
-
 常用配置：
 
 ```yaml
-knife4j:
-  enable: true
-springdoc:
-  group-configs:
-    - group: default
-      paths-to-match: /api/**
 kset:
   web:
     oplog:
@@ -439,8 +419,6 @@ kset:
     response:
       trace-id-enabled: true
 ```
-
-访问地址：`/doc.html`、`/v3/api-docs`。生产环境建议关闭或通过网关鉴权限制文档访问。
 
 ### kset-starter-monitor：全链路监控与 TraceId
 
@@ -899,4 +877,4 @@ mvn clean install
 ## 后续迭代
 
 - 完整 JWT/OAuth2 Gateway 鉴权
-- 可选：Knife4j / Redisson 改为 optional 依赖以进一步瘦身 classpath
+- 可选：Redisson 改为 optional 依赖以进一步瘦身 classpath
