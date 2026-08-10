@@ -36,8 +36,6 @@
         <!-- Third-party libraries -->
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <dynamic-datasource.version>4.5.0</dynamic-datasource.version>
-        <spring-ai.version>1.0.0</spring-ai.version>
-        <spring-ai-alibaba-graph.version>1.0.0.2</spring-ai-alibaba-graph.version>
         <duckdb.version>1.0.0</duckdb.version>
         <mybatis.version>3.5.15</mybatis.version>
         <hikaricp.version>5.1.0</hikaricp.version>
@@ -205,15 +203,6 @@
                 <groupId>org.mybatis</groupId>
                 <artifactId>mybatis</artifactId>
                 <version>${mybatis.version}</version>
-            </dependency>
-
-            <!-- Spring AI BOM -->
-            <dependency>
-                <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-bom</artifactId>
-                <version>${spring-ai.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
             </dependency>
 
             <!-- DuckDB -->
@@ -494,12 +483,6 @@
                 <version>${ip2region.version}</version>
             </dependency>
 
-            <!-- Spring AI Alibaba Graph -->
-            <dependency>
-                <groupId>com.alibaba.cloud.ai</groupId>
-                <artifactId>spring-ai-alibaba-graph-core</artifactId>
-                <version>${spring-ai-alibaba-graph.version}</version>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 
