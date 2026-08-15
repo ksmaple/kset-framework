@@ -1,7 +1,7 @@
 package com.kset.redis.autoconfigure;
 
 import com.kset.redis.core.KsetRedisService;
-import com.kset.redis.codec.KsetFastjsonRedisSerializer;
+import com.kset.redis.codec.KsetStringRedisSerializer;
 import com.kset.redis.config.KsetRedisSerializerConfiguration;
 import com.kset.redis.lock.KsetRedisLockExecutor;
 import com.kset.redis.lock.internal.KsetRedissonLockProvider;
@@ -47,11 +47,11 @@ class KsetRedisAutoConfigurationTest {
 
     @Test
     void allowsOverridingKsetRedisValueSerializer() {
-        KsetFastjsonRedisSerializer customSerializer = new KsetFastjsonRedisSerializer();
+        KsetStringRedisSerializer customSerializer = new KsetStringRedisSerializer();
 
         contextRunnerWithRedissonClient
                 .withBean(KsetRedisSerializerConfiguration.BEAN_NAME,
-                        KsetFastjsonRedisSerializer.class,
+                        KsetStringRedisSerializer.class,
                         () -> customSerializer)
                 .run(context -> assertThat(context.getBean(KsetRedisSerializerConfiguration.BEAN_NAME))
                         .isSameAs(customSerializer));

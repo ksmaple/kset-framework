@@ -1,9 +1,8 @@
 {
   "dialect": "mysql",
   "version": "8.0",
-  "profileRelPath": "skills/kaka-coder-designer/references/sql-spec.md",
-  "commonSpecRelPath": "skills/kaka-coder-designer/references/naming-spec.md",
+  "projectSpecPattern": "skills/*-coder/references/project-spec.md",
   "detectedFrom": "no signal -> default mysql (WARN)",
-  "selectedAt": "2026-07-29T10:17:42+08:00",
+  "selectedAt": "2026-08-14T22:40:15+08:00",
   "source": "auto"
 }

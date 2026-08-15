@@ -104,6 +104,19 @@ DateZoneHelper.sauToLocalDef("2024-06-07 10:00:00");  // 沙特快捷
 
 内置枚举：`UTC`、`CN`、`SAU`、`JP`、`SG`、`UAE`、`IN`、`UK`、`US_EAST`、`US_WEST`（固定偏移，不含夏令时）。
 
+## JsonUtil（`com.kset.common.utils`）
+
+最简单的 JSON 字符串转换，底层是 Spring Boot 内置 Jackson，不写类型元数据。
+
+```java
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.kset.common.utils.JsonUtil;
+
+String json = JsonUtil.toJson(order);
+Order order = JsonUtil.fromJson(json, Order.class);
+List<Order> orders = JsonUtil.fromJson(json, new TypeReference<List<Order>>() {});
+```
+
 ## VersionUtil（`com.kset.common.utils`）
 
 常见版本号比较与判断。数字段逐段比较，缺失段按 0 处理，因此 `1.0`、`1.0.0`、`1.0.0.0` 视为相同版本；支持 `v` 前缀、`-SNAPSHOT`、`-RC1`、`.Final` 等常见后缀。

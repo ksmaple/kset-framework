@@ -1,33 +1,37 @@
-package com.kset.redis.codec;
+package com.kset.common.utils;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.junit.jupiter.api.Test;
 
-import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class KsetFastjsonRedisSerializerTest {
-
-    private final KsetFastjsonRedisSerializer serializer = new KsetFastjsonRedisSerializer();
+class JsonUtilTest {
 
     @Test
-    void serializesBasicValuesAsPlainText() {
-        assertThat(new String(serializer.serialize("abc"), StandardCharsets.UTF_8)).isEqualTo("abc");
-        assertThat(new String(serializer.serialize(12), StandardCharsets.UTF_8)).isEqualTo("12");
-        assertThat(new String(serializer.serialize(true), StandardCharsets.UTF_8)).isEqualTo("true");
-    }
-
-    @Test
-    void serializesObjectValuesWithFastjsonTypeInfo() {
+    void writesPlainJsonWithoutTypeMetadata() {
         SampleUser user = new SampleUser();
         user.setId(1L);
         user.setName("Alice");
 
-        byte[] bytes = serializer.serialize(user);
-        String json = new String(bytes, StandardCharsets.UTF_8);
+        String json = JsonUtil.toJson(user);
 
-        assertThat(json).contains("\"@type\"");
-        assertThat(serializer.deserialize(bytes)).isEqualTo(user);
+        assertThat(json).doesNotContain("@type", "@class");
+        assertThat(json).contains("\"id\":1");
+        assertThat(json).contains("\"name\":\"Alice\"");
+        assertThat(JsonUtil.fromJson(json, SampleUser.class)).isEqualTo(user);
+    }
+
+    @Test
+    void convertsGenericJsonString() {
+        String json = JsonUtil.toJson(List.of(Map.of("id", 1)));
+
+        List<Map<String, Integer>> parsed = JsonUtil.fromJson(json, new TypeReference<>() {
+        });
+
+        assertThat(parsed).containsExactly(Map.of("id", 1));
     }
 
     public static class SampleUser {

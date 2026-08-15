@@ -129,7 +129,6 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | MySQL Connector/J | 8.3.0 |
 | Jedis | 5.1.2 |
 | Redisson | 3.40.2 |
-| Fastjson2 | 2.0.53 |
 | Guava | 33.4.0-jre |
 | Commons Lang3 | 3.17.0 |
 | Commons Collections4 | 4.4 |
@@ -153,7 +152,7 @@ Spring 生态版本以 `kset-boot-parent/pom.xml` 为准：Spring Boot 3.5.x 对
 | 层级 | 模块 | 说明 |
 |------|------|------|
 | BOM | `kset-boot-parent` | 锁定全量三方版本 |
-| 工具聚合 | `kset-common` | Commons / Guava / Jackson / Fastjson2 / TTL 等**仅在此声明** |
+| 工具聚合 | `kset-common` | Commons / Guava / Jackson / TTL 等**仅在此声明** |
 | 能力 | `kset-cloud`、`kset-starter-*` | **必须**依赖 `kset-common`；只声明领域能力，勿重复工具库；`starter-nacos` / `starter-sentinel` / `starter-web` **解耦**，微服务按需组合 |
 
 业务项目引入任意 KSet Starter 后，上述工具库会随 `kset-common` **传递**进入 classpath，一般无需再单独声明 `commons-lang3`、`guava` 等。

@@ -28,11 +28,11 @@
 
 ## 依赖管理
 
-`dependencyManagement` 管理全部 KSet 模块版本，以及 MyBatis-Plus、dynamic-datasource、RocketMQ、Redis、Caffeine、Fastjson2、MapStruct、POI、Tika、BouncyCastle 等常用依赖。
+`dependencyManagement` 管理全部 KSet 模块版本，以及 MyBatis-Plus、dynamic-datasource、RocketMQ、Redis、Caffeine、MapStruct、POI、Tika、BouncyCastle 等常用依赖。
 
 KSet 自身模块版本由 `kset-framework.version` 固定管理，不使用业务工程的 `project.version`；三方依赖继续使用各自版本属性。
 
-公共工具库统一由 `kset-common` 声明和传递；业务引入任意 `kset-starter-*` 后一般无需重复声明 Guava、Commons、Jackson、Fastjson2、TTL 等基础工具。
+公共工具库统一由 `kset-common` 声明和传递；业务引入任意 `kset-starter-*` 后一般无需重复声明 Guava、Commons、Jackson、TTL 等基础工具。
 
 ## 发布
 

@@ -1,13 +1,14 @@
 package com.kset.redis.config;
 
-import com.kset.redis.codec.KsetFastjsonRedisSerializer;
+import com.kset.redis.codec.KsetStringRedisSerializer;
 import com.kset.redis.key.KsetRedisKeys;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
- * 统一创建带 key 前缀与 JSON 值序列化的 {@link RedisTemplate}。
+ * 统一创建带 key 前缀与字符串值序列化的 {@link RedisTemplate}。
  */
 public final class KsetRedisTemplateFactory {
 
@@ -15,12 +16,12 @@ public final class KsetRedisTemplateFactory {
     }
 
     public static RedisTemplate<String, Object> create(RedisConnectionFactory connectionFactory, String keyPrefix) {
-        return create(connectionFactory, keyPrefix, new KsetFastjsonRedisSerializer());
+        return create(connectionFactory, keyPrefix, new KsetStringRedisSerializer());
     }
 
     public static RedisTemplate<String, Object> create(RedisConnectionFactory connectionFactory,
                                                        String keyPrefix,
-                                                       KsetFastjsonRedisSerializer valueSerializer) {
+                                                       RedisSerializer<Object> valueSerializer) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 

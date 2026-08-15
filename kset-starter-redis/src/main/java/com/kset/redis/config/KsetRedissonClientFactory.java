@@ -1,10 +1,9 @@
 package com.kset.redis.config;
 
 import com.kset.cloud.config.KsetRedisProperties;
-import com.kset.redis.codec.KsetFastjsonRedisSerializer;
-import com.kset.redis.codec.KsetFastjsonRedissonCodec;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
+import org.redisson.client.codec.StringCodec;
 import org.redisson.config.ClusterServersConfig;
 import org.redisson.config.Config;
 import org.redisson.config.SingleServerConfig;
@@ -22,9 +21,8 @@ public final class KsetRedissonClientFactory {
     }
 
     public static RedissonClient createPrimary(RedisProperties springRedis,
-                                               KsetRedisProperties ksetRedis,
-                                               KsetFastjsonRedisSerializer valueSerializer) {
-        Config config = baseConfig(ksetRedis, valueSerializer);
+                                               KsetRedisProperties ksetRedis) {
+        Config config = baseConfig(ksetRedis);
         if (springRedis.getCluster() != null && springRedis.getCluster().getNodes() != null
                 && !springRedis.getCluster().getNodes().isEmpty()) {
             ClusterServersConfig cluster = config.useClusterServers();
@@ -41,9 +39,9 @@ public final class KsetRedissonClientFactory {
         return Redisson.create(config);
     }
 
-    private static Config baseConfig(KsetRedisProperties ksetRedis, KsetFastjsonRedisSerializer valueSerializer) {
+    private static Config baseConfig(KsetRedisProperties ksetRedis) {
         Config config = new Config();
-        config.setCodec(new KsetFastjsonRedissonCodec(valueSerializer));
+        config.setCodec(StringCodec.INSTANCE);
         KsetRedisProperties.Redisson redisson = ksetRedis.getRedisson();
         config.setThreads(redisson.getThreads());
         config.setNettyThreads(redisson.getNettyThreads());

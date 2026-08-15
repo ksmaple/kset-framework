@@ -1,6 +1,6 @@
 # KSet Redis 统一抽象
 
-依赖 `kset-starter-redis` 后，可使用 **`KsetRedisService`（注入）** 与 **`KsetRedis`（静态）** 操作 Redis；可选 **Redisson** 提供分布式锁与统一 Fastjson2 编解码。
+依赖 `kset-starter-redis` 后，可使用 **`KsetRedisService`（注入）** 与 **`KsetRedis`（静态）** 操作 Redis；可选 **Redisson** 提供分布式锁与字符串编解码。
 
 | 包 | 说明 |
 |----|------|
@@ -12,18 +12,18 @@
 
 ## 对象解析
 
-KSet Redis 统一使用名为 `ksetRedisValueSerializer` 的 Fastjson2 序列化器处理值对象，覆盖范围包括：
+KSet Redis 统一使用名为 `ksetRedisValueSerializer` 的字符串序列化器处理值对象，覆盖范围包括：
 
 - `ksetRedisTemplate` 的 value / hash value
 - KSet Redis API 与 KSet Cache L2 适配器的缓存值
-- Redisson 的默认 `Codec`
+- Redisson 默认使用 `StringCodec`
 
-基础类型按 Redis 友好的文本存储，复杂对象按 Fastjson2 JSON 存储并携带类型信息。业务如需调整值序列化规则，只需要声明同名 Bean：
+基础类型按 Redis 友好的文本存储，复杂对象按普通 JSON 字符串存储（不写 `@type` / `@class`）。读出时按调用方传入的 `Class` / `TypeReference` 再转成对象。业务如需调整值序列化规则，只需要声明同名 Bean：
 
 ```java
 @Bean("ksetRedisValueSerializer")
-KsetFastjsonRedisSerializer ksetRedisValueSerializer() {
-    return new KsetFastjsonRedisSerializer();
+KsetStringRedisSerializer ksetRedisValueSerializer() {
+    return new KsetStringRedisSerializer();
 }
 ```
 

@@ -1,6 +1,6 @@
 package com.kset.redis.config;
 
-import com.kset.redis.codec.KsetFastjsonRedisSerializer;
+import com.kset.redis.codec.KsetStringRedisSerializer;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,7 +12,7 @@ public class KsetRedisSerializerConfiguration {
 
     @Bean(BEAN_NAME)
     @ConditionalOnMissingBean(name = BEAN_NAME)
-    public KsetFastjsonRedisSerializer ksetRedisValueSerializer() {
-        return new KsetFastjsonRedisSerializer();
+    public KsetStringRedisSerializer ksetRedisValueSerializer() {
+        return new KsetStringRedisSerializer();
     }
 }

@@ -63,7 +63,6 @@
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
 
         <!-- JSON / utilities / HTTP (common third-party) -->
-        <fastjson2.version>2.0.53</fastjson2.version>
         <guava.version>33.4.0-jre</guava.version>
         <commons-lang3.version>3.17.0</commons-lang3.version>
         <commons-io.version>2.18.0</commons-io.version>
@@ -394,18 +393,6 @@
                 <groupId>com.dianping.cat</groupId>
                 <artifactId>cat-client</artifactId>
                 <version>${cat-client.version}</version>
-            </dependency>
-
-            <!-- Fastjson2 (use fastjson2, not legacy fastjson 1.x) -->
-            <dependency>
-                <groupId>com.alibaba.fastjson2</groupId>
-                <artifactId>fastjson2</artifactId>
-                <version>${fastjson2.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.alibaba.fastjson2</groupId>
-                <artifactId>fastjson2-extension-spring6</artifactId>
-                <version>${fastjson2.version}</version>
             </dependency>
 
             <!-- Guava -->

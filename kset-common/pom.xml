@@ -26,14 +26,10 @@
             <artifactId>spring-tx</artifactId>
         </dependency>
 
-        <!-- JSON: Jackson for in-module code; Fastjson2 BOM entry for downstream -->
+        <!-- JSON: Spring Boot 内置 Jackson，仅此一套 -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.alibaba.fastjson2</groupId>
-            <artifactId>fastjson2</artifactId>
         </dependency>
 
         <!-- Utilities: declare once here; starters must not redeclare (project-spec) -->

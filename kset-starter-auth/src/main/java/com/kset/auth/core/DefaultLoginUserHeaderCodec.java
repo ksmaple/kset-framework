@@ -1,7 +1,7 @@
 package com.kset.auth.core;
 
-import com.alibaba.fastjson2.JSON;
 import com.kset.auth.spi.LoginUserHeaderCodec;
+import com.kset.common.utils.JsonUtil;
 import com.kset.common.auth.AuthHeaders;
 import com.kset.common.auth.LoginUser;
 
@@ -23,7 +23,7 @@ public class DefaultLoginUserHeaderCodec implements LoginUserHeaderCodec {
         String subject = subjectOrDefault(user.getSubjectType());
         Map<String, String> headers = new LinkedHashMap<>();
         put(headers, AuthHeaders.AUTH_SUBJECT, subject);
-        put(headers, AuthHeaders.loginContextHeader(subject), JSON.toJSONString(BasicLoginContext.from(user, includeToken)));
+        put(headers, AuthHeaders.loginContextHeader(subject), JsonUtil.toJson(BasicLoginContext.from(user, includeToken)));
         put(headers, AuthHeaders.DEVICE_ID, user.getDeviceId());
         put(headers, AuthHeaders.DEVICE_TYPE, user.getDeviceType());
         put(headers, AuthHeaders.CLIENT_TYPE, user.getClientType());
@@ -78,7 +78,7 @@ public class DefaultLoginUserHeaderCodec implements LoginUserHeaderCodec {
             return Optional.empty();
         }
         try {
-            BasicLoginContext context = JSON.parseObject(value, BasicLoginContext.class);
+            BasicLoginContext context = JsonUtil.fromJson(value, BasicLoginContext.class);
             if (context == null || !hasText(context.getUserId())) {
                 return Optional.empty();
             }

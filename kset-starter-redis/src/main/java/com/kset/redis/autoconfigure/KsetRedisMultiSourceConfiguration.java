@@ -1,7 +1,6 @@
 package com.kset.redis.autoconfigure;
 
 import com.kset.cloud.config.KsetRedisProperties;
-import com.kset.redis.codec.KsetFastjsonRedisSerializer;
 import com.kset.redis.config.KsetRedisConnectionFactoryBuilder;
 import com.kset.redis.config.KsetRedisConnectionCustomizer;
 import com.kset.redis.config.KsetRedisSerializerConfiguration;
@@ -21,6 +20,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
@@ -48,7 +48,7 @@ public class KsetRedisMultiSourceConfiguration {
                                                        Environment environment,
                                                        ObjectProvider<KsetRedisConnectionCustomizer> connectionCustomizers,
                                                        @Qualifier(KsetRedisSerializerConfiguration.BEAN_NAME)
-                                                       KsetFastjsonRedisSerializer valueSerializer) {
+                                                       RedisSerializer<Object> valueSerializer) {
         Map<String, KsetRedisProperties.RedisSourceProperties> sources = properties.getSources();
         if (sources == null || sources.isEmpty()) {
             return KsetRedisNamedSources.empty();

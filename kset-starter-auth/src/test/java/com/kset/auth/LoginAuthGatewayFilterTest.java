@@ -13,7 +13,7 @@ import com.kset.auth.gateway.LoginAuthGatewayFilter;
 import com.kset.auth.session.LoginSessionStore;
 import com.kset.common.auth.AuthHeaders;
 import com.kset.common.auth.LoginUser;
-import com.alibaba.fastjson2.JSON;
+import com.kset.common.utils.JsonUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
@@ -48,7 +48,7 @@ class LoginAuthGatewayFilterTest {
         filter.filter(exchange, chain).block();
 
         String context = chain.exchange.getRequest().getHeaders().getFirst(AuthHeaders.APP_LOGIN_CONTEXT);
-        BasicLoginContext user = JSON.parseObject(context, BasicLoginContext.class);
+        BasicLoginContext user = JsonUtil.fromJson(context, BasicLoginContext.class);
         assertThat(user.getUserId()).isEqualTo("u1");
         assertThat(user.getUserName()).isEqualTo("neo");
         assertThat(chain.exchange.getRequest().getHeaders().getFirst(AuthHeaders.AUTH_SUBJECT)).isEqualTo("app");

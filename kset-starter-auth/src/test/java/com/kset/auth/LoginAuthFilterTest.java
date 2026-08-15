@@ -17,7 +17,7 @@ import com.kset.common.utils.sign.KsetSignUtil;
 import com.kset.auth.session.LoginSessionStore;
 import com.kset.auth.web.DefaultServletAuthFailureHandler;
 import com.kset.auth.web.LoginAuthFilter;
-import com.alibaba.fastjson2.JSON;
+import com.kset.common.utils.JsonUtil;
 import com.kset.common.auth.AuthHeaders;
 import com.kset.common.auth.LoginContext;
 import com.kset.common.auth.LoginUser;
@@ -109,7 +109,7 @@ class LoginAuthFilterTest {
         BasicLoginContext context = BasicLoginContext.from(LoginUser.builder()
                 .userId("u1")
                 .build(), false);
-        request.addHeader(AuthHeaders.LOGIN_CONTEXT, JSON.toJSONString(context));
+        request.addHeader(AuthHeaders.LOGIN_CONTEXT, JsonUtil.toJson(context));
         request.addHeader(AuthHeaders.DEVICE_ID, "device-1");
         request.addHeader(AuthHeaders.LANGUAGE, "zh-CN");
         CapturingFilterChain chain = new CapturingFilterChain();

@@ -1,8 +1,7 @@
 package com.kset.redis.core;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.alibaba.fastjson2.JSON;
-import com.kset.redis.codec.KsetFastjsonRedisSerializer;
+import com.kset.common.utils.JsonUtil;
 import com.kset.common.utils.collection.ListHelper;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
@@ -498,17 +497,22 @@ public class KsetRedisTemplateOperations implements KsetRedisOperations {
         if (raw instanceof String text) {
             return convertText(text, type);
         }
-        return JSON.parseObject(JSON.toJSONString(raw), type);
+        return convertJsonValue(raw, type);
     }
 
     private <T> T convert(Object raw, TypeReference<T> typeReference) {
         if (raw == null || typeReference == null) {
             return null;
         }
-        if (raw instanceof String text) {
-            return JSON.parseObject(text, typeReference.getType());
-        }
-        return JSON.parseObject(JSON.toJSONString(raw), typeReference.getType());
+        return convertJsonValue(raw, typeReference);
+    }
+
+    private static <T> T convertJsonValue(Object raw, Class<T> type) {
+        return JsonUtil.convert(raw, type);
+    }
+
+    private static <T> T convertJsonValue(Object raw, TypeReference<T> typeReference) {
+        return JsonUtil.convert(raw, typeReference);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -543,10 +547,7 @@ public class KsetRedisTemplateOperations implements KsetRedisOperations {
         if (Enum.class.isAssignableFrom(type)) {
             return (T) Enum.valueOf((Class<Enum>) type.asSubclass(Enum.class), text);
         }
-        if (KsetFastjsonRedisSerializer.isBasicType(type)) {
-            return JSON.parseObject(text, type);
-        }
-        return JSON.parseObject(text, type);
+        return convertJsonValue(text, type);
     }
 
     private <T> Map<String, T> toMultiGetMap(Collection<String> keys, List<Object> values, Class<T> type) {
