@@ -3,6 +3,7 @@ package com.kset.mq.autoconfigure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.common.event.EventFacade;
 import com.kset.common.event.EventHandler;
+import com.kset.common.utils.JsonUtil;
 import com.kset.mq.event.RocketMqEventConsumer;
 import com.kset.mq.event.RocketMqEventFacade;
 import com.kset.mq.event.RocketMqEventOperations;
@@ -33,7 +34,7 @@ public class KsetRocketMqEventAutoConfiguration {
                                                    ObjectProvider<ObjectMapper> objectMapperProvider,
                                                    RocketMQProperties rocketMqProperties,
                                                    Environment environment) {
-        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(JsonUtil::mapper);
         return new RocketMqEventFacade(rocketMqTemplate, objectMapper, rocketMqProperties, environment);
     }
 
@@ -49,7 +50,7 @@ public class KsetRocketMqEventAutoConfiguration {
     @ConditionalOnMissingBean(RocketMqEventConsumer.class)
     public RocketMqEventConsumer rocketMqEventConsumer(List<EventHandler<?>> handlers,
                                                        ObjectProvider<ObjectMapper> objectMapperProvider) {
-        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(JsonUtil::mapper);
         return new RocketMqEventConsumer(handlers, objectMapper);
     }
 }

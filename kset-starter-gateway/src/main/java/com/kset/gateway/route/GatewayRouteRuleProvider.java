@@ -1,9 +1,9 @@
 package com.kset.gateway.route;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.cloud.spi.CloudRuleProvider;
 import com.kset.cloud.spi.CloudRuleType;
+import com.kset.common.utils.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.cloud.gateway.route.RouteDefinition;
@@ -26,7 +26,6 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
 
     private final RouteDefinitionWriter routeDefinitionWriter;
     private final ApplicationEventPublisher eventPublisher;
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final Set<String> managedRouteIds = ConcurrentHashMap.newKeySet();
 
     public GatewayRouteRuleProvider(RouteDefinitionWriter routeDefinitionWriter,
@@ -47,7 +46,7 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
             return;
         }
         try {
-            JsonNode root = objectMapper.readTree(jsonContent);
+            JsonNode root = JsonUtil.readTree(jsonContent);
             if (!root.isArray()) {
                 log.warn("Gateway route config must be a JSON array");
                 return;

@@ -24,6 +24,16 @@ class BusinessExceptionTest {
         assertThat(exception.getMessage()).isEqualTo("custom message");
     }
 
+    @Test
+    void keepsCause() {
+        IllegalStateException cause = new IllegalStateException("rpc down");
+        BusinessException exception = new BusinessException(TestErrorCode.NAME_EXISTS, "custom message", cause);
+
+        assertThat(exception.getCode()).isEqualTo(1002);
+        assertThat(exception.getCause()).isSameAs(cause);
+        assertThat(exception.getMessage()).isEqualTo("custom message");
+    }
+
     private enum TestErrorCode implements BizErrorCode {
         NAME_EXISTS(1002, "name exists");
 

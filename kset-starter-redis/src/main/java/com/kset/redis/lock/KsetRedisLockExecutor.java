@@ -12,7 +12,11 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
- * Redisson based Redis lock executor.
+ * Redis 分布式锁执行器（Redisson）。
+ *
+ * <p>默认租约 30 秒且固定 lease 不会自动续期。长任务用 {@link KsetRedisLockOptions#rejectNowWatchdog()}
+ * 或 {@code @KsetLocked(lease = "0s")}。{@link KsetRedisLockOptions#rejectNow(Duration)} 传入 {@link Duration#ZERO}
+ * 会被拒绝。用法见 {@code docs/usage/redis-lock.md}。
  */
 public class KsetRedisLockExecutor {
 
@@ -50,6 +54,9 @@ public class KsetRedisLockExecutor {
                 .orElseThrow(() -> toAcquireException(composite, options));
     }
 
+    /**
+     * 立即抢锁，失败抛 {@link KsetRedisLockBusyException}。租约用全局默认（通常 30 秒）。
+     */
     public void runExclusive(String lockKey, Runnable action) {
         runExclusive(lockKey, provider.defaultLeaseTime(), action);
     }
@@ -58,6 +65,9 @@ public class KsetRedisLockExecutor {
         run(lockKey, KsetRedisLockOptions.rejectNow(leaseTime), action);
     }
 
+    /**
+     * 等待 {@code waitTime} 后仍抢不到则抛 {@link KsetRedisLockTimeoutException}。
+     */
     public void runWithWait(String lockKey, Duration waitTime, Runnable action) {
         runWithWait(lockKey, waitTime, provider.defaultLeaseTime(), action);
     }
@@ -74,6 +84,9 @@ public class KsetRedisLockExecutor {
         return call(lockKey, KsetRedisLockOptions.rejectNow(leaseTime), action);
     }
 
+    /**
+     * 抢不到则跳过，返回 {@code null}，不抛异常。
+     */
     public <T> T callIfLock(String lockKey, Supplier<T> action) {
         return callIfLock(lockKey, provider.defaultLeaseTime(), action);
     }
@@ -86,6 +99,9 @@ public class KsetRedisLockExecutor {
                 .build(), action).orElse(null);
     }
 
+    /**
+     * 一直等到拿到锁。线程被中断抛 {@link KsetRedisLockInterruptedException}。
+     */
     public void runBlocking(String lockKey, Runnable action) {
         runBlocking(lockKey, provider.defaultLeaseTime(), action);
     }
@@ -270,6 +286,21 @@ public class KsetRedisLockExecutor {
     }
 
     private Duration resolveLease(KsetRedisLockOptions options) {
+        return resolveLeaseOrWatchdog(options);
+    }
+
+    private Duration resolveLeaseOrWatchdog(KsetRedisLockOptions options) {
+        if (options.watchdog()) {
+            return Duration.ZERO;
+        }
+        return ttlPolicy.requireTtl(options.leaseTime() != null ? options.leaseTime() : provider.defaultLeaseTime());
+    }
+
+    /**
+     * 保留原因：lease=0 走 requireTtl 直接拒绝，长任务无法选用 watchdog。
+     */
+    @SuppressWarnings("unused")
+    private Duration resolveLeaseForRollback(KsetRedisLockOptions options) {
         return ttlPolicy.requireTtl(options.leaseTime() != null ? options.leaseTime() : provider.defaultLeaseTime());
     }
 

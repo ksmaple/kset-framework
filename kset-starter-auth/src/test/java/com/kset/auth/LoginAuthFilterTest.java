@@ -123,12 +123,29 @@ class LoginAuthFilterTest {
     }
 
     @Test
-    void trustedHeaderModeStillAcceptsLegacySplitHeaders() throws Exception {
+    void trustedHeaderModeRejectsLegacySplitHeadersByDefault() throws Exception {
         KsetAuthProperties properties = new KsetAuthProperties();
         properties.getWeb().setMode(KsetAuthProperties.Mode.TRUSTED_HEADER);
         LoginAuthFilter filter = filter(properties, mock(LoginSessionStore.class));
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/orders");
         request.addHeader(AuthHeaders.USER_ID, "u1");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new CapturingFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(HttpServletResponse.SC_OK);
+        assertThat(response.getContentAsString()).contains("\"code\":401");
+    }
+
+    @Test
+    void trustedHeaderModeAcceptsLegacySplitHeadersWhenEnabled() throws Exception {
+        KsetAuthProperties properties = new KsetAuthProperties();
+        properties.getWeb().setMode(KsetAuthProperties.Mode.TRUSTED_HEADER);
+        properties.getWeb().setLegacySplitHeadersEnabled(true);
+        LoginAuthFilter filter = filter(properties, mock(LoginSessionStore.class));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/orders");
+        request.addHeader(AuthHeaders.USER_ID, "u1");
+        request.addHeader(AuthHeaders.ROLES, "admin");
         request.addHeader(AuthHeaders.DEVICE_ID, "device-1");
         request.addHeader(AuthHeaders.LANGUAGE, "zh-CN");
         CapturingFilterChain chain = new CapturingFilterChain();
@@ -138,6 +155,7 @@ class LoginAuthFilterTest {
         assertThat(chain.userId).isEqualTo("u1");
         assertThat(chain.deviceId).isEqualTo("device-1");
         assertThat(chain.language).isEqualTo("zh-CN");
+        assertThat(chain.roles).isEmpty();
     }
 
     @Test
@@ -299,7 +317,7 @@ class LoginAuthFilterTest {
                 new LoginAuthService(store,
                         new AuthRuleResolver(properties),
                         List.of(new SessionAuthenticator(store),
-                                new TrustedHeaderAuthenticator(new DefaultLoginUserHeaderCodec()),
+                                new TrustedHeaderAuthenticator(new DefaultLoginUserHeaderCodec(properties)),
                                 new SignatureAuthenticator(properties),
                                 new AppTokenAuthenticator(properties),
                                 new NoneAuthenticator())),
@@ -325,6 +343,7 @@ class LoginAuthFilterTest {
         private String subjectType;
         private String deviceId;
         private String language;
+        private List<String> roles;
 
         @Override
         public void doFilter(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response) {
@@ -333,6 +352,7 @@ class LoginAuthFilterTest {
             subjectType = user != null ? user.getSubjectType() : null;
             deviceId = user != null ? user.getDeviceId() : null;
             language = user != null ? user.getLanguage() : null;
+            roles = user != null ? user.getRoles() : List.of();
         }
     }
 

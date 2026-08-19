@@ -2,6 +2,8 @@
 
 `kset-starter-cache` 提供统一缓存门面、KSet 自定义注解、L1 Caffeine、本地 single-flight、指标统计与 L2 SPI。它不依赖 `kset-starter-redis`；需要 Redis 二级缓存时，额外引入 `kset-starter-redis`，Redis 模块会自动注册 L2 适配器。
 
+业务接入见 [多级缓存](../docs/usage/cache.md)。
+
 ## 依赖
 
 仅使用本地一级缓存：

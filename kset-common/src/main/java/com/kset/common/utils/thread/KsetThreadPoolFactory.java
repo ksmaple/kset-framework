@@ -211,6 +211,7 @@ public class KsetThreadPoolFactory {
             pool.shutdown();
             log.info(String.format("[Factory] Shutdown pool for biz '%s'", bizName));
         }
+        configs.remove(bizName);
     }
 
     public void shutdownAll() {
@@ -220,6 +221,7 @@ public class KsetThreadPoolFactory {
                 log.info(String.format("[Factory] Shutdown pool for biz '%s'", k));
             });
             pools.clear();
+            configs.clear();
         }
     }
 

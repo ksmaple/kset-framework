@@ -1,10 +1,16 @@
 package com.kset.common.utils.date;
 
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAccessor;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.TimeZone;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 日期时间工具（基于 {@link Date} 和 {@link Calendar}，链式 API）。
@@ -32,6 +38,8 @@ public class DateHelper {
     public static final long DayMil = 24 * 60 * 60 * 1000;
     public static final int ISO_MONDAY = 1;
     public static final int ISO_SUNDAY = 7;
+
+    private static final ConcurrentHashMap<String, DateTimeFormatter> FORMATTERS = new ConcurrentHashMap<>();
 
     private Date date;
 
@@ -497,7 +505,7 @@ public class DateHelper {
     }
 
     public String format(String pattern) {
-        return formatter(pattern).format(date);
+        return formatDate(date, pattern);
     }
 
     public long toMil() {
@@ -549,14 +557,14 @@ public class DateHelper {
         value.set(Calendar.MINUTE, value.get(Calendar.MINUTE) / 5 * 5);
         value.set(Calendar.SECOND, 0);
         value.set(Calendar.MILLISECOND, 0);
-        return formatter("yyyyMMddHHmm").format(value.getTime()) + "_5";
+        return formatDate(value.getTime(), "yyyyMMddHHmm") + "_5";
     }
 
     public String uniqueKeyPer1Min() {
         Calendar value = calendar(date);
         value.set(Calendar.SECOND, 0);
         value.set(Calendar.MILLISECOND, 0);
-        return formatter("yyyyMMddHHmm").format(value.getTime()) + "_1";
+        return formatDate(value.getTime(), "yyyyMMddHHmm") + "_1";
     }
 
     private DateHelper add(int field, int amount) {
@@ -631,16 +639,38 @@ public class DateHelper {
     }
 
     private static Date parseExact(String text, String pattern) {
-        SimpleDateFormat format = formatter(pattern);
-        format.setLenient(false);
         try {
-            return format.parse(text);
-        } catch (ParseException e) {
+            TemporalAccessor parsed = formatter(pattern).parse(text);
+            return Date.from(toLocalDateTime(parsed).atZone(ZoneId.systemDefault()).toInstant());
+        } catch (DateTimeParseException e) {
             throw new IllegalArgumentException("invalid date text: " + text, e);
         }
     }
 
-    private static SimpleDateFormat formatter(String pattern) {
+    private static String formatDate(Date value, String pattern) {
+        return formatter(pattern).format(LocalDateTime.ofInstant(value.toInstant(), ZoneId.systemDefault()));
+    }
+
+    private static LocalDateTime toLocalDateTime(TemporalAccessor parsed) {
+        int year = parsed.isSupported(ChronoField.YEAR) ? parsed.get(ChronoField.YEAR) : 1970;
+        int month = parsed.isSupported(ChronoField.MONTH_OF_YEAR) ? parsed.get(ChronoField.MONTH_OF_YEAR) : 1;
+        int day = parsed.isSupported(ChronoField.DAY_OF_MONTH) ? parsed.get(ChronoField.DAY_OF_MONTH) : 1;
+        int hour = parsed.isSupported(ChronoField.HOUR_OF_DAY) ? parsed.get(ChronoField.HOUR_OF_DAY) : 0;
+        int minute = parsed.isSupported(ChronoField.MINUTE_OF_HOUR) ? parsed.get(ChronoField.MINUTE_OF_HOUR) : 0;
+        int second = parsed.isSupported(ChronoField.SECOND_OF_MINUTE) ? parsed.get(ChronoField.SECOND_OF_MINUTE) : 0;
+        int nano = parsed.isSupported(ChronoField.NANO_OF_SECOND) ? parsed.get(ChronoField.NANO_OF_SECOND) : 0;
+        return LocalDateTime.of(year, month, day, hour, minute, second, nano);
+    }
+
+    private static DateTimeFormatter formatter(String pattern) {
+        return FORMATTERS.computeIfAbsent(pattern, DateTimeFormatter::ofPattern);
+    }
+
+    /**
+     * 保留原因：每次 new SimpleDateFormat，热路径分配高。
+     */
+    @SuppressWarnings("unused")
+    private static SimpleDateFormat formatterForRollback(String pattern) {
         return new SimpleDateFormat(pattern);
     }
 

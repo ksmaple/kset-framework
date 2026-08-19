@@ -1,9 +1,12 @@
 package com.kset.auth.core;
 
+import com.kset.auth.config.KsetAuthProperties;
 import com.kset.auth.spi.LoginUserHeaderCodec;
 import com.kset.common.utils.JsonUtil;
 import com.kset.common.auth.AuthHeaders;
 import com.kset.common.auth.LoginUser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -11,9 +14,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * 登录用户头编解码。
+ *
+ * <p>默认只认 JSON 登录上下文头。{@code X-User-Id} 等遗留分头需
+ * {@code kset.auth.web.legacy-split-headers-enabled=true}，且即使打开也不从分头读取角色权限。
+ * trusted-header 模式必须放在网关之后。用法见 {@code docs/usage/auth.md}。
+ */
 public class DefaultLoginUserHeaderCodec implements LoginUserHeaderCodec {
 
+    private static final Logger log = LoggerFactory.getLogger(DefaultLoginUserHeaderCodec.class);
     private static final String SEPARATOR = ",";
+
+    private final boolean legacySplitHeadersEnabled;
+
+    public DefaultLoginUserHeaderCodec() {
+        this(false);
+    }
+
+    public DefaultLoginUserHeaderCodec(KsetAuthProperties properties) {
+        this(properties != null && properties.getWeb().isLegacySplitHeadersEnabled());
+    }
+
+    public DefaultLoginUserHeaderCodec(boolean legacySplitHeadersEnabled) {
+        this.legacySplitHeadersEnabled = legacySplitHeadersEnabled;
+    }
 
     @Override
     public Map<String, String> encode(LoginUser user, boolean includeToken) {
@@ -49,7 +74,7 @@ public class DefaultLoginUserHeaderCodec implements LoginUserHeaderCodec {
         if (contextUser.isPresent()) {
             return contextUser;
         }
-        return decodeLegacyHeaders(reader);
+        return decodeLegacyIfEnabled(reader);
     }
 
     @Override
@@ -69,7 +94,7 @@ public class DefaultLoginUserHeaderCodec implements LoginUserHeaderCodec {
                 return contextUser;
             }
         }
-        return decodeLegacyHeaders(reader).map(user -> user.withSubjectType(subject));
+        return decodeLegacyIfEnabled(reader).map(user -> user.withSubjectType(subject));
     }
 
     private Optional<LoginUser> decodeLoginContext(HeaderReader reader, String subject, String headerName) {
@@ -102,11 +127,23 @@ public class DefaultLoginUserHeaderCodec implements LoginUserHeaderCodec {
                     .loginTime(parseLong(reader.get(AuthHeaders.LOGIN_TIME)))
                     .build());
         } catch (RuntimeException e) {
+            log.warn("解析登录头失败 header={}", headerName);
             return Optional.empty();
         }
     }
 
-    private Optional<LoginUser> decodeLegacyHeaders(HeaderReader reader) {
+    private Optional<LoginUser> decodeLegacyIfEnabled(HeaderReader reader) {
+        if (!legacySplitHeadersEnabled) {
+            return Optional.empty();
+        }
+        return decodeLegacyIdentity(reader);
+    }
+
+    /**
+     * 保留原因：默认接受 X-User-Id 等分头，并可带上 roles/permissions，公网直连可伪造登录。
+     */
+    @SuppressWarnings("unused")
+    private Optional<LoginUser> decodeLegacyHeadersForRollback(HeaderReader reader) {
         if (!hasText(reader.get(AuthHeaders.USER_ID))) {
             return Optional.empty();
         }
@@ -124,6 +161,34 @@ public class DefaultLoginUserHeaderCodec implements LoginUserHeaderCodec {
                 .deptId(reader.get(AuthHeaders.DEPT_ID))
                 .roles(split(reader.get(AuthHeaders.ROLES)))
                 .permissions(split(reader.get(AuthHeaders.PERMISSIONS)))
+                .deviceId(reader.get(AuthHeaders.DEVICE_ID))
+                .deviceType(reader.get(AuthHeaders.DEVICE_TYPE))
+                .clientType(reader.get(AuthHeaders.CLIENT_TYPE))
+                .clientVersion(reader.get(AuthHeaders.CLIENT_VERSION))
+                .ip(reader.get(AuthHeaders.IP))
+                .language(reader.get(AuthHeaders.LANGUAGE))
+                .timeZone(reader.get(AuthHeaders.TIME_ZONE))
+                .loginTime(parseLong(reader.get(AuthHeaders.LOGIN_TIME)))
+                .token(reader.get(AuthHeaders.SESSION_TOKEN))
+                .build());
+    }
+
+    private Optional<LoginUser> decodeLegacyIdentity(HeaderReader reader) {
+        if (!hasText(reader.get(AuthHeaders.USER_ID))) {
+            return Optional.empty();
+        }
+        return Optional.of(LoginUser.builder()
+                .userId(reader.get(AuthHeaders.USER_ID))
+                .subjectType(reader.get(AuthHeaders.AUTH_SUBJECT))
+                .userName(reader.get(AuthHeaders.USER_NAME))
+                .realName(reader.get(AuthHeaders.REAL_NAME))
+                .nickName(reader.get(AuthHeaders.NICK_NAME))
+                .avatar(reader.get(AuthHeaders.AVATAR))
+                .mobile(reader.get(AuthHeaders.MOBILE))
+                .email(reader.get(AuthHeaders.EMAIL))
+                .tenantId(reader.get(AuthHeaders.TENANT_ID))
+                .orgId(reader.get(AuthHeaders.ORG_ID))
+                .deptId(reader.get(AuthHeaders.DEPT_ID))
                 .deviceId(reader.get(AuthHeaders.DEVICE_ID))
                 .deviceType(reader.get(AuthHeaders.DEVICE_TYPE))
                 .clientType(reader.get(AuthHeaders.CLIENT_TYPE))

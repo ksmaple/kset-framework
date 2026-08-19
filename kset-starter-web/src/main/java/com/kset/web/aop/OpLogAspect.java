@@ -1,12 +1,12 @@
 package com.kset.web.aop;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.common.logging.LogMaskingUtil;
 import com.kset.common.logging.OpLogContext;
 import com.kset.common.logging.StructLog;
 import com.kset.common.monitor.Monitor;
 import com.kset.common.monitor.facade.MonitorStatus;
 import com.kset.common.monitor.facade.MonitorTypes;
+import com.kset.common.utils.JsonUtil;
 import com.kset.web.annotation.OpLog;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +36,6 @@ public class OpLogAspect {
 
     private static final ExpressionParser PARSER = new SpelExpressionParser();
     private static final DefaultParameterNameDiscoverer NAME_DISCOVERER = new DefaultParameterNameDiscoverer();
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final String userIdHeader;
 
@@ -155,8 +154,8 @@ public class OpLogAspect {
 
     private String toJson(Object value) {
         try {
-            return OBJECT_MAPPER.writeValueAsString(value);
-        } catch (Exception e) {
+            return JsonUtil.toJson(value);
+        } catch (RuntimeException e) {
             return String.valueOf(value);
         }
     }

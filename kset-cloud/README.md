@@ -2,6 +2,8 @@
 
 `kset-cloud` 提供云服务 Starter 共享的公共配置、Nacos 命名约定、灰度标签解析、LoadBalancer 与规则 SPI。业务通常通过 `kset-starter-nacos`、`kset-starter-sentinel`、`kset-starter-dubbo`、`kset-starter-gateway` 间接引入。
 
+业务接入见 [Nacos / Sentinel / Dubbo](../docs/usage/cloud.md)。
+
 ## 主要入口
 
 | 入口 | 用途 |

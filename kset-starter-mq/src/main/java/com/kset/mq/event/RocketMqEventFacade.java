@@ -110,6 +110,11 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
 
     @Override
     public void publishDelay(Object event, long delayMillis) {
+        publishDelay(event, delayMillis, null);
+    }
+
+    @Override
+    public void publishDelay(Object event, long delayMillis, SendCallback callback) {
         if (delayMillis < 0) {
             throw new IllegalArgumentException("delayMillis must not be negative");
         }
@@ -121,8 +126,14 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
             RocketMqEventMonitorSupport.addData(transaction, "messageId", receipt.getMessageId().toString());
             RocketMqEventMonitorSupport.addData(transaction, "delayMillis", Long.toString(delayMillis));
             RocketMqEventMonitorSupport.success(transaction);
+            if (callback != null) {
+                callback.onSuccess();
+            }
         } catch (RuntimeException | Error e) {
             RocketMqEventMonitorSupport.fail(transaction, e, "publishDelay", RocketMqEventMonitorSupport.eventType(payload));
+            if (callback != null) {
+                callback.onException(e);
+            }
             throw e;
         } finally {
             RocketMqEventMonitorSupport.close(transaction);

@@ -34,6 +34,18 @@ class JsonUtilTest {
         assertThat(parsed).containsExactly(Map.of("id", 1));
     }
 
+    @Test
+    void copiesObjectToIndependentInstance() {
+        SampleUser user = new SampleUser();
+        user.setId(1L);
+        user.setName("Alice");
+
+        SampleUser copy = JsonUtil.copy(user, SampleUser.class);
+
+        assertThat(copy).isEqualTo(user);
+        assertThat(copy).isNotSameAs(user);
+    }
+
     public static class SampleUser {
         private Long id;
         private String name;

@@ -30,8 +30,8 @@ public class KsetAuthAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public LoginUserHeaderCodec loginUserHeaderCodec() {
-        return new DefaultLoginUserHeaderCodec();
+    public LoginUserHeaderCodec loginUserHeaderCodec(KsetAuthProperties properties) {
+        return new DefaultLoginUserHeaderCodec(properties);
     }
 
     @Bean

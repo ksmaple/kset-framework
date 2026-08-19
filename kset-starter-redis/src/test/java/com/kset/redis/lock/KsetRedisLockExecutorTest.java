@@ -69,6 +69,15 @@ class KsetRedisLockExecutorTest {
     }
 
     @Test
+    void runExclusivePropagatesInterrupt() {
+        when(provider.tryLockAll(eq(List.of("job")), eq(Duration.ZERO), any(Duration.class)))
+                .thenThrow(new KsetRedisLockInterruptedException("job", new InterruptedException()));
+
+        assertThrows(KsetRedisLockInterruptedException.class, () -> executor.runExclusive("job", () -> {
+        }));
+    }
+
+    @Test
     void runExclusiveThrowsWhenBusy() {
         when(provider.tryLockAll(eq(List.of("job")), eq(Duration.ZERO), any(Duration.class)))
                 .thenReturn(Optional.empty());
@@ -106,6 +115,24 @@ class KsetRedisLockExecutorTest {
         executor.runExclusiveAll(List.of("a", "b"), () -> {
         });
         verify(lock).unlock();
+    }
+
+    @Test
+    void watchdogPassesZeroLease() {
+        KsetRedisLock lock = mock(KsetRedisLock.class);
+        when(provider.tryLockAll(eq(List.of("job")), eq(Duration.ZERO), eq(Duration.ZERO)))
+                .thenReturn(Optional.of(lock));
+
+        executor.run("job", KsetRedisLockOptions.rejectNowWatchdog(), () -> {
+        });
+        verify(lock).unlock();
+    }
+
+    @Test
+    void rejectNowZeroLeaseIsRejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> executor.run("job", KsetRedisLockOptions.rejectNow(Duration.ZERO), () -> {
+                }));
     }
 
 }

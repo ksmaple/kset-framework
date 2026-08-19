@@ -2,6 +2,8 @@
 
 `kset-starter-auth` 提供统一登录态、项目默认鉴权、多套主体鉴权、Gateway/Web/Dubbo 登录上下文透传，以及方法级登录与权限注解。
 
+业务接入（scheme 与 `web.mode` 区别、trusted-header、遗留分头）见 [登录鉴权使用说明](../docs/usage/auth.md)。
+
 适用场景：
 
 - App 用户登录态：普通业务接口默认使用 `app` 主体。
@@ -305,13 +307,15 @@ public LoginSessionStore loginSessionStore() {
 
 ## Web 与 Gateway 模式
 
-Web 默认按 `session` 查询 LoginSessionStore。若服务只信任 Gateway 透传，可切换为 trusted-header：
+Web 默认 `kset.auth.web.mode=redis`：用 token 查 `LoginSessionStore`。这和 `default-scheme=session` 不是同一个配置，YAML 里不要写 `mode: session`。若服务只信任 Gateway 透传，可切换为 `trusted-header`。该模式必须部署在网关之后，并由网关覆盖/剥离客户端登录头（含 `X-App-Login-Context` / `X-Admin-Login-Context` / `X-Auth-Subject` / 兼容旧头 `X-Login-Context`），不能对公网直连开放。
 
 ```yaml
 kset:
   auth:
     web:
       mode: trusted-header
+      # 仅兼容期打开；打开后仍不从分头读取角色权限
+      legacy-split-headers-enabled: false
 ```
 
 兼容配置：
@@ -492,7 +496,7 @@ kset:
       apps: []
     web:
       enabled: true
-      mode: redis
+      mode: redis # redis=查 session；trusted-header=只信网关头。没有 session 这个枚举值
       token-header: X-Session-Token
       public-paths:
         - /api/public/**
@@ -522,7 +526,7 @@ kset:
 - 引入 `kset-starter-web`
 - 引入 `kset-starter-auth`
 - 引入 `kset-starter-redis`
-- 可使用 `trusted-header` 信任 Gateway，也可继续 session 兜底
+- 可使用 `trusted-header` 信任 Gateway（须由网关覆盖登录头），也可继续 session 兜底
 
 Gateway：
 

@@ -2,6 +2,8 @@
 
 `kset-starter-datasource` 提供 JDBC、MyBatis-Plus、dynamic-datasource 多数据源和 KSet 自动填充能力。MySQL、PostgreSQL、SQLite 不再提供 KSet 独立 starter，业务按需直接引入对应 JDBC 驱动。
 
+生产约定是 MySQL 8。下面 SQLite 示例只方便本地无外部库时跑通。接入步骤见 [数据源](../docs/usage/datasource.md)。
+
 ## 单数据源
 
 单数据源使用 Spring Boot 原生 `spring.datasource.*`：

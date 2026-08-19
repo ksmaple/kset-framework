@@ -2,6 +2,8 @@
 
 `kset-common` 模块提供与业务无关的通用能力，包根路径为 `com.kset.common`。以下工具由 bobo-common-utils 迁移或在本仓新增，**日期时间统一使用 JDK `java.time`**（不依赖 Joda-Time）。
 
+业务接入示例：[并行](../docs/usage/parallel.md) · [重试](../docs/usage/retry.md) · [事件](../docs/usage/events.md) · [请求上下文](../docs/usage/context.md)
+
 ## ListHelper（`com.kset.common.utils.collection`）
 
 列表分批、函数式转换、排序与空安全取用。日常单元素变换用 JDK Stream；IN 上限、Redis 分片、批量写库等用分批 API。
@@ -76,7 +78,7 @@ DateHelper.DatePeriod month = DateHelper.build().monthRangeExclusive();
 
 ## DateZone / DateZoneHelper（`com.kset.common.utils.date`）
 
-时区转换，支持人类习惯输入：整小时偏移、GMT/UTC 字符串、内置 {@link DateZone} 枚举。
+时区转换，支持人类习惯输入：整小时偏移、GMT/UTC 字符串、内置 `DateZone` 枚举。
 
 ```java
 import com.kset.common.utils.date.DateZone;
@@ -115,6 +117,7 @@ import com.kset.common.utils.JsonUtil;
 String json = JsonUtil.toJson(order);
 Order order = JsonUtil.fromJson(json, Order.class);
 List<Order> orders = JsonUtil.fromJson(json, new TypeReference<List<Order>>() {});
+Order copy = JsonUtil.copy(order, Order.class); // 小对象；大对象用 MapStruct
 ```
 
 ## VersionUtil（`com.kset.common.utils`）
@@ -132,7 +135,7 @@ VersionUtil.inRange("1.5.0", "1.0.0", "2.0.0");
 
 ## KsetHttp（`com.kset.common.utils.http`）
 
-基于 JDK 21 `HttpClient` 的 HTTP 客户端封装（原 `DDKJHttp`）。
+基于 JDK 21 `HttpClient` 的 HTTP 客户端封装。出站自动带 trace header；若当前线程没有 trace，只写入请求头，不会把生成的 ID 留在调用线程。
 
 ```java
 import com.kset.common.utils.http.KsetHttp;
@@ -166,8 +169,21 @@ factory.execute("order-payment", () -> {
 |----|------|
 | `KsetThreadPoolFactory` | 推荐入口，按 biz 名懒创建池 |
 | `KsetThreadPoolExecutor` | 底层实现，可 Builder 单独使用 |
+| `Parallel` | 一组任务并行执行，限制并发、超时、传递 `KsetContext`。写法见 [并行](../docs/usage/parallel.md) |
 | `ThreadPoolMetrics` / `ThreadPoolReporter` | 指标与上报 |
 | `ThreadPoolTraceAdapter` / `MdcThreadPoolTraceAdapter` | TraceId 跨线程传递（基于 `com.kset.common.monitor.Monitor`） |
+
+## 重试（`com.kset.common.utils.retry`）
+
+瞬时失败重试，默认带预算，避免下游故障时重试把本机打满。写法见 [重试](../docs/usage/retry.md)。
+
+| 类 | 说明 |
+|----|------|
+| `Retryer` | `call` / `run` |
+| `RetryPolicy` | 次数、退避、抖动、总时长、可重试异常 |
+| `RetryBudget` | 窗口内重试占比上限（默认 20%） |
+
+默认最多 3 次、指数退避 + 全抖动、总时长 5 秒。生产请用 `Retryer.call("业务名", ...)` 按接口隔离预算。未命名调用共用 `default` 预算。
 
 ## 日志与链路上下文（`com.kset.common.logging` + `com.kset.common.monitor`）
 
@@ -310,6 +326,12 @@ params.put("sign", sign);
 boolean ok = signer.verifySha1(params);  // 或 checkSign()
 ```
 
+## KsetContext（`com.kset.common.context`）
+
+统一请求上下文门面。写法、自定义 key 与传播规则见 [请求上下文](../docs/usage/context.md)。
+
+`LoginContext` 已委托到 `KsetContextKeys.LOGIN_USER`。Redis 只作为登录 session 存储，不是通用上下文底座。
+
 ## 依赖
 
 业务工程通过任意 `kset-starter-*` 间接依赖 `kset-common`，也可直接声明：
@@ -322,38 +344,3 @@ boolean ok = signer.verifySha1(params);  // 或 checkSign()
 ```
 
 `kset-boot-parent` BOM 已管理 Guava、commons-lang3 等版本，**无需** 再引入 `joda-time`。
-## KsetContext（`com.kset.common.context`）
-
-统一请求上下文门面，底层使用 Alibaba `TransmittableThreadLocal`，用于在当前请求、线程池任务和 RPC 调用中承载登录态、trace、灰度、租户、语言等轻量上下文。
-
-```java
-KsetContext.put(KsetContextKeys.LOGIN_USER, loginUser);
-KsetContext.put(KsetContextKeys.TRACE_ID, traceId);
-
-LoginUser user = KsetContext.get(KsetContextKeys.LOGIN_USER).orElse(null);
-KsetContextSnapshot snapshot = KsetContext.capture();
-
-try (KsetContextScope ignored = KsetContext.openScope(snapshot)) {
-    // async / rpc work
-}
-```
-
-`LoginContext` 已兼容委托到 `KsetContextKeys.LOGIN_USER`；业务原有 `LoginContext.requireUser()`、`LoginContext.capture()` 可继续使用。Redis 只作为登录 session 存储，不作为通用上下文传播底座。
-
-多业务隔离约定：
-
-- 公共语义使用 `KsetContextKeys`，如 `LOGIN_USER`、`TRACE_ID`、`TENANT_ID`。
-- 业务自定义 key 必须带命名空间，避免覆盖其他业务字段。
-- 同名 key 如果类型、传播标记或敏感标记不同，注册时会直接失败。
-- `propagatable=false` 的 key 只在当前线程内使用，不会进入 `capture()` 和线程池传播快照。
-
-```java
-public static final KsetContextKey<String> ORDER_ID =
-        KsetContextKey.of("order", "currentOrderId", String.class);
-
-public static final KsetContextKey<String> CMS_OPERATOR =
-        KsetContextKey.of("cms", "operator", String.class);
-
-public static final KsetContextKey<String> LOCAL_TEMP =
-        KsetContextKey.of("order", "localTemp", String.class, false, false);
-```

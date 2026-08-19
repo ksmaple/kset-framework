@@ -2,6 +2,8 @@
 
 `kset-starter-sentinel` 集成 Spring Cloud Alibaba Sentinel，并从 Nacos 加载限流、熔断和热点参数规则。
 
+接入与 dataId 约定见 [Nacos / Sentinel / Dubbo](../docs/usage/cloud.md)。
+
 ## 依赖
 
 ```xml

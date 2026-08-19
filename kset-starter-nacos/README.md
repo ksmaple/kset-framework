@@ -2,6 +2,8 @@
 
 `kset-starter-nacos` 集成 Spring Cloud Alibaba Nacos 注册发现、配置中心、KSet 命名约定和灰度 LoadBalancer。它不传递 `kset-starter-web` / `kset-starter-sentinel`，业务按场景显式组合。
 
+与 Sentinel / Dubbo 一起接入见 [Nacos / Sentinel / Dubbo](../docs/usage/cloud.md)。
+
 ## 依赖
 
 ```xml

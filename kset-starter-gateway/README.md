@@ -2,6 +2,8 @@
 
 `kset-starter-gateway` 集成 Spring Cloud Gateway、Nacos 动态路由、灰度标签、Gateway Sentinel 和鉴权 SPI。Gateway 是独立进程，不应与 `kset-starter-web` 同用。
 
+鉴权、CORS 接入见 [网关使用说明](../docs/usage/gateway.md)。
+
 ## 依赖
 
 ```xml
@@ -37,7 +39,7 @@ kset:
       route-data-id: order-gateway-gateway-routes
       sentinel-enabled: true
       auth-enabled: false
-      cors-enabled: true
+      cors-enabled: false
       trace-header: X-Trace-Id
       gray-header: X-Gray-Tag
 ```
@@ -63,22 +65,35 @@ kset:
 
 ## 鉴权扩展
 
-启用 `kset.cloud.gateway.auth-enabled=true` 后，可实现 `GatewayAuthProvider` 扩展网关鉴权：
+启用 `kset.cloud.gateway.auth-enabled=true` 后，默认 `HeaderTokenGatewayAuthProvider` 校验 `kset.cloud.gateway.auth-token` 与请求头（默认 `X-Auth-Token`）是否一致；未配置或值不匹配返回 401。生产请实现 `GatewayAuthProvider` 替换为 JWT/OAuth2，**必须真正校验凭证**。
+
+```yaml
+kset:
+  cloud:
+    gateway:
+      auth-enabled: true
+      auth-token-header: X-Auth-Token
+      auth-token: ${GATEWAY_AUTH_TOKEN}
+```
 
 ```java
 @Component
-public class TokenGatewayAuthProvider implements GatewayAuthProvider {
+public class JwtGatewayAuthProvider implements GatewayAuthProvider {
     @Override
     public Mono<Void> authenticate(ServerWebExchange exchange) {
-        String token = exchange.getRequest().getHeaders().getFirst("X-Auth-Token");
-        if (StringUtils.hasText(token)) {
-            return null; // 放行，继续执行后续 Provider 或 Gateway 过滤链
+        String token = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (!jwtService.isValid(token)) {
+            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+            return exchange.getResponse().setComplete();
         }
-        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-        return exchange.getResponse().setComplete();
+        return Mono.empty(); // 放行，继续 Gateway 过滤链
     }
 }
 ```
+
+`Mono.empty()` 表示通过；已提交或 4xx/5xx 响应表示拒绝；`null` 表示本 Provider 不处理。不要写成「请求头非空就放行」。
+
+CORS 默认关闭。需要跨域时显式 `kset.cloud.gateway.cors-enabled=true`，并自行收紧来源白名单。
 
 ## 边界
 

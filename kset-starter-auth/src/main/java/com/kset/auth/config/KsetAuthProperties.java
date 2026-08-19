@@ -349,6 +349,10 @@ public class KsetAuthProperties {
         private boolean enabled = true;
         private Mode mode = Mode.REDIS;
         private String tokenHeader = AuthHeaders.SESSION_TOKEN;
+        /**
+         * 是否接受 X-User-Id 等遗留分头。默认关闭；仅网关后的兼容期可打开，且仍不从分头读取角色权限。
+         */
+        private boolean legacySplitHeadersEnabled = false;
         private List<String> publicPaths = new ArrayList<>(List.of(
                 "/api/public/**",
                 "/actuator/health/**"));
@@ -375,6 +379,14 @@ public class KsetAuthProperties {
 
         public void setTokenHeader(String tokenHeader) {
             this.tokenHeader = tokenHeader;
+        }
+
+        public boolean isLegacySplitHeadersEnabled() {
+            return legacySplitHeadersEnabled;
+        }
+
+        public void setLegacySplitHeadersEnabled(boolean legacySplitHeadersEnabled) {
+            this.legacySplitHeadersEnabled = legacySplitHeadersEnabled;
         }
 
         public List<String> getPublicPaths() {

@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 /**
  * Redis Key 统一规范与生成（段之间使用 {@value #SEPARATOR} 分隔）。
  * <p>
- * 对齐 cache-spec K001：{@code {system}:{module}:{business}:{identifier}}。
+ * 段之间使用 {@value #SEPARATOR} 分隔，推荐形状 {@code {system}:{module}:{business}:{identifier}}。
  * <ul>
  *   <li>每段非空，且不得包含 {@link #SEPARATOR}</li>
  *   <li>推荐通过 {@link #builder(String)} 或领域方法 {@link #cache} / {@link #rank} / {@link #lock} 构造</li>

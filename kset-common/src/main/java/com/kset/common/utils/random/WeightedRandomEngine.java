@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
@@ -18,7 +19,7 @@ public class WeightedRandomEngine {
 
     private volatile WeightedRandomConfig config;
     private volatile Map<String, Double> weights;
-    private final Map<String, LongAdder> counters = new LinkedHashMap<>();
+    private final Map<String, LongAdder> counters = new ConcurrentHashMap<>();
     private final Random seededRandom;
     private final AtomicLong totalDraws = new AtomicLong();
     private final AtomicLong nextSeq = new AtomicLong();
@@ -196,7 +197,7 @@ public class WeightedRandomEngine {
         }
     }
 
-    private String drawInternal(List<String> hidden, boolean record) {
+    private synchronized String drawInternal(List<String> hidden, boolean record) {
         Random random = resolveRandom();
         String key = pickOnce(random, hidden);
         if (record) {
@@ -246,7 +247,7 @@ public class WeightedRandomEngine {
         return event;
     }
 
-    private void flushJournalBuffer() {
+    private synchronized void flushJournalBuffer() {
         if (replayStore == null || config.getName() == null || journalBuffer.isEmpty()) {
             journalBuffer.clear();
             return;
@@ -255,7 +256,7 @@ public class WeightedRandomEngine {
         journalBuffer.clear();
     }
 
-    private WeightedRandomMetrics buildMetricsSnapshot() {
+    private synchronized WeightedRandomMetrics buildMetricsSnapshot() {
         long total = totalDraws.get();
         double weightSum = weights.values().stream().mapToDouble(Double::doubleValue).sum();
         List<WeightedRandomMetrics.ItemMetric> itemMetrics = new ArrayList<>();

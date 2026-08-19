@@ -7,7 +7,6 @@ import com.alibaba.csp.sentinel.slots.block.degrade.DegradeRuleManager;
 import com.alibaba.csp.sentinel.datasource.ReadableDataSource;
 import com.alibaba.csp.sentinel.datasource.nacos.NacosDataSource;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.gateway.auth.HeaderTokenGatewayAuthProvider;
 import com.kset.gateway.auth.PassThroughGatewayAuthProvider;
@@ -18,6 +17,7 @@ import com.kset.gateway.route.GatewayRouteRuleProvider;
 import com.kset.cloud.nacos.NacosConfigConvention;
 import com.kset.cloud.loadbalancer.KsetGrayLoadBalancerConfiguration;
 import com.kset.cloud.spi.GrayTagResolver;
+import com.kset.common.utils.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -62,6 +62,7 @@ public class KsetGatewayAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "kset.cloud.gateway", name = "auth-enabled", havingValue = "false", matchIfMissing = true)
     @ConditionalOnMissingBean
     public GatewayAuthProvider passThroughGatewayAuthProvider() {
         return new PassThroughGatewayAuthProvider();
@@ -87,7 +88,7 @@ public class KsetGatewayAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "kset.cloud.gateway", name = "cors-enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "kset.cloud.gateway", name = "cors-enabled", havingValue = "true")
     public CorsWebFilter ksetGatewayCorsWebFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
@@ -123,8 +124,6 @@ public class KsetGatewayAutoConfiguration {
 
     static class GatewaySentinelRuleLoader {
 
-        private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
         GatewaySentinelRuleLoader(KsetCloudProperties properties,
                                   NacosConfigConvention convention,
                                   Environment environment) {
@@ -147,7 +146,7 @@ public class KsetGatewayAutoConfiguration {
                     serverAddr, convention.group(), dataId,
                     json -> {
                         try {
-                            List<GatewayFlowRule> rules = OBJECT_MAPPER.readValue(json,
+                            List<GatewayFlowRule> rules = JsonUtil.fromJson(json,
                                     new TypeReference<List<GatewayFlowRule>>() {});
                             return new HashSet<>(rules);
                         } catch (Exception e) {
@@ -165,7 +164,7 @@ public class KsetGatewayAutoConfiguration {
                     serverAddr, convention.group(), degradeDataId,
                     json -> {
                         try {
-                            return OBJECT_MAPPER.readValue(json, new TypeReference<List<DegradeRule>>() {});
+                            return JsonUtil.fromJson(json, new TypeReference<List<DegradeRule>>() {});
                         } catch (Exception e) {
                             throw new IllegalStateException("Failed to parse gateway degrade rules", e);
                         }

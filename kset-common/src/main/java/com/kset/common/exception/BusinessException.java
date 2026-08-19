@@ -1,10 +1,10 @@
 package com.kset.common.exception;
 
 /**
- * 业务异常
+ * 业务异常。
  *
- * <p>用于表达明确的业务规则违反，如"资源不存在"、"用户已禁用"等。
- * 区别于系统异常（RuntimeException），业务异常有明确的错误消息，通常不需要完整堆栈。
+ * <p>表示明确的业务规则失败（资源不存在、状态不允许等）。{@link com.kset.common.utils.retry.Retryer}
+ * 默认不重试本异常（含被包装在 cause 链中的情况）。Web 侧通常映射为业务码，而不是系统 500。
  */
 public class BusinessException extends RuntimeException {
 
@@ -29,6 +29,28 @@ public class BusinessException extends RuntimeException {
 
     public BusinessException(BizErrorCode errorCode, String message) {
         super(message);
+        this.errorCode = errorCode != null ? String.valueOf(errorCode.code()) : null;
+        this.code = errorCode != null ? errorCode.code() : null;
+    }
+
+    public BusinessException(String message, Throwable cause) {
+        super(message, cause);
+        this.errorCode = null;
+        this.code = null;
+    }
+
+    public BusinessException(String errorCode, String message, Throwable cause) {
+        super(message, cause);
+        this.errorCode = errorCode;
+        this.code = null;
+    }
+
+    public BusinessException(BizErrorCode errorCode, Throwable cause) {
+        this(errorCode, errorCode != null ? errorCode.message() : null, cause);
+    }
+
+    public BusinessException(BizErrorCode errorCode, String message, Throwable cause) {
+        super(message, cause);
         this.errorCode = errorCode != null ? String.valueOf(errorCode.code()) : null;
         this.code = errorCode != null ? errorCode.code() : null;
     }

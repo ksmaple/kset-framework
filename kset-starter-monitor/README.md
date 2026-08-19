@@ -1,5 +1,7 @@
 # KSet 全链路监控与门面层
 
+业务埋点与 Trace 传递见 [监控与 TraceId](../docs/usage/monitor.md)。
+
 ## 依赖
 
 ```xml

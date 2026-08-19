@@ -93,8 +93,8 @@ class KsetRedisTemplateOperationsTest {
 
     @Test
     void existsAll() {
-        when(template.hasKey("k1")).thenReturn(true);
-        when(template.hasKey("k2")).thenReturn(false);
+        when(template.executePipelined(any(org.springframework.data.redis.core.SessionCallback.class)))
+                .thenReturn(List.of(true, false));
         Map<String, Boolean> exists = operations.existsAll(List.of("k1", "k2"));
         assertTrue(exists.get("k1"));
         assertFalse(exists.get("k2"));

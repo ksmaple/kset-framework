@@ -188,8 +188,9 @@ public class KsetCloudProperties {
         private String routeDataId;
         private boolean sentinelEnabled = true;
         private boolean authEnabled = false;
-        private boolean corsEnabled = true;
+        private boolean corsEnabled = false;
         private String authTokenHeader = "X-Auth-Token";
+        private String authToken;
         private String traceHeader = "X-Trace-Id";
         private String grayHeader = "X-Gray-Tag";
 
@@ -239,6 +240,14 @@ public class KsetCloudProperties {
 
         public void setAuthTokenHeader(String authTokenHeader) {
             this.authTokenHeader = authTokenHeader;
+        }
+
+        public String getAuthToken() {
+            return authToken;
+        }
+
+        public void setAuthToken(String authToken) {
+            this.authToken = authToken;
         }
 
         public String getTraceHeader() {

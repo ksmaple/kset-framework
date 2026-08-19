@@ -142,6 +142,28 @@ public final class DefaultMonitorFacade implements MonitorFacade {
 
     @Override
     public Object putReactorContext(Object context, String traceId, String grayTag) {
+        return putReactorContextValues(context, traceId, grayTag);
+    }
+
+    private Object putReactorContextValues(Object context, String traceId, String grayTag) {
+        if (!(context instanceof Context reactorContext)) {
+            return context;
+        }
+        Context updated = reactorContext;
+        if (traceId != null) {
+            updated = updated.put(TraceHeaders.TRACE_ID_KEY, traceId);
+        }
+        if (grayTag != null) {
+            updated = updated.put(TraceHeaders.GRAY_TAG_KEY, grayTag);
+        }
+        return updated;
+    }
+
+    /**
+     * 保留原因：旧实现对非 Reactor Context 直接强转，可能 ClassCastException。
+     */
+    @SuppressWarnings("unused")
+    private Object putReactorContextForRollback(Object context, String traceId, String grayTag) {
         Context reactorContext = (Context) context;
         Context updated = reactorContext;
         if (traceId != null) {
@@ -155,7 +177,9 @@ public final class DefaultMonitorFacade implements MonitorFacade {
 
     @Override
     public Optional<String> getFromReactor(Object contextView, String key) {
-        ContextView view = (ContextView) contextView;
+        if (!(contextView instanceof ContextView view)) {
+            return Optional.empty();
+        }
         return view.hasKey(key) ? Optional.of(view.get(key)) : Optional.empty();
     }
 

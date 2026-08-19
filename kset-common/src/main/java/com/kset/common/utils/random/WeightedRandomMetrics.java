@@ -1,7 +1,6 @@
 package com.kset.common.utils.random;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kset.common.utils.JsonUtil;
 import lombok.Builder;
 import lombok.Data;
 
@@ -17,7 +16,6 @@ import java.util.List;
 public class WeightedRandomMetrics implements Serializable {
 
     private static final long serialVersionUID = 1L;
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private String name;
     private WeightedRandomAlgorithm algorithm;
@@ -45,8 +43,8 @@ public class WeightedRandomMetrics implements Serializable {
 
     public String toJson() {
         try {
-            return OBJECT_MAPPER.writeValueAsString(this);
-        } catch (JsonProcessingException e) {
+            return JsonUtil.toJson(this);
+        } catch (RuntimeException e) {
             return "{\"error\":\"failed to serialize metrics\"}";
         }
     }

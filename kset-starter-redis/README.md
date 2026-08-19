@@ -2,6 +2,8 @@
 
 依赖 `kset-starter-redis` 后，可使用 **`KsetRedisService`（注入）** 与 **`KsetRedis`（静态）** 操作 Redis；可选 **Redisson** 提供分布式锁与字符串编解码。
 
+读写与 TTL 见 [Redis 读写](../docs/usage/redis.md)。锁的接入步骤见 [Redis 分布式锁使用说明](../docs/usage/redis-lock.md)。
+
 | 包 | 说明 |
 |----|------|
 | `com.kset.redis.core` | `KsetRedisOperations`、`KsetRedisService`、`KsetRedisRegistry`、`KsetRedis` |
@@ -50,7 +52,7 @@ kset:
 
 ## Redis Key 规范（`:` 分隔）
 
-对齐 cache-spec **K001**：`{system}:{module}:{business}:{identifier}`。统一使用 [`KsetRedisKeys`](src/main/java/com/kset/redis/key/KsetRedisKeys.java)：
+对齐 Key 规范 `{system}:{module}:{business}:{identifier}`。统一使用 [`KsetRedisKeys`](src/main/java/com/kset/redis/key/KsetRedisKeys.java)：
 
 - 每段非空，**段内不得包含 `:`**（多段用 `join` / `builder`）
 - 与 `kset.redis.key-prefix` 组合：`KsetRedisKeys.joinPrefix(prefix, logicalKey)`（Template 序列化已内置）
@@ -114,6 +116,8 @@ kset:
 
 锁**仅基于 Redisson**，默认随 `kset-starter-redis` 开启，并始终使用主 Redis 连接配置 `spring.data.redis.*`；不为 `kset.redis.sources.*` 命名源创建 Redisson 多数据源。缓存用 `KsetRedisService`；锁用 **`KsetRedisLockExecutor`**、**`KsetRedisLocks`** 或 **`@KsetLocked`**。如无需分布式锁，可配置 `kset.redis.redisson.enabled=false` 关闭。
 
+策略、租约、watchdog、Web 映射码见 [Redis 分布式锁使用说明](../docs/usage/redis-lock.md)。这里只列参考 API。
+
 | 层级 | 说明 |
 |------|------|
 | `com.kset.redis.lock` | `KsetRedisLockExecutor`、`KsetRedisLock`、`KsetRedisLockOptions` |
@@ -125,6 +129,7 @@ kset:
 |------|-----|------|
 | 互斥拒绝 | `runExclusive` | 立即获取，失败 `KsetRedisLockBusyException` |
 | 等待后失败 | `runWithWait` | 超时 `KsetRedisLockTimeoutException` |
+| 等待中断 | 上述等待路径 | `KsetRedisLockInterruptedException` |
 | 可选 | `callIfLock` / `tryAcquire` | 失败返回 empty |
 | 阻塞 | `runBlocking` | Redisson 阻塞直到获取 |
 | 多锁 | `runExclusiveAll` / `acquireAll` | MultiLock |

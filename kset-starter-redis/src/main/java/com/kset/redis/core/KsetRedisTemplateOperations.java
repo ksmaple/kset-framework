@@ -292,6 +292,14 @@ public class KsetRedisTemplateOperations implements KsetRedisOperations {
 
     @Override
     public Map<String, Boolean> existsAll(Collection<String> keys) {
+        return existsAllPipelined(keys);
+    }
+
+    /**
+     * 保留原因：1.0.11 对每个 key 单独 hasKey，大批量存在检查 RTT 过高。
+     */
+    @SuppressWarnings("unused")
+    private Map<String, Boolean> existsAllForRollback(Collection<String> keys) {
         if (keys == null || keys.isEmpty()) {
             return Map.of();
         }
@@ -301,6 +309,32 @@ public class KsetRedisTemplateOperations implements KsetRedisOperations {
         ListHelper.forEachBatch(keyList, chunk, slice -> {
             for (String key : slice) {
                 result.put(key, Boolean.TRUE.equals(template.hasKey(key)));
+            }
+        });
+        return result;
+    }
+
+    private Map<String, Boolean> existsAllPipelined(Collection<String> keys) {
+        if (keys == null || keys.isEmpty()) {
+            return Map.of();
+        }
+        List<String> keyList = keys instanceof List<String> list ? list : List.copyOf(keys);
+        Map<String, Boolean> result = LinkedHashMap.newLinkedHashMap(keyList.size());
+        int chunk = streamSettings.mgetChunkSize();
+        ListHelper.forEachBatch(keyList, chunk, slice -> {
+            List<Object> flags = template.executePipelined(new SessionCallback<Object>() {
+                @Override
+                @SuppressWarnings({"unchecked", "rawtypes"})
+                public Object execute(RedisOperations operations) {
+                    for (String key : slice) {
+                        operations.hasKey(key);
+                    }
+                    return null;
+                }
+            });
+            for (int i = 0; i < slice.size(); i++) {
+                Object flag = flags != null && i < flags.size() ? flags.get(i) : null;
+                result.put(slice.get(i), Boolean.TRUE.equals(flag));
             }
         });
         return result;

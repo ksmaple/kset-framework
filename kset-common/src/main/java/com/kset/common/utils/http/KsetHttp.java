@@ -19,7 +19,11 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-/** JDK 21 HTTP 客户端封装。 */
+/**
+ * JDK 21 HTTP 客户端封装。
+ *
+ * <p>出站自动带 Trace / 灰度头，不改调用线程的 Trace。监控 scope 包住整次发送。
+ */
 public final class KsetHttp {
 
     private static final KsetHttp INSTANCE = new KsetHttp();
@@ -51,9 +55,10 @@ public final class KsetHttp {
     }
 
     public CompletableFuture<HttpResponse<String>> enqueue(HttpRequest request) {
-        HttpRequest tracedRequest = withTraceHeaders(request);
+        OutboundTrace trace = resolveOutboundTrace();
+        HttpRequest tracedRequest = copyWithTraceHeaders(request, trace);
         return client.sendAsync(tracedRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-                .whenComplete((response, error) -> finish(tracedRequest, response, error));
+                .whenComplete((response, error) -> finish(tracedRequest, trace, response, error));
     }
 
     public String execute(String url, Map<String, String> headers, Map<String, String> formBody)
@@ -67,8 +72,9 @@ public final class KsetHttp {
     }
 
     private HttpResponse<String> send(HttpRequest request) throws IOException, InterruptedException {
-        HttpRequest tracedRequest = withTraceHeaders(request);
-        MonitorScope scope = new MonitorScope(tracedRequest);
+        OutboundTrace trace = resolveOutboundTrace();
+        HttpRequest tracedRequest = copyWithTraceHeaders(request, trace);
+        MonitorScope scope = MonitorScope.open(tracedRequest, trace);
         try {
             HttpResponse<String> response = client.send(
                     tracedRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -82,8 +88,8 @@ public final class KsetHttp {
         }
     }
 
-    private void finish(HttpRequest request, HttpResponse<String> response, Throwable error) {
-        try (MonitorScope scope = new MonitorScope(request)) {
+    private void finish(HttpRequest request, OutboundTrace trace, HttpResponse<String> response, Throwable error) {
+        try (MonitorScope scope = MonitorScope.open(request, trace)) {
             if (error != null) {
                 scope.failure(error);
             } else {
@@ -104,7 +110,16 @@ public final class KsetHttp {
         return builder.build();
     }
 
+    @SuppressWarnings("unused")
     private static HttpRequest withTraceHeaders(HttpRequest request) {
+        return copyWithTraceHeaders(request, resolveOutboundTrace());
+    }
+
+    /**
+     * 保留原因：无 inbound trace 时 setTraceId/setSpanId 污染调用线程。
+     */
+    @SuppressWarnings("unused")
+    private static HttpRequest withTraceHeadersForRollback(HttpRequest request) {
         String traceId = Monitor.currentTraceId().orElseGet(() -> {
             String value = UUID.randomUUID().toString().replace("-", "");
             Monitor.setTraceId(value);
@@ -130,6 +145,46 @@ public final class KsetHttp {
         return builder.build();
     }
 
+    private static OutboundTrace resolveOutboundTrace() {
+        String traceId = firstNonBlank(Monitor.currentTraceId().orElse(null), Monitor.generateTraceId());
+        if (traceId == null || traceId.isBlank()) {
+            traceId = UUID.randomUUID().toString().replace("-", "");
+        }
+        String spanId = firstNonBlank(Monitor.currentSpanId().orElse(null), Monitor.generateSpanId());
+        if (spanId == null || spanId.isBlank()) {
+            spanId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+        }
+        return new OutboundTrace(traceId, spanId, Monitor.currentGrayTag().orElse(null));
+    }
+
+    private static HttpRequest copyWithTraceHeaders(HttpRequest request, OutboundTrace trace) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder(request.uri())
+                .timeout(request.timeout().orElse(Duration.ofSeconds(10)))
+                .version(request.version().orElse(HttpClient.Version.HTTP_2))
+                .method(request.method(), request.bodyPublisher().orElse(HttpRequest.BodyPublishers.noBody()));
+        request.headers().map().forEach((name, values) -> {
+            if (!MANAGED_HEADERS.contains(name.toLowerCase())) {
+                values.forEach(value -> builder.header(name, value));
+            }
+        });
+        builder.header(TraceHeaders.TRACE_ID_HEADER, trace.traceId())
+                .header(TraceHeaders.SPAN_ID_HEADER, trace.spanId());
+        if (trace.grayTag() != null && !trace.grayTag().isBlank()) {
+            builder.header(TraceHeaders.GRAY_TAG_HEADER, trace.grayTag());
+        }
+        return builder.build();
+    }
+
+    private static String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        if (second != null && !second.isBlank()) {
+            return second;
+        }
+        return null;
+    }
+
     private static void addHeaders(HttpRequest.Builder builder, Map<String, String> headers) {
         headers.forEach((name, value) -> {
             if (value != null && !MANAGED_HEADERS.contains(name.toLowerCase())) {
@@ -138,15 +193,47 @@ public final class KsetHttp {
         });
     }
 
+    private record OutboundTrace(String traceId, String spanId, String grayTag) {
+    }
+
     private static final class MonitorScope implements AutoCloseable {
+        private final TraceSnapshot previous;
         private final MonitorTransaction transaction;
 
-        private MonitorScope(HttpRequest request) {
+        private static MonitorScope open(HttpRequest request, OutboundTrace trace) {
+            return new MonitorScope(request, trace);
+        }
+
+        private MonitorScope(HttpRequest request, OutboundTrace trace) {
+            this.previous = Monitor.capture();
+            Monitor.setTraceId(trace.traceId());
+            Monitor.setSpanId(trace.spanId());
+            if (trace.grayTag() != null && !trace.grayTag().isBlank()) {
+                Monitor.setGrayTag(trace.grayTag());
+            }
             if (!monitorEnabled) {
                 this.transaction = null;
                 return;
             }
-            TraceSnapshot previous = Monitor.capture();
+            String name = request.method() + " " + request.uri().getPath();
+            this.transaction = Monitor.newTransaction(MonitorTypes.HTTP_CLIENT, name);
+            transaction.addData("component", "http-client");
+            transaction.addData("method", request.method());
+            transaction.addData("host", request.uri().getHost());
+            transaction.addData("path", request.uri().getPath());
+        }
+
+        /**
+         * 保留原因：newTransaction 后立刻 restore，出站 header 与监控事务对不上。
+         */
+        @SuppressWarnings("unused")
+        private MonitorScope(HttpRequest request) {
+            if (!monitorEnabled) {
+                this.previous = Monitor.capture();
+                this.transaction = null;
+                return;
+            }
+            this.previous = Monitor.capture();
             String name = request.method() + " " + request.uri().getPath();
             this.transaction = Monitor.newTransaction(MonitorTypes.HTTP_CLIENT, name);
             transaction.addData("component", "http-client");
@@ -174,8 +261,12 @@ public final class KsetHttp {
 
         @Override
         public void close() {
-            if (transaction != null) {
-                transaction.close();
+            try {
+                if (transaction != null) {
+                    transaction.close();
+                }
+            } finally {
+                Monitor.restore(previous);
             }
         }
     }

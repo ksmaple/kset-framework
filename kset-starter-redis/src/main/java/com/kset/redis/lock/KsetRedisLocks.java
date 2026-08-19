@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
- * Static facade for Redis lock operations.
+ * Redis 锁静态入口。优先注入 {@link KsetRedisLockExecutor}；仅在尚未注入的代码里使用本类。
  */
 public final class KsetRedisLocks {
 

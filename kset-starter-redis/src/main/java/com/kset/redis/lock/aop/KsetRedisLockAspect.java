@@ -60,6 +60,17 @@ public class KsetRedisLockAspect {
     }
 
     private KsetRedisLockOptions toOptions(KsetLocked locked) {
+        if (watchdogLease(locked.lease())) {
+            return toWatchdogOptions(locked);
+        }
+        return toFixedLeaseOptions(locked);
+    }
+
+    /**
+     * 保留原因：lease=0s 走 rejectNow(Duration.ZERO)，误传 0 会拿到 watchdog 锁。
+     */
+    @SuppressWarnings("unused")
+    private KsetRedisLockOptions toOptionsForRollback(KsetLocked locked) {
         Duration lease = parseDuration(locked.lease(), provider.defaultLeaseTime());
         return switch (locked.strategy()) {
             case REJECT_IF_BUSY -> KsetRedisLockOptions.rejectNow(lease);
@@ -74,6 +85,44 @@ public class KsetRedisLockAspect {
                     .build();
             case BLOCK_UNTIL_ACQUIRED -> KsetRedisLockOptions.blockUntil(lease);
         };
+    }
+
+    private KsetRedisLockOptions toWatchdogOptions(KsetLocked locked) {
+        return switch (locked.strategy()) {
+            case REJECT_IF_BUSY -> KsetRedisLockOptions.rejectNowWatchdog();
+            case WAIT_THEN_FAIL -> KsetRedisLockOptions.waitThenFailWatchdog(
+                    parseDuration(locked.waitTime(), provider.defaultWaitTime()));
+            case OPTIONAL -> KsetRedisLockOptions.builder()
+                    .strategy(KsetRedisLockStrategy.OPTIONAL)
+                    .waitTime(Duration.ZERO)
+                    .watchdog(true)
+                    .build();
+            case BLOCK_UNTIL_ACQUIRED -> KsetRedisLockOptions.blockUntilWatchdog();
+        };
+    }
+
+    private KsetRedisLockOptions toFixedLeaseOptions(KsetLocked locked) {
+        Duration lease = parseDuration(locked.lease(), provider.defaultLeaseTime());
+        return switch (locked.strategy()) {
+            case REJECT_IF_BUSY -> KsetRedisLockOptions.rejectNow(lease);
+            case WAIT_THEN_FAIL -> {
+                Duration wait = parseDuration(locked.waitTime(), provider.defaultWaitTime());
+                yield KsetRedisLockOptions.waitThenFail(wait, lease);
+            }
+            case OPTIONAL -> KsetRedisLockOptions.builder()
+                    .strategy(KsetRedisLockStrategy.OPTIONAL)
+                    .waitTime(Duration.ZERO)
+                    .leaseTime(lease)
+                    .build();
+            case BLOCK_UNTIL_ACQUIRED -> KsetRedisLockOptions.blockUntil(lease);
+        };
+    }
+
+    private static boolean watchdogLease(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return false;
+        }
+        return DurationStyle.SIMPLE.parse(raw).isZero();
     }
 
     private static Duration parseDuration(String raw, Duration fallback) {

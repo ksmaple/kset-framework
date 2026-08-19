@@ -3,6 +3,7 @@ package com.kset.redis.lock.internal;
 import com.kset.cloud.config.KsetRedisProperties;
 import com.kset.redis.lock.KsetRedisLock;
 import com.kset.redis.lock.KsetRedisLockException;
+import com.kset.redis.lock.KsetRedisLockInterruptedException;
 import com.kset.redis.core.KsetRedisTtlPolicy;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
@@ -43,6 +44,37 @@ public final class KsetRedissonLockProvider {
     public Optional<KsetRedisLock> tryLockAll(Collection<String> lockKeys,
                                               Duration waitTime,
                                               Duration leaseTime) {
+        return tryLockAllOrThrowInterrupt(lockKeys, waitTime, leaseTime);
+    }
+
+    private Optional<KsetRedisLock> tryLockAllOrThrowInterrupt(Collection<String> lockKeys,
+                                                               Duration waitTime,
+                                                               Duration leaseTime) {
+        List<String> keys = normalizeKeys(lockKeys);
+        if (keys.isEmpty()) {
+            throw new IllegalArgumentException("lockKeys must not be empty");
+        }
+        Duration wait = waitTime != null ? waitTime : defaultWaitTime;
+        RLock rLock = toRedissonLock(keys);
+        try {
+            boolean acquired = rLock.tryLock(wait.toMillis(), leaseMillis(leaseTime), TimeUnit.MILLISECONDS);
+            if (!acquired) {
+                return Optional.empty();
+            }
+            return Optional.of(wrapScope(keys, rLock));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new KsetRedisLockInterruptedException(String.join("|", keys), e);
+        }
+    }
+
+    /**
+     * 保留原因：等待锁时 InterruptedException 被当成未抢到，调用方无法区分取消与竞争失败。
+     */
+    @SuppressWarnings("unused")
+    private Optional<KsetRedisLock> tryLockAllForRollback(Collection<String> lockKeys,
+                                                          Duration waitTime,
+                                                          Duration leaseTime) {
         List<String> keys = normalizeKeys(lockKeys);
         if (keys.isEmpty()) {
             throw new IllegalArgumentException("lockKeys must not be empty");
@@ -68,10 +100,20 @@ public final class KsetRedissonLockProvider {
 
     public KsetRedisLock lockBlockingAll(Collection<String> lockKeys, Duration leaseTime) {
         List<String> keys = normalizeKeys(lockKeys);
-        Duration lease = ttlPolicy.requireTtl(leaseTime != null ? leaseTime : defaultLeaseTime);
         RLock rLock = toRedissonLock(keys);
-        rLock.lock(lease.toMillis(), TimeUnit.MILLISECONDS);
+        rLock.lock(leaseMillis(leaseTime), TimeUnit.MILLISECONDS);
         return wrapScope(keys, rLock);
+    }
+
+    /**
+     * {@code leaseTime == 0} 使用 Redisson watchdog（lease = -1），默认仍是固定 30s 租约。
+     */
+    private long leaseMillis(Duration leaseTime) {
+        if (leaseTime != null && leaseTime.isZero()) {
+            return -1L;
+        }
+        Duration lease = ttlPolicy.requireTtl(leaseTime != null ? leaseTime : defaultLeaseTime);
+        return lease.toMillis();
     }
 
     public RLock fairLock(String lockKey) {

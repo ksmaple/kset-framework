@@ -9,11 +9,11 @@ import com.alibaba.csp.sentinel.slots.block.flow.FlowRuleManager;
 import com.alibaba.csp.sentinel.slots.block.flow.param.ParamFlowRule;
 import com.alibaba.csp.sentinel.slots.block.flow.param.ParamFlowRuleManager;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.cloud.nacos.NacosConfigConvention;
 import com.kset.cloud.spi.CloudRuleProvider;
 import com.kset.cloud.spi.CloudRuleType;
+import com.kset.common.utils.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -29,8 +29,6 @@ import java.util.List;
 @ConditionalOnProperty(prefix = "kset.cloud.sentinel", name = "enabled", havingValue = "true", matchIfMissing = true)
 @Slf4j
 public class KsetSentinelRuleAutoConfiguration {
-
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @Bean
     public SentinelRuleLoader sentinelRuleLoader(KsetCloudProperties properties,
@@ -69,7 +67,7 @@ public class KsetSentinelRuleAutoConfiguration {
                     serverAddr, group, dataId,
                     json -> {
                         try {
-                            return OBJECT_MAPPER.readValue(json, new TypeReference<List<FlowRule>>() {});
+                            return JsonUtil.fromJson(json, new TypeReference<List<FlowRule>>() {});
                         } catch (Exception e) {
                             throw new IllegalStateException("Failed to parse flow rules", e);
                         }
@@ -87,7 +85,7 @@ public class KsetSentinelRuleAutoConfiguration {
                         serverAddr, group, dataId,
                         json -> {
                             try {
-                                return OBJECT_MAPPER.readValue(json, new TypeReference<List<ParamFlowRule>>() {});
+                                return JsonUtil.fromJson(json, new TypeReference<List<ParamFlowRule>>() {});
                             } catch (Exception e) {
                                 throw new IllegalStateException("Failed to parse param flow rules", e);
                             }
@@ -107,7 +105,7 @@ public class KsetSentinelRuleAutoConfiguration {
                     serverAddr, group, dataId,
                     json -> {
                         try {
-                            return OBJECT_MAPPER.readValue(json, new TypeReference<List<DegradeRule>>() {});
+                            return JsonUtil.fromJson(json, new TypeReference<List<DegradeRule>>() {});
                         } catch (Exception e) {
                             throw new IllegalStateException("Failed to parse degrade rules", e);
                         }

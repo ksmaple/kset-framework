@@ -2,6 +2,8 @@
 
 `kset-starter-dubbo` 集成 Apache Dubbo、Nacos 注册与 KSet 标签路由。TraceId 透传与 RPC Transaction 由 `kset-starter-monitor` 的 Dubbo 插件提供。
 
+接入见 [Nacos / Sentinel / Dubbo](../docs/usage/cloud.md)。
+
 ## 依赖
 
 ```xml

@@ -1,7 +1,7 @@
 package com.kset.cache.core;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.cache.config.KsetCacheProperties;
+import com.kset.common.utils.JsonUtil;
 import com.kset.common.monitor.Monitor;
 import com.kset.common.monitor.facade.MonitorStatus;
 import com.kset.common.monitor.facade.MonitorTransaction;
@@ -27,7 +27,6 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
 
     private final Map<KsetCacheLayer, KsetCacheStore> stores;
     private final KsetCacheProperties properties;
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConcurrentHashMap<String, FutureTask<Object>> loadingTasks = new ConcurrentHashMap<>();
     private final KsetCacheMetricCollector metrics = new KsetCacheMetricCollector();
 
@@ -144,7 +143,7 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
         if (raw == null || spec.valueType() == Object.class || spec.valueType().isInstance(raw)) {
             return raw;
         }
-        return objectMapper.convertValue(raw, spec.valueType());
+        return JsonUtil.convert(raw, spec.valueType());
     }
 
     private Object loadSingleFlight(List<KsetCacheSpec> specs,

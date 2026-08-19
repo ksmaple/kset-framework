@@ -47,6 +47,8 @@ public @interface KsetLocked {
 
     /**
      * 租约时间；空则使用 {@code kset.redis.redisson.lock-lease-time}。
+     * {@code 0s} 表示显式启用 Redisson watchdog 自动续期，适合超过默认 30 秒的临界区。
+     * 不要把 {@code Duration.ZERO} 传给 {@code rejectNow} 或 {@code builder().leaseTime}，那会按 TTL 策略拒绝。
      */
     String lease() default "";
 }
