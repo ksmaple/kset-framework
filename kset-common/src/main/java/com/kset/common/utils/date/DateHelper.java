@@ -10,7 +10,8 @@ import java.time.temporal.TemporalAccessor;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.TimeZone;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * 日期时间工具（基于 {@link Date} 和 {@link Calendar}，链式 API）。
@@ -39,7 +40,23 @@ public class DateHelper {
     public static final int ISO_MONDAY = 1;
     public static final int ISO_SUNDAY = 7;
 
-    private static final ConcurrentHashMap<String, DateTimeFormatter> FORMATTERS = new ConcurrentHashMap<>();
+    private static final DateTimeFormatter FORMATTER_DEF = DateTimeFormatter.ofPattern(PATTERN_DEF);
+    private static final DateTimeFormatter FORMATTER_DEF_MS = DateTimeFormatter.ofPattern(PATTERN_DEF_MS);
+    private static final DateTimeFormatter FORMATTER_DAY_DEF = DateTimeFormatter.ofPattern(PATTERN_DAY_DEF);
+    private static final DateTimeFormatter FORMATTER_DAY_SP = DateTimeFormatter.ofPattern(PATTERN_DAY_SP);
+    private static final DateTimeFormatter FORMATTER_MONTH_DEF = DateTimeFormatter.ofPattern(PATTERN_MONTH_DEF);
+    private static final DateTimeFormatter FORMATTER_YEAR_DEF = DateTimeFormatter.ofPattern(PATTERN_YEAR_DEF);
+    private static final DateTimeFormatter FORMATTER_ONLY_MONTH = DateTimeFormatter.ofPattern(PATTERN_ONLY_MONTH);
+    private static final DateTimeFormatter FORMATTER_ONLY_DAY = DateTimeFormatter.ofPattern(PATTERN_ONLY_DAY);
+    private static final DateTimeFormatter FORMATTER_MM_DD = DateTimeFormatter.ofPattern(PATTERN_MM_DD);
+
+    private static final int FORMATTER_CACHE_CAPACITY = 256;
+    private static final Map<String, DateTimeFormatter> FORMATTERS = new LinkedHashMap<>(32, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, DateTimeFormatter> eldest) {
+            return size() > FORMATTER_CACHE_CAPACITY;
+        }
+    };
 
     private Date date;
 
@@ -662,7 +679,22 @@ public class DateHelper {
         return LocalDateTime.of(year, month, day, hour, minute, second, nano);
     }
 
-    private static DateTimeFormatter formatter(String pattern) {
+    private static synchronized DateTimeFormatter formatter(String pattern) {
+        DateTimeFormatter builtIn = switch (pattern) {
+            case PATTERN_DEF -> FORMATTER_DEF;
+            case PATTERN_DEF_MS -> FORMATTER_DEF_MS;
+            case PATTERN_DAY_DEF -> FORMATTER_DAY_DEF;
+            case PATTERN_DAY_SP -> FORMATTER_DAY_SP;
+            case PATTERN_MONTH_DEF -> FORMATTER_MONTH_DEF;
+            case PATTERN_YEAR_DEF -> FORMATTER_YEAR_DEF;
+            case PATTERN_ONLY_MONTH -> FORMATTER_ONLY_MONTH;
+            case PATTERN_ONLY_DAY -> FORMATTER_ONLY_DAY;
+            case PATTERN_MM_DD -> FORMATTER_MM_DD;
+            default -> null;
+        };
+        if (builtIn != null) {
+            return builtIn;
+        }
         return FORMATTERS.computeIfAbsent(pattern, DateTimeFormatter::ofPattern);
     }
 

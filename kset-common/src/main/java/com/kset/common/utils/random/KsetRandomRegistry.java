@@ -69,6 +69,22 @@ public class KsetRandomRegistry {
         getEngine(name).flush();
     }
 
+    /** Flushes and removes a random pool, releasing its configuration and counters. */
+    public boolean unregister(String name) {
+        WeightedRandomEngine engine = engines.remove(name);
+        if (engine == null) {
+            return false;
+        }
+        engine.flush();
+        return true;
+    }
+
+    /** Flushes and removes all registered random pools. */
+    public void clear() {
+        engines.values().forEach(WeightedRandomEngine::flush);
+        engines.clear();
+    }
+
     public void flushAll() {
         engines.values().forEach(WeightedRandomEngine::flush);
     }

@@ -80,6 +80,18 @@ public final class RetryBudget {
         return namedBudget(name, maxRetryRatio, minRetriesPerWindow, window);
     }
 
+    /** Removes a named budget so dynamic business names do not remain resident forever. */
+    public static void remove(String name) {
+        if (name != null) {
+            NAMED.remove(name);
+        }
+    }
+
+    /** Clears all named budgets. Intended for application shutdown or test isolation. */
+    public static void clearNamed() {
+        NAMED.clear();
+    }
+
     /**
      * 保留原因：同名第二次 of 忽略比例/窗口，测试与生产会静默用错预算。
      */
