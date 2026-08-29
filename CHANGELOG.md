@@ -67,13 +67,45 @@
 
 ## 如何发布新版本
 
-### 前置条件
+项目提供两种发布方式：**方式一（release 插件，pom 已配置）**为标准流程；**方式二（手工 versions:set + deploy）**为可控备选，v1.0.12 即用方式二发布。两种方式都必须手工处理 `kset-framework.version` 自定义属性（详见各节）。
+
+### 方式一：maven-release-plugin（标准流程）
+
+根 `pom.xml` 已预配置 maven-release-plugin（`tagNameFormat=v@{project.version}`、`autoVersionSubmodules=true`、构建参数 `-q -DskipTests -Dmaven.test.skip=true -Pnexus`）。
+
+**1. 先将 `kset-boot-parent/pom.xml` 的自定义属性改为发布版本并提交**（插件只改 `<version>`，不会改该属性，否则发布的 POM 内部模块引用会指向 SNAPSHOT）：
+
+```xml
+<kset-framework.version>1.0.12</kset-framework.version>
+```
+
+**2. 一条命令完成 prepare + perform**（-B 批处理模式避免交互输入版本号）：
+
+```powershell
+mvn -B release:prepare release:perform "-DreleaseVersion=1.0.12" "-DdevelopmentVersion=1.0.13-SNAPSHOT"
+```
+
+该命令自动完成：全量构建（跳过测试）→ 改版本号并提交两次（`prepare release` / `prepare for next development iteration`）→ 打标签 `v1.0.12` → 推送 main 与标签 → 从标签检出重建并 deploy 到 Nexus releases。
+
+**3. 插件回滚版本后，手工把 `kset-framework.version` 改回下一 SNAPSHOT 并补充提交：**
+
+```powershell
+git add -A; git commit -m "chore: sync kset-framework.version to 1.0.13-SNAPSHOT"; git push origin main
+```
+
+**4. 失败恢复**：prepare 阶段失败可用 `mvn release:rollback` 回退本地变更；已推送的错误标签需手工删除（`git push origin :v<x.y.z>`）。
+
+### 方式二：手工 versions:set + deploy（v1.0.12 实际使用）
+
+适合需要逐步验证、或插件流程异常时的备选。
+
+#### 前置条件
 
 - JDK 21、Maven 可用；能访问内部 Nexus（默认 `http://192.168.53.5:8081`）
 - `~/.m2/settings.xml` 已配置 `kset-nexus-releases` / `kset-nexus-snapshots` 两个 server 凭据
 - 工作区干净（`git status` 无未提交变更），`main` 与远端同步
 
-### 发布步骤（以 1.0.12 → 1.0.13-SNAPSHOT 为例）
+#### 发布步骤（以 1.0.12 → 1.0.13-SNAPSHOT 为例）
 
 > PowerShell 注意：`-D` 参数含多个 `.` 时必须加引号，如 `"-DnewVersion=1.0.12"`，否则会被拆参数导致 `Unknown lifecycle phase` 报错。
 
@@ -126,7 +158,7 @@ git push origin main; git push origin v1.0.12
 
 **6. 补充本文档**：在顶部新增该版本的发布说明（新增/变更/修复/行为变化/升级指引）。
 
-### 注意事项
+### 注意事项（两种方式通用）
 
 - 根聚合 POM 已配置 `maven.deploy.skip=true`，不会发布自身，仅发布各模块
 - Nexus releases 仓库默认禁止覆盖同版本构件；发错版本只能发下一版本号，不能重发
