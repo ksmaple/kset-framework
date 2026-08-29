@@ -5,13 +5,14 @@ import com.kset.redis.lock.KsetRedisLocks;
 import com.kset.redis.core.KsetRedis;
 import com.kset.redis.core.KsetRedisRegistry;
 import com.kset.redis.core.KsetRedisService;
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.ObjectProvider;
 
 /**
  * 启动时注册 Redis 数据源并绑定静态门面。
  */
-public class KsetRedisBootstrap implements InitializingBean {
+public class KsetRedisBootstrap implements InitializingBean, DisposableBean {
 
     private final KsetRedisRegistry registry;
     private final KsetRedisService primaryService;
@@ -34,5 +35,11 @@ public class KsetRedisBootstrap implements InitializingBean {
         namedSources.ifAvailable(sources -> sources.registerAll(registry));
         KsetRedis.bind(registry);
         lockExecutor.ifAvailable(KsetRedisLocks::bind);
+    }
+
+    @Override
+    public void destroy() {
+        KsetRedisLocks.unbind();
+        KsetRedis.unbind();
     }
 }

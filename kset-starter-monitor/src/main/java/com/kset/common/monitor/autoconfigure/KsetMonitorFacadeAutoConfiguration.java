@@ -56,8 +56,18 @@ public class KsetMonitorFacadeAutoConfiguration {
     }
 
     @Bean
-    public Object ksetMonitorFacadeInstaller(MonitorFacade facade) {
+    public MonitorFacadeInstaller ksetMonitorFacadeInstaller(MonitorFacade facade) {
         Monitor.install(facade);
-        return new Object();
+        return new MonitorFacadeInstaller();
+    }
+
+    /**
+     * 门面安装器：停机时解除静态绑定，避免同 JVM 重启串状态。
+     */
+    static final class MonitorFacadeInstaller implements org.springframework.beans.factory.DisposableBean {
+        @Override
+        public void destroy() {
+            Monitor.uninstall();
+        }
     }
 }

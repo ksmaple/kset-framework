@@ -1,8 +1,9 @@
 package com.kset.cache.core;
 
+import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 
-public class KsetCacheBootstrap implements InitializingBean {
+public class KsetCacheBootstrap implements InitializingBean, DisposableBean {
 
     private final KsetCacheFacade cacheFacade;
 
@@ -13,5 +14,10 @@ public class KsetCacheBootstrap implements InitializingBean {
     @Override
     public void afterPropertiesSet() {
         KsetCache.bind(cacheFacade);
+    }
+
+    @Override
+    public void destroy() {
+        KsetCache.unbind();
     }
 }

@@ -47,6 +47,13 @@ public final class Monitor {
         facade = Objects.requireNonNull(newFacade, "facade");
     }
 
+    /**
+     * 解除安装，恢复内置默认门面（停机/同 JVM 重启隔离用）。
+     */
+    public static void uninstall() {
+        facade = createBuiltinDefault();
+    }
+
     public static MonitorFacade facade() {
         return facade;
     }

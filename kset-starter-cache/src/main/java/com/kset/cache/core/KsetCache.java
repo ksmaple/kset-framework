@@ -20,6 +20,13 @@ public final class KsetCache {
         return facade;
     }
 
+    /**
+     * 解除绑定，恢复空实现门面（停机/同 JVM 重启隔离用）。
+     */
+    public static void unbind() {
+        facade = new NoOpKsetCacheFacade();
+    }
+
     public static <T> Optional<T> get(String cacheName, String key, Class<T> type) {
         return facade.getValue(KsetCacheSpec.builder(cacheName, key).valueType(type).build(), type);
     }
