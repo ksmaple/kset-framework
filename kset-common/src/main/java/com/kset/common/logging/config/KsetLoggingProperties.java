@@ -16,12 +16,12 @@ public class KsetLoggingProperties {
     public static final boolean DEFAULT_BUSINESS_DEBUG_ENABLED = true;
 
     /**
-     * 是否自动注入 {@code logging.config} 与默认 profile。
+     * 是否自动注入 {@code logging.config}。
      * 设为 {@code false} 时回退 Spring Boot 默认 logback 发现逻辑。
      */
     private boolean autoConfig = true;
 
-    /** 未设置 spring.profiles.active/default 时使用的默认 profile（等同 spring.profiles.default 缺省值） */
+    /** 未设置 spring.profiles.active/default 时按此判定日志行为（仅日志层内部使用，不注入 spring.profiles.default） */
     private String defaultProfile = DEFAULT_PROFILE;
 
     /** 业务侧 DEBUG 配置 */

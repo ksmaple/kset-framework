@@ -5,6 +5,7 @@ import com.kset.common.event.EventHandler;
 import com.kset.common.event.config.KsetEventProperties;
 import com.kset.common.event.spring.SpringEventConsumer;
 import com.kset.common.event.spring.SpringEventFacade;
+import com.kset.common.lifecycle.KsetLifecycleProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -28,8 +29,15 @@ public class KsetEventAutoConfiguration {
     public EventFacade eventFacade(ApplicationEventPublisher publisher,
                                    ObjectProvider<TaskExecutor> taskExecutorProvider,
                                    ApplicationContext applicationContext,
-                                   KsetEventProperties properties) {
-        return new SpringEventFacade(publisher, resolveTaskExecutor(taskExecutorProvider, applicationContext, properties));
+                                   KsetEventProperties properties,
+                                   ObjectProvider<KsetLifecycleProperties> lifecyclePropertiesProvider) {
+        SpringEventFacade facade = new SpringEventFacade(
+                publisher, resolveTaskExecutor(taskExecutorProvider, applicationContext, properties));
+        KsetLifecycleProperties lifecycleProperties = lifecyclePropertiesProvider.getIfAvailable();
+        if (lifecycleProperties != null) {
+            facade.setShutdownTimeout(lifecycleProperties.getShutdownTimeout());
+        }
+        return facade;
     }
 
     @Bean

@@ -5,17 +5,19 @@ import com.kset.common.context.KsetContextScope;
 import com.kset.common.context.KsetContextSnapshot;
 import com.kset.common.event.EventFacade;
 import com.kset.common.event.SendCallback;
+import com.kset.common.lifecycle.AbstractKsetLifecycleComponent;
+import com.kset.common.lifecycle.KsetGracefulShutdowns;
+import com.kset.common.lifecycle.KsetLifecyclePhases;
 import com.kset.common.monitor.Monitor;
 import com.kset.common.monitor.MonitorScope;
 import com.kset.common.monitor.TraceSnapshot;
 import com.kset.common.monitor.facade.MonitorTransaction;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
@@ -28,11 +30,14 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 进程内 Spring 事件实现。同 {@code hashKey} 按 64 槽串行；delay/async 会恢复调用线程的上下文。
+ *
+ * <p>停机接入 kset 统一启停（{@link KsetLifecyclePhases#PHASE_EVENT}）：delay/async 执行器先 shutdown 排空，
+ * 超过 {@code shutdownTimeout} 后 shutdownNow 兜底。</p>
  */
-public class SpringEventFacade implements EventFacade, DisposableBean {
+public class SpringEventFacade extends AbstractKsetLifecycleComponent implements EventFacade, DisposableBean {
 
-    private static final Logger log = LoggerFactory.getLogger(SpringEventFacade.class);
     private static final int ORDERLY_STRIPES = 64;
+    private static final Duration DEFAULT_SHUTDOWN_TIMEOUT = Duration.ofSeconds(30);
 
     private final ApplicationEventPublisher publisher;
     private final TaskExecutor asyncExecutor;
@@ -40,7 +45,10 @@ public class SpringEventFacade implements EventFacade, DisposableBean {
     private final ScheduledExecutorService delayExecutor;
     private final Object[] orderlyStripes;
 
+    private volatile Duration shutdownTimeout = DEFAULT_SHUTDOWN_TIMEOUT;
+
     public SpringEventFacade(ApplicationEventPublisher publisher, TaskExecutor asyncExecutor) {
+        super("kset-event-facade", KsetLifecyclePhases.PHASE_EVENT);
         this.publisher = Objects.requireNonNull(publisher, "publisher must not be null");
         if (asyncExecutor != null) {
             this.asyncExecutor = asyncExecutor;
@@ -264,8 +272,39 @@ public class SpringEventFacade implements EventFacade, DisposableBean {
         }
     }
 
+    /**
+     * 设置停机排空等待预算（由 kset.lifecycle.shutdown-timeout 注入），超时后兜底强关。
+     */
+    public void setShutdownTimeout(Duration shutdownTimeout) {
+        if (shutdownTimeout != null && !shutdownTimeout.isNegative() && !shutdownTimeout.isZero()) {
+            this.shutdownTimeout = shutdownTimeout;
+        }
+    }
+
+    @Override
+    protected void doStop() {
+        long deadlineNanos = System.nanoTime() + shutdownTimeout.toNanos();
+        delayExecutor.shutdown();
+        if (ownedAsyncExecutor != null) {
+            ownedAsyncExecutor.shutdown();
+        }
+        KsetGracefulShutdowns.awaitTermination(delayExecutor, "kset-event-delay", deadlineNanos);
+        if (ownedAsyncExecutor != null) {
+            KsetGracefulShutdowns.awaitTermination(ownedAsyncExecutor, "kset-event-async", deadlineNanos);
+        }
+    }
+
     @Override
     public void destroy() {
+        shutdownLifecycle();
+    }
+
+    /**
+     * 保留原因（feature-key=graceful-lifecycle, change-id=graceful-lifecycle-v1）：停机硬关实现，
+     * 优雅停机异常或未接入统一启停时用于恢复原行为。
+     */
+    @SuppressWarnings("unused")
+    public void destroyForRollback() {
         delayExecutor.shutdownNow();
         if (ownedAsyncExecutor != null) {
             ownedAsyncExecutor.shutdownNow();

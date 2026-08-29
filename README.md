@@ -97,6 +97,69 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | `kset-starter-gateway` | 动态路由 diff、灰度、可选鉴权、Gateway Sentinel（Trace 见 monitor） | Spring Cloud Gateway |
 | `kset-starter-mq` | RocketMQ 组件依赖入口；事件门面默认在 `kset-common` 提供 Spring 本地实现 | RocketMQ V5 Client Spring Boot Starter |
 
+## 优雅启停
+
+全部 KSet 组件统一接入基于 Spring `SmartLifecycle` 相位的启停编排（`kset-common` 内置，默认开启）。
+
+停机优先级（相位越大越先停）：
+
+| 顺序 | 相位 | 组件 | 停机动作 |
+|------|------|------|----------|
+| 0 | — | 定时任务 | `@Scheduled` 在 ContextClosedEvent 最先取消（Spring 原生，先于所有相位） |
+| 1 | 600 `PHASE_READINESS` | 健康状态摘流 | readiness 置为 `REFUSING_TRAFFIC`，K8s readiness 探针立即失败摘出实例 |
+| 2 | — | Web 容器 | `server.shutdown=graceful` 断流并排完在途 HTTP 请求 |
+| 3 | 500 `PHASE_TRAFFIC` | Dubbo / MQ 入口 | `DubboBootstrap.stop()` 注销摘流；停止 RocketMQ 监听容器停收消息 |
+| 4 | 400 `PHASE_EVENT` | 事件门面 | delay/async 执行器排空，超时强关 |
+| 5 | 300 `PHASE_THREAD_POOL` | 业务线程池 | `KsetThreadPoolFactory` 全部池排空，超时强关 |
+| 6 | 200 `PHASE_MONITOR` | 监控上报 | flush 最终聚合指标，关闭异步上报器 |
+| 7 | 100 `PHASE_INFRA` | Redis 连接 | 命名数据源连接工厂关闭 |
+| 8 | — | DB 连接池 | Hikari/dynamic-datasource 在 Spring destroy 阶段最后关闭 |
+
+默认配置（未显式配置时由 starter 注入，用户配置优先）：
+
+```yaml
+server:
+  shutdown: graceful                      # Web/WebFlux 在途请求先排完
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s       # 每个相位停机超时
+kset:
+  lifecycle:
+    enabled: true                         # 统一启停总开关
+    shutdown-timeout: 30s                 # 组件排空预算，超时兜底强关
+    health:
+      enabled: true                       # /actuator/health 中暴露 ksetLifecycle 健康项（需引入 actuator）
+dubbo:
+  application:
+    shutwait: 10000                       # Dubbo 优雅停机等待（ms），注销摘流后等待注册中心传播
+```
+
+健康状态：停机一开始 readiness 即置为 `REFUSING_TRAFFIC`，`/actuator/health/readiness` 探针失败，K8s 先摘出实例再逐步排空；`/actuator/health` 的 `ksetLifecycle` 项可查看各组件 RUNNING/STOPPED 排空进度。probes 默认值由 `kset-starter-monitor` 注入（`management.endpoint.health.probes.enabled=true`）。
+
+### 业务侧接入统一启停
+
+业务组件（自研客户端、本地缓存、定时拉取器等）可通过扩展点加入同一套相位编排，停机顺序、排空日志、健康明细自动生效。**业务侧统一约定：默认使用方式一（函数式适配器）**，逻辑复杂需独立启停回调或完整生命周期控制时才用方式二/三：
+
+```java
+// 方式一（推荐）：函数式注册一个停机钩子
+@Bean
+KsetLifecycleHookAdapter localCacheShutdown() {
+    return new KsetLifecycleHookAdapter(
+            "local-cache",                       // 组件名，用于日志与健康明细
+            KsetLifecyclePhases.PHASE_EVENT + 10, // 紧随事件排空之后停止（相位可加偏移插入任意位置）
+            localCache::shutdown);               // 停机回调
+}
+
+// 方式二（结构化）：实现 KsetLifecycleHook 接口（getName/getPhase/onStart/onStop），
+// 再用 new KsetLifecycleHookAdapter(hook) 注册为 Bean
+
+// 方式三（完整控制）：直接继承 AbstractKsetLifecycleComponent 实现 doStart/doStop
+```
+
+注册后无需其他配置：启动按相位升序回调 `onStart`，停机按相位降序回调 `onStop`，幂等防重复，自动纳入 `ksetLifecycle` 健康项。
+
+部署建议：K8s `terminationGracePeriodSeconds` 应大于各相位超时与 `dubbo.application.shutwait` 之和（默认约 90s 以上）。
+
 ## 组件接入总览
 
 | 组件 | Maven 依赖 | 主要入口 | 最小配置/说明 |
@@ -159,10 +222,10 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | 层级 | 模块 | 说明 |
 |------|------|------|
 | BOM | `kset-boot-parent` | 锁定全量三方版本 |
-| 工具聚合 | `kset-common` | Commons / Guava / Jackson / TTL 等**仅在此声明** |
+| 工具聚合 | `kset-common` | Commons / Jackson / TTL 等**仅在此声明**（Guava 已移除，业务需要请自行声明） |
 | 能力 | `kset-cloud`、`kset-starter-*` | **必须**依赖 `kset-common`；只声明领域能力，勿重复工具库；`starter-nacos` / `starter-sentinel` / `starter-web` **解耦**，微服务按需组合 |
 
-业务项目引入任意 KSet Starter 后，上述工具库会随 `kset-common` **传递**进入 classpath，一般无需再单独声明 `commons-lang3`、`guava` 等。
+业务项目引入任意 KSet Starter 后，上述工具库会随 `kset-common` **传递**进入 classpath，一般无需再单独声明 `commons-lang3` 等；`guava` 不再传递，业务需要时请自行声明（版本仍由 `kset-boot-parent` 统一管理）。
 
 若未使用 KSet Starter、仅继承 `kset-boot-parent`，可按需从 BOM 引用（**无需写 version**）：
 

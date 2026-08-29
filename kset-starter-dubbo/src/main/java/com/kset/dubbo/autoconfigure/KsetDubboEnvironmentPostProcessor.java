@@ -27,6 +27,7 @@ public class KsetDubboEnvironmentPostProcessor implements EnvironmentPostProcess
         putIfMissing(environment, defaults, "dubbo.protocol.port", "-1");
         putIfMissing(environment, defaults, "dubbo.consumer.check", "false");
         putIfMissing(environment, defaults, "dubbo.registry.register-mode", "instance");
+        putIfMissing(environment, defaults, "dubbo.application.shutwait", "10000");
 
         String nacosServerAddr = firstNonBlank(
                 environment.getProperty("spring.cloud.nacos.discovery.server-addr"),

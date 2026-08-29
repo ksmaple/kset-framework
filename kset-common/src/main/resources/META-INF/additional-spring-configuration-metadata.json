@@ -9,6 +9,11 @@
       "name": "kset.event",
       "type": "java.lang.Object",
       "description": "KSet 事件门面配置。"
+    },
+    {
+      "name": "kset.lifecycle",
+      "type": "com.kset.common.lifecycle.KsetLifecycleProperties",
+      "description": "KSet 统一启停编排配置（基于 Spring SmartLifecycle 相位）。"
     }
   ],
   "properties": [
@@ -16,13 +21,13 @@
       "name": "kset.logging.auto-config",
       "type": "java.lang.Boolean",
       "defaultValue": true,
-      "description": "是否自动注入 logging.config 与默认 profile；false 时使用 Spring Boot 默认 logback 发现逻辑。"
+      "description": "是否自动注入 logging.config；false 时使用 Spring Boot 默认 logback 发现逻辑。"
     },
     {
       "name": "kset.logging.default-profile",
       "type": "java.lang.String",
       "defaultValue": "dev",
-      "description": "未设置 spring.profiles.active/default 时使用的默认 profile。"
+      "description": "未设置 spring.profiles.active/default 时按此判定日志行为（仅日志层内部使用，不注入 spring.profiles.default）。"
     },
     {
       "name": "kset.logging.business-debug.enabled",
@@ -40,6 +45,24 @@
       "type": "java.lang.Boolean",
       "defaultValue": true,
       "description": "是否启用 KSet 事件门面本地 Spring 默认实现。"
+    },
+    {
+      "name": "kset.lifecycle.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "是否启用 KSet 统一启停编排；false 时各组件回退为 Spring 原生销毁顺序。"
+    },
+    {
+      "name": "kset.lifecycle.shutdown-timeout",
+      "type": "java.time.Duration",
+      "defaultValue": "30s",
+      "description": "各组件停机排空等待预算，超时后兜底强制关闭。"
+    },
+    {
+      "name": "kset.lifecycle.health.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "是否在 /actuator/health 中暴露 ksetLifecycle 健康项（需引入 spring-boot-actuator）；停机排空开始时 readiness 探针自动置为失败。"
     }
   ]
 }

@@ -1,5 +1,6 @@
 package com.kset.common.utils.thread;
 
+import com.kset.common.lifecycle.KsetGracefulShutdowns;
 import lombok.Builder;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -214,14 +215,46 @@ public class KsetThreadPoolFactory {
         configs.remove(bizName);
     }
 
+    /**
+     * 默认停机排空等待预算（毫秒）。
+     */
+    public static final long DEFAULT_SHUTDOWN_TIMEOUT_MS = 30_000L;
+
     public void shutdownAll() {
+        shutdownAll(DEFAULT_SHUTDOWN_TIMEOUT_MS);
+    }
+
+    /**
+     * 优雅关闭全部业务池：先统一 shutdown 并行排空，再在总预算内逐池 awaitTermination，超时 shutdownNow 兜底。
+     * 全程打印每个池的快照（在途/队列/累计指标）与排空结果。
+     */
+    public void shutdownAll(long timeoutMillis) {
         if (globalShutdown.compareAndSet(false, true)) {
-            pools.forEach((k, v) -> {
-                v.shutdown();
-                log.info(String.format("[Factory] Shutdown pool for biz '%s'", k));
+            log.info(String.format("[Factory] Graceful shutdown started: pools=%d, timeoutMs=%d",
+                    pools.size(), timeoutMillis));
+            pools.forEach((bizName, pool) -> {
+                ThreadPoolMetrics metrics = pool.getMetrics();
+                log.info(String.format("[Factory] Shutdown pool for biz '%s' (active=%d, queued=%d, submitted=%d, completed=%d)",
+                        bizName, metrics.getActiveCount(), metrics.getQueueSize(),
+                        metrics.getSubmittedTasks(), metrics.getCompletedTasks()));
+                pool.shutdown();
+            });
+            long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+            pools.forEach((bizName, pool) -> {
+                boolean drained = KsetGracefulShutdowns.awaitTermination(pool, "pool-" + bizName, deadlineNanos);
+                ThreadPoolMetrics metrics = pool.getMetrics();
+                if (drained) {
+                    log.info(String.format("[Factory] Pool '%s' drained (completed=%d, failed=%d, rejected=%d)",
+                            bizName, metrics.getCompletedTasks(), metrics.getFailedTasks(), metrics.getRejectedTasks()));
+                } else {
+                    log.warn(String.format("[Factory] Pool '%s' forced shutdown (remainingActive=%d, remainingQueued=%d, completed=%d, failed=%d)",
+                            bizName, metrics.getActiveCount(), metrics.getQueueSize(),
+                            metrics.getCompletedTasks(), metrics.getFailedTasks()));
+                }
             });
             pools.clear();
             configs.clear();
+            log.info("[Factory] Graceful shutdown finished");
         }
     }
 

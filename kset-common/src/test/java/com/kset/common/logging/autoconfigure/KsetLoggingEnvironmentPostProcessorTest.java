@@ -13,12 +13,18 @@ class KsetLoggingEnvironmentPostProcessorTest {
     private final KsetLoggingEnvironmentPostProcessor postProcessor = new KsetLoggingEnvironmentPostProcessor();
 
     @Test
-    void defaultsToDevProfileAndBusinessDebugEnabled() {
+    void keepsDevLoggingBehaviorWithoutInjectingSpringDefaultProfile() {
         StandardEnvironment environment = new StandardEnvironment();
 
         postProcessor.postProcessEnvironment(environment, null);
 
-        assertThat(environment.getProperty("spring.profiles.default")).isEqualTo("dev");
+        assertThat(environment.getProperty("spring.profiles.default"))
+                .as("不再注入 spring.profiles.default，避免裸配应用静默落入 dev 语义")
+                .isNull();
+        MapPropertySource defaults = (MapPropertySource) environment.getPropertySources()
+                .get(KsetLoggingEnvironmentPostProcessor.PROPERTY_SOURCE_NAME);
+        assertThat(defaults).isNotNull();
+        assertThat(defaults.getSource()).doesNotContainKey("spring.profiles.default");
         assertThat(environment.getProperty("kset.logging.business-debug.enabled", Boolean.class)).isTrue();
     }
 

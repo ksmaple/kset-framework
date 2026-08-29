@@ -1,7 +1,6 @@
 package com.kset.common.utils.thread;
 
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.kset.common.context.KsetContext;
 import com.kset.common.context.KsetContextScope;
 import com.kset.common.context.KsetContextSnapshot;
@@ -10,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -401,6 +401,14 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
     // ========== 工厂方法 ==========
 
     /**
+     * 线程工厂：按 {@code nameFormat}（含 %d）从 1 递增命名，非守护线程、普通优先级。
+     */
+    private static ThreadFactory namedThreadFactory(String nameFormat) {
+        AtomicInteger threadId = new AtomicInteger();
+        return runnable -> new Thread(runnable, String.format(nameFormat, threadId.incrementAndGet()));
+    }
+
+    /**
      * 获取默认全局单例（向后兼容）。
      * <p>默认配置：core=32, max=200, queue=100, targetLatency=1000ms, autoTune=false, priorityQueue=false</p>
      */
@@ -408,9 +416,7 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
         if (DEFAULT_INSTANCE == null) {
             synchronized (DEFAULT_LOCK) {
                 if (DEFAULT_INSTANCE == null) {
-                    ThreadFactory factory = new ThreadFactoryBuilder()
-                            .setNameFormat("we-thread-pool-%d")
-                            .build();
+                    ThreadFactory factory = namedThreadFactory("kset-thread-pool-%d");
                     DEFAULT_INSTANCE = newBuilder("default")
                             .corePoolSize(DEFAULT_CORE_POOL_SIZE)
                             .maximumPoolSize(DEFAULT_MAX_POOL_SIZE)
@@ -594,9 +600,7 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
 
         public KsetThreadPoolExecutor build() {
             if (threadFactory == null) {
-                threadFactory = new ThreadFactoryBuilder()
-                        .setNameFormat(poolName + "-%d")
-                        .build();
+                threadFactory = namedThreadFactory("kset-" + poolName + "-%d");
             }
             return new KsetThreadPoolExecutor(poolName, corePoolSize, maximumPoolSize,
                     keepAliveTimeMs, queueCapacity, threadFactory, rejectedExecutionHandler,
@@ -1055,7 +1059,7 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
             return;
         }
         tuner = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, poolName + "-tuner");
+            Thread t = new Thread(r, "kset-" + poolName + "-tuner");
             t.setDaemon(true);
             return t;
         });

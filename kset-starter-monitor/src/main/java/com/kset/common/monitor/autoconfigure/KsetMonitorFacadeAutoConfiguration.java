@@ -5,10 +5,13 @@ import com.kset.common.monitor.backend.MonitorBackend;
 import com.kset.common.monitor.config.KsetMonitorProperties;
 import com.kset.common.monitor.facade.MonitorFacade;
 import com.kset.common.monitor.internal.DefaultMonitorFacade;
+import com.kset.common.monitor.lifecycle.KsetMonitorLifecycle;
+import com.kset.common.monitor.reporter.AsyncReporter;
 import com.kset.common.monitor.reporter.DefaultMetricAggregator;
 import com.kset.common.monitor.reporter.MetricAggregator;
 import com.kset.common.monitor.sampler.RateSampler;
 import com.kset.common.monitor.sampler.Sampler;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -42,6 +45,14 @@ public class KsetMonitorFacadeAutoConfiguration {
                 monitorBackend,
                 monitorSampler,
                 monitorMetricAggregator);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "kset.lifecycle", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnMissingBean
+    public KsetMonitorLifecycle ksetMonitorLifecycle(ObjectProvider<MetricAggregator> metricAggregators,
+                                                     ObjectProvider<AsyncReporter> asyncReporters) {
+        return new KsetMonitorLifecycle(metricAggregators, asyncReporters);
     }
 
     @Bean
