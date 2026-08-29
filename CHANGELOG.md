@@ -67,9 +67,9 @@
 
 ## 如何发布新版本
 
-项目提供两种发布方式：**方式一（release 插件，pom 已配置）**为标准流程；**方式二（手工 versions:set + deploy）**为可控备选，v1.0.12 即用方式二发布。两种方式都必须手工处理 `kset-framework.version` 自定义属性（详见各节）。
+项目提供两种发布方式：**方式一（release 插件，pom 已配置，推荐）**为标准流程，日常发布一律使用；**方式二（手工 versions:set + deploy）**仅作为插件流程异常或需逐步验证时的备选，v1.0.12 即用方式二发布。两种方式都必须手工处理 `kset-framework.version` 自定义属性（详见各节）。
 
-### 方式一：maven-release-plugin（标准流程）
+### 方式一：maven-release-plugin（标准流程，推荐）
 
 根 `pom.xml` 已预配置 maven-release-plugin（`tagNameFormat=v@{project.version}`、`autoVersionSubmodules=true`、构建参数 `-q -DskipTests -Dmaven.test.skip=true -Pnexus`）。
 
@@ -95,7 +95,7 @@ git add -A; git commit -m "chore: sync kset-framework.version to 1.0.13-SNAPSHOT
 
 **4. 失败恢复**：prepare 阶段失败可用 `mvn release:rollback` 回退本地变更；已推送的错误标签需手工删除（`git push origin :v<x.y.z>`）。
 
-### 方式二：手工 versions:set + deploy（v1.0.12 实际使用）
+### 方式二：手工 versions:set + deploy（备选，v1.0.12 实际使用）
 
 适合需要逐步验证、或插件流程异常时的备选。
 
