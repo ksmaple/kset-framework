@@ -2,6 +2,23 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [v1.0.13] - 2026-08-29
+
+### 新增
+
+- **新模块 `kset-starter-schedule`**：定时任务唯一运行锁
+  - `@KsetScheduled`：元注解继承原生 `@Scheduled` 全量调度属性（cron/fixedRate/zone 等），与原生注解明确区分
+  - `@KsetTaskLock`：独立声明的集群唯一运行锁，可叠加在调度或任意方法上；抢不到锁的实例跳过执行
+  - SQL 锁表 `t_kset_schedule_lock`：UPDATE 过期抢占 + INSERT 兜底 + fencing token 自增，时间以数据库为准防时钟漂移
+  - 启动自动识别数据库方言（PostgreSQL/MySQL/MariaDB）并自动建表，零配置；无 DataSource 时告警降级为单机语义
+  - 配置：`kset.scheduler.lock.enabled/table-name/at-most-for/auto-create-table`
+
+### 升级指引
+
+1. parent 升级为 `1.0.13`，按需引入 `kset-starter-schedule`
+2. 集群单活的定时任务：原生 `@Scheduled` 换为 `@KsetScheduled` 并叠加 `@KsetTaskLock(atMostFor=...)`（atMostFor 须大于任务最长执行时间）
+3. 每实例都要执行的任务（本地缓存刷新、实例级巡检）保持原生 `@Scheduled` 不动
+
 ## [v1.0.12] - 2026-08-29
 
 > 统一优雅启停、健康状态接入、依赖瘦身。**包含需要注意的行为变化，升级前请阅读"行为变化"小节。**
