@@ -60,6 +60,8 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 
 ## 文档
 
+- [版本发布说明（CHANGELOG）](CHANGELOG.md)
+
 使用说明按场景放在 [docs/README.md](docs/README.md)。模块原理与配置项：
 
 | 文档 | 说明 |
