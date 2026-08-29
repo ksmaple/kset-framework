@@ -2,7 +2,6 @@ package com.kset.common.monitor;
 
 import com.kset.common.context.KsetContext;
 import com.kset.common.context.KsetContextKeys;
-import com.kset.common.monitor.internal.NoOpMonitorFacade;
 import com.kset.common.monitor.facade.MonitorFacade;
 import com.kset.common.monitor.facade.MetricKind;
 import com.kset.common.monitor.facade.MonitorStatus;
@@ -14,6 +13,7 @@ import com.kset.common.monitor.reporter.NoOpMetricAggregator;
 import com.kset.common.monitor.sampler.RateSampler;
 import com.kset.common.trace.TraceHeaders;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -27,10 +27,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MonitorFacadeTest {
 
+    private MonitorFacade originalFacade;
+
+    @BeforeEach
+    void saveFacade() {
+        originalFacade = Monitor.facade();
+    }
+
     @AfterEach
     void resetFacade() {
         Monitor.clear();
-        Monitor.install(new NoOpMonitorFacade());
+        Monitor.install(originalFacade);
     }
 
     @Test
