@@ -97,6 +97,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | `kset-starter-sentinel` | 限流/熔断/热点规则从 Nacos 加载 | SCA Sentinel |
 | `kset-starter-dubbo` | 标签路由、路由冷启动拉取（**不依赖** nacos starter；Trace 见 monitor） | Apache Dubbo + Nacos Config |
 | `kset-starter-gateway` | 动态路由 diff、灰度、可选鉴权、Gateway Sentinel（Trace 见 monitor） | Spring Cloud Gateway |
+| `kset-starter-schedule` | `@KsetScheduled` 继承原生调度 + `@KsetTaskLock` 唯一运行锁（SQL 锁表，启动自动识别方言建表） | Spring Scheduling |
 | `kset-starter-mq` | RocketMQ 组件依赖入口；事件门面默认在 `kset-common` 提供 Spring 本地实现 | RocketMQ V5 Client Spring Boot Starter |
 
 ## 优雅启停
@@ -172,6 +173,7 @@ KsetLifecycleHookAdapter localCacheShutdown() {
 | Web | `kset-starter-web` | `ApiResponse`、`@OpLog`、Controller | 提供 Web 基础能力与统一响应 |
 | Auth | `kset-starter-auth` | `LoginContext`、`@RequireLogin`、`@RequirePermission`、`LoginSessionStore` | 默认 `app + session + X-Session-Token`；`web.mode` 默认 `redis` |
 | 监控 | `kset-starter-monitor` | `Monitor`、`@Monitored`、Trace Filter | 默认 log backend；CAT 需显式配置 |
+| 定时任务 | `kset-starter-schedule` | `@KsetScheduled`、`@KsetTaskLock` | 唯一运行锁走 SQL 锁表 `t_kset_schedule_lock`，零配置自动识别 |
 | 数据源公共能力 | `kset-starter-datasource` | MyBatis-Plus Mapper / Entity | 配置 `spring.datasource.*`、`kset.datasource.auto-fill` |
 | 多级缓存 | `kset-starter-cache` | `@KsetCacheable`、`KsetCache`、`KsetCacheFacade` | L1 Caffeine；L2 通过 SPI 接入 |
 | Redis L2 适配 | `kset-starter-redis` + `kset-starter-cache` | `RedisKsetCacheStore` 自动注册 | 引入 Redis 后为 cache 组件提供 L2 |

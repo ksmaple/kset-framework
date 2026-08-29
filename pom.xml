@@ -43,6 +43,7 @@
         <module>kset-starter-mq</module>
         <module>kset-starter-gateway</module>
         <module>kset-starter-monitor</module>
+        <module>kset-starter-schedule</module>
     </modules>
 
     <build>

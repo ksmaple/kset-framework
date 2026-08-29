@@ -151,6 +151,11 @@
                 <artifactId>kset-starter-monitor</artifactId>
                 <version>${kset-framework.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.kset</groupId>
+                <artifactId>kset-starter-schedule</artifactId>
+                <version>${kset-framework.version}</version>
+            </dependency>
 
             <!-- Spring Cloud BOM -->
             <dependency>
