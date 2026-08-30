@@ -2,7 +2,7 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
-## [v1.0.16] - 未发布
+## [v1.0.16] - 2026-08-30
 
 ### 新增
 
