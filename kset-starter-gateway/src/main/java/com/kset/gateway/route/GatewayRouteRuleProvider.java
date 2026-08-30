@@ -7,7 +7,7 @@ import com.kset.common.utils.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
 import org.springframework.cloud.gateway.route.RouteDefinition;
-import org.springframework.cloud.gateway.route.RouteDefinitionWriter;
+import org.springframework.cloud.gateway.route.RouteDefinitionRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import reactor.core.publisher.Mono;
 
@@ -24,13 +24,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class GatewayRouteRuleProvider implements CloudRuleProvider {
 
-    private final RouteDefinitionWriter routeDefinitionWriter;
+    private final RouteDefinitionRepository routeDefinitionRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final Set<String> managedRouteIds = ConcurrentHashMap.newKeySet();
 
-    public GatewayRouteRuleProvider(RouteDefinitionWriter routeDefinitionWriter,
+    public GatewayRouteRuleProvider(RouteDefinitionRepository routeDefinitionRepository,
                                     ApplicationEventPublisher eventPublisher) {
-        this.routeDefinitionWriter = routeDefinitionWriter;
+        this.routeDefinitionRepository = routeDefinitionRepository;
         this.eventPublisher = eventPublisher;
     }
 
@@ -59,7 +59,7 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
                 newIds.add(def.getId());
             }
             removeStaleRoutes(newIds);
-            definitions.forEach(def -> routeDefinitionWriter.save(Mono.just(def)).subscribe());
+            definitions.forEach(def -> saveRoute(def));
             managedRouteIds.clear();
             managedRouteIds.addAll(newIds);
             eventPublisher.publishEvent(new RefreshRoutesEvent(this));
@@ -69,17 +69,40 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
         }
     }
 
+    /**
+     * 写入单条路由：错误进入日志而不是裸 subscribe 静默吞掉。
+     */
+    private void saveRoute(RouteDefinition definition) {
+        routeDefinitionRepository.save(Mono.just(definition))
+                .subscribe(null, error -> log.warn("Failed to save gateway route [{}]: {}", definition.getId(), error.getMessage()));
+    }
+
+    private void deleteRoute(String routeId) {
+        routeDefinitionRepository.delete(Mono.just(routeId))
+                .subscribe(null, error -> log.warn("Failed to delete gateway route [{}]: {}", routeId, error.getMessage()));
+    }
+
+    /**
+     * 保留原因（feature-key=gateway-route-repository, change-id=gateway-route-repository-v1）：
+     * 原 RouteDefinitionWriter 已废弃且裸 subscribe 无错误处理，迁移 RouteDefinitionRepository 后仅用于回滚对照。
+     */
+    @SuppressWarnings("unused")
+    private void saveRouteForRollback(org.springframework.cloud.gateway.route.RouteDefinitionWriter writer,
+                                      RouteDefinition definition) {
+        writer.save(Mono.just(definition)).subscribe();
+    }
+
     private void removeStaleRoutes(Set<String> newIds) {
         Set<String> toRemove = new HashSet<>(managedRouteIds);
         toRemove.removeAll(newIds);
         for (String routeId : toRemove) {
-            routeDefinitionWriter.delete(Mono.just(routeId)).subscribe();
+            deleteRoute(routeId);
         }
     }
 
     private void removeManagedRoutes() {
         for (String routeId : new HashSet<>(managedRouteIds)) {
-            routeDefinitionWriter.delete(Mono.just(routeId)).subscribe();
+            deleteRoute(routeId);
         }
         managedRouteIds.clear();
         eventPublisher.publishEvent(new RefreshRoutesEvent(this));

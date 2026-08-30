@@ -30,7 +30,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
-import org.springframework.cloud.gateway.route.RouteDefinitionWriter;
+import org.springframework.cloud.gateway.route.RouteDefinitionRepository;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
@@ -82,9 +82,9 @@ public class KsetGatewayAutoConfiguration {
     }
 
     @Bean
-    public GatewayRouteRuleProvider gatewayRouteRuleProvider(RouteDefinitionWriter routeDefinitionWriter,
+    public GatewayRouteRuleProvider gatewayRouteRuleProvider(RouteDefinitionRepository routeDefinitionRepository,
                                                              ApplicationEventPublisher eventPublisher) {
-        return new GatewayRouteRuleProvider(routeDefinitionWriter, eventPublisher);
+        return new GatewayRouteRuleProvider(routeDefinitionRepository, eventPublisher);
     }
 
     @Bean

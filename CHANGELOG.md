@@ -2,6 +2,16 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [v1.0.16] - 未发布
+
+### 新增
+
+- **全模块配置元数据自动生成**：`kset-boot-parent` 注解处理器链新增 `spring-boot-configuration-processor`，全部 `kset.*` 配置项编译期自动生成 `spring-configuration-metadata.json`，业务方 IDE 写 yml 时有自动补全与默认值提示（注意：升级 Boot 父版本时需同步该处理器版本）
+
+### 变更
+
+- `GatewayRouteRuleProvider`：废弃的 `RouteDefinitionWriter` 迁移至 `RouteDefinitionRepository`（SCG 4.x 继任 API）；路由写入/删除的裸 `subscribe()` 增加错误日志，不再静默吞错
+
 ## [v1.0.15] - 2026-08-29
 
 ### 变更（架构解耦，配置键全部不变）

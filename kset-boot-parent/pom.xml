@@ -523,6 +523,12 @@
                                 <artifactId>lombok-mapstruct-binding</artifactId>
                                 <version>0.2.0</version>
                             </path>
+                            <!-- 为全部模块的 @ConfigurationProperties 自动生成配置元数据（业务 IDE 自动补全）。版本与 <parent> 的 spring-boot-starter-parent 保持同步 -->
+                            <path>
+                                <groupId>org.springframework.boot</groupId>
+                                <artifactId>spring-boot-configuration-processor</artifactId>
+                                <version>3.5.14</version>
+                            </path>
                         </annotationProcessorPaths>
                     </configuration>
                 </plugin>
