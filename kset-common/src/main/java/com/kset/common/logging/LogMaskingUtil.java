@@ -63,8 +63,9 @@ public class LogMaskingUtil {
 
     /**
      * 保留原因：字段名用 contains 子串匹配，且只处理文本节点，数值与数组标量会漏脱敏。
+     * （deprecation：内部使用的 ObjectNode.fields() 已过时，回滚恢复时可改为 properties()）
      */
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "deprecation"})
     private static void maskNodeForRollback(JsonNode node) {
         if (node.isObject()) {
             ObjectNode obj = (ObjectNode) node;

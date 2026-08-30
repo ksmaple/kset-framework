@@ -10,7 +10,13 @@
 
 ### 变更
 
-- `GatewayRouteRuleProvider`：废弃的 `RouteDefinitionWriter` 迁移至 `RouteDefinitionRepository`（SCG 4.x 继任 API）；路由写入/删除的裸 `subscribe()` 增加错误日志，不再静默吞错
+- `GatewayRouteRuleProvider`：`RouteDefinitionWriter` 迁移至 `RouteDefinitionRepository`；路由写入/删除的裸 `subscribe()` 增加错误日志，不再静默吞错
+- `KsetRedis` 静态门面的 `hGetAll`/`sMembers` 同步标记 `@Deprecated`（与接口层弃用语义对齐，消除门面自调用警告）
+- `LogMaskingUtil` 回滚保留方法对 Jackson `ObjectNode.fields()` 弃用警告显式抑制并注释说明
+
+### 备注
+
+- 构建日志中 `GatewayRouteRuleProvider.java 使用或覆盖了已过时的 API` 为 Maven 并行构建的既有提示噪音：单文件 javac `-Xlint:deprecation` 验证该文件无任何过时 API 使用。
 
 ## [v1.0.15] - 2026-08-29
 

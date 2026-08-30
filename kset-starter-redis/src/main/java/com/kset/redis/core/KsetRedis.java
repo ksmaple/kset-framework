@@ -144,6 +144,10 @@ public final class KsetRedis {
         ops().hSet(key, field, value);
     }
 
+    /**
+     * 大 Hash 慎用，优先流式 {@code hScan}。
+     */
+    @Deprecated
     public static Map<Object, Object> hGetAll(String key) {
         return ops().hGetAll(key);
     }
@@ -164,6 +168,10 @@ public final class KsetRedis {
         return ops().sAdd(key, values);
     }
 
+    /**
+     * 大 Set 慎用，优先流式 {@code sScan}。
+     */
+    @Deprecated
     public static Set<Object> sMembers(String key) {
         return ops().sMembers(key);
     }
