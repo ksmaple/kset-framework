@@ -2,6 +2,22 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [v1.0.14] - 2026-08-29
+
+### 变更
+
+- `kset-starter-schedule` 移除未使用的 `kset-common` 依赖，成为零内部依赖的最轻 starter
+- 静态门面停机解绑：新增 `KsetCache.unbind()` / `Monitor.uninstall()`；`KsetCacheBootstrap` / `KsetRedisBootstrap` / `MonitorFacadeInstaller` 在停机时解除静态绑定，避免同 JVM 重启（DevTools/测试上下文）串状态
+- EnvPostProcessor 注册机制统一：datasource/monitor 从老式 `META-INF/spring.factories` 迁到新式 `META-INF/spring/` 文件，全框架一致
+
+### 修复
+
+- `MonitorFacadeTest` 测试隔离：原 `@AfterEach` 安装 NoOp 门面不还原，污染同 JVM 后续测试（KsetHttpTest/ParallelTest）；改为保存/还原原门面
+
+### 升级指引
+
+无迁移事项；行为变化仅限停机路径（更干净）。
+
 ## [v1.0.13] - 2026-08-29
 
 ### 新增
