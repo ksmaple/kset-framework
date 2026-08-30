@@ -22,10 +22,11 @@ KSet 公共框架 — 统一版本管理、按能力拆分的 Starter、云服�
 kset-framework/
 ├── kset-boot-parent/     # 版本 BOM（Boot 3.5.14 / SC 2025.0.2 / SCA 2025.0.0.0 / Dubbo 3.3.6）
 ├── kset-common/          # 公共工具（异常、日志、监控门面 API、DateHelper、HTTP、线程池、Parallel、Retryer）
-├── kset-cloud/           # 云服务规范（kset.cloud.*、SPI）
+├── kset-cloud/           # 云服务规则层（kset.cloud.*、SPI、灰度 LB）
 ├── kset-starter-web/     # Web + 统一异常
 ├── kset-starter-auth/    # 登录态 + 多套鉴权 + 上下文透传
 ├── kset-starter-monitor/ # 全链路监控（TraceId/灰度/线程池 MDC，引入即生效）
+├── kset-starter-schedule/# 定时任务唯一运行锁（@KsetScheduled/@KsetTaskLock，SQL 锁表）
 ├── kset-starter-datasource/  # JDBC + MyBatis-Plus + dynamic-datasource
 ├── kset-starter-cache/   # 多级缓存门面（L1 Caffeine，L2 SPI）
 ├── kset-starter-redis/   # Spring Data Redis (Lettuce)
