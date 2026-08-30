@@ -1,6 +1,5 @@
 package com.kset.common.monitor.dubbo;
 
-import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.common.monitor.Monitor;
 import com.kset.common.monitor.TraceSnapshot;
 import com.kset.common.monitor.facade.MonitorStatus;
@@ -20,10 +19,12 @@ import org.apache.dubbo.rpc.RpcException;
  */
 public class DubboTraceFilter implements Filter {
 
-    private final KsetCloudProperties properties;
+    private final boolean tracePropagationEnabled;
+    private final String defaultGrayTag;
 
-    public DubboTraceFilter(KsetCloudProperties properties) {
-        this.properties = properties;
+    public DubboTraceFilter(boolean tracePropagationEnabled, String defaultGrayTag) {
+        this.tracePropagationEnabled = tracePropagationEnabled;
+        this.defaultGrayTag = defaultGrayTag;
     }
 
     @Override
@@ -31,9 +32,8 @@ public class DubboTraceFilter implements Filter {
         RpcContext context = RpcContext.getServiceContext();
         TraceSnapshot previous = Monitor.capture();
         String side = resolveSide(context);
-        boolean tracePropagationEnabled = properties.getDubbo().isTracePropagationEnabled();
         if (tracePropagationEnabled) {
-            String defaultGray = properties.getDubbo().getDefaultGrayTag();
+            String defaultGray = defaultGrayTag;
             if ("consumer".equals(side)) {
                 Monitor.bindDubboConsumer(new DubboInvocationAttachments(invocation, false), defaultGray);
             } else if ("provider".equals(side)) {

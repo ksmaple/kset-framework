@@ -1,6 +1,6 @@
 package com.kset.redis.core;
 
-import com.kset.cloud.config.KsetRedisProperties;
+import com.kset.redis.config.KsetRedisProperties;
 
 import java.time.Duration;
 

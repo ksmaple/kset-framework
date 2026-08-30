@@ -1,6 +1,7 @@
 package com.kset.common.monitor.autoconfigure;
 
-import com.kset.cloud.config.KsetCloudProperties;
+import com.kset.common.monitor.config.KsetMonitorCloudCompat;
+import com.kset.common.monitor.config.KsetMonitorProperties;
 import com.kset.common.monitor.interceptor.MvcMonitorInterceptor;
 import com.kset.common.monitor.web.GrayTagServletFilter;
 import com.kset.common.monitor.web.TraceIdFilter;
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.Ordered;
+import org.springframework.core.env.Environment;
 
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
@@ -43,8 +45,8 @@ public class KsetMonitorServletAutoConfiguration {
     @Bean
     @ConditionalOnProperty(prefix = "kset.monitor.servlet", name = "gray-tag-enabled", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
-    public GrayTagServletFilter grayTagServletFilter(KsetCloudProperties cloudProperties) {
-        return new GrayTagServletFilter(cloudProperties);
+    public GrayTagServletFilter grayTagServletFilter(KsetMonitorProperties properties, Environment environment) {
+        return new GrayTagServletFilter(KsetMonitorCloudCompat.defaultGrayTag(properties, environment));
     }
 
     @Bean

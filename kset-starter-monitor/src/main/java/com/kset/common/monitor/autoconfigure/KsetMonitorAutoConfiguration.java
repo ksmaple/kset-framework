@@ -1,6 +1,5 @@
 package com.kset.common.monitor.autoconfigure;
 
-import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.common.monitor.config.KsetMonitorProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +13,7 @@ import org.springframework.context.annotation.Import;
 
 @AutoConfiguration
 @ConditionalOnProperty(prefix = "kset.monitor", name = "enabled", havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties({KsetMonitorProperties.class, KsetCloudProperties.class})
+@EnableConfigurationProperties(KsetMonitorProperties.class)
 @Import({
         KsetMonitorFacadeAutoConfiguration.class,
         MonitorAutoConfiguration.class,

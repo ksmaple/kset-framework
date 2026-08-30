@@ -2,7 +2,7 @@ package com.kset.datasource.autoconfigure;
 
 import com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration;
 import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
-import com.kset.cloud.config.KsetDatasourceProperties;
+import com.kset.datasource.config.KsetDatasourceProperties;
 import com.kset.datasource.handler.KsetMetaObjectHandler;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;

@@ -2,6 +2,19 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [v1.0.15] - 未发布
+
+### 变更（架构解耦，配置键全部不变）
+
+- **cloud 配置载体下沉**：`KsetRedisProperties` 移至 `kset-starter-redis`（`com.kset.redis.config`）、`KsetDatasourceProperties` 移至 `kset-starter-datasource`（`com.kset.datasource.config`）；cloud 中旧类标记 `@Deprecated` 保留兼容，**配置键 `kset.redis.*` / `kset.datasource.*` 完全不变**
+- **monitor 解除对 kset-cloud 的依赖**：灰度/链路配置自持——`kset.monitor.dubbo.trace-propagation-enabled`、`kset.monitor.dubbo.default-gray-tag`、`kset.monitor.gateway.trace-header`，未配置时自动回退读取 `kset.cloud.*` 旧键（行为兼容）
+- redis / datasource / monitor 三个 starter 不再依赖 kset-cloud；cloud 收敛为纯云规则层（dubbo/gateway/nacos/sentinel 使用）
+
+### 升级指引
+
+- 配置无需任何修改（新旧键均生效，自持键优先）
+- 极少数直接 import `com.kset.cloud.config.KsetRedisProperties` / `KsetDatasourceProperties` 的代码建议改引新包（旧类仍编译可用）
+
 ## [v1.0.14] - 2026-08-29
 
 ### 变更

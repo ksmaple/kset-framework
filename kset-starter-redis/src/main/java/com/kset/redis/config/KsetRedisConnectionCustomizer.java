@@ -1,6 +1,6 @@
 package com.kset.redis.config;
 
-import com.kset.cloud.config.KsetRedisProperties;
+import com.kset.redis.config.KsetRedisProperties;
 import org.springframework.data.redis.connection.RedisClusterConfiguration;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;

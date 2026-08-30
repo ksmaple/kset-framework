@@ -22,10 +22,6 @@
         </dependency>
         <dependency>
             <groupId>com.kset</groupId>
-            <artifactId>kset-cloud</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.kset</groupId>
             <artifactId>kset-starter-cache</artifactId>
             <optional>true</optional>
         </dependency>

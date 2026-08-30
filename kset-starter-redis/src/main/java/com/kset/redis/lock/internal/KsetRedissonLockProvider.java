@@ -1,6 +1,6 @@
 package com.kset.redis.lock.internal;
 
-import com.kset.cloud.config.KsetRedisProperties;
+import com.kset.redis.config.KsetRedisProperties;
 import com.kset.redis.lock.KsetRedisLock;
 import com.kset.redis.lock.KsetRedisLockException;
 import com.kset.redis.lock.KsetRedisLockInterruptedException;

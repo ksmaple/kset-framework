@@ -148,6 +148,10 @@ public class KsetMonitorProperties {
 
     public static class Dubbo {
         private boolean enabled = true;
+        /** Dubbo 链路透传开关；未设置时回退兼容键 {@code kset.cloud.dubbo.trace-propagation-enabled} */
+        private Boolean tracePropagationEnabled;
+        /** 请求未携带灰度标签时的兜底标签；未设置时回退兼容键 {@code kset.cloud.dubbo.default-gray-tag} */
+        private String defaultGrayTag;
 
         public boolean isEnabled() {
             return enabled;
@@ -156,11 +160,29 @@ public class KsetMonitorProperties {
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
         }
+
+        public Boolean getTracePropagationEnabled() {
+            return tracePropagationEnabled;
+        }
+
+        public void setTracePropagationEnabled(Boolean tracePropagationEnabled) {
+            this.tracePropagationEnabled = tracePropagationEnabled;
+        }
+
+        public String getDefaultGrayTag() {
+            return defaultGrayTag;
+        }
+
+        public void setDefaultGrayTag(String defaultGrayTag) {
+            this.defaultGrayTag = defaultGrayTag;
+        }
     }
 
     public static class Gateway {
         private boolean enabled = true;
         private boolean traceEnabled = true;
+        /** 网关透传的 trace 头名；未设置时回退兼容键 {@code kset.cloud.gateway.trace-header} */
+        private String traceHeader;
 
         public boolean isEnabled() {
             return enabled;
@@ -176,6 +198,14 @@ public class KsetMonitorProperties {
 
         public void setTraceEnabled(boolean traceEnabled) {
             this.traceEnabled = traceEnabled;
+        }
+
+        public String getTraceHeader() {
+            return traceHeader;
+        }
+
+        public void setTraceHeader(String traceHeader) {
+            this.traceHeader = traceHeader;
         }
     }
 

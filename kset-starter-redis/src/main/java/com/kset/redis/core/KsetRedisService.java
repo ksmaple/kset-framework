@@ -27,14 +27,14 @@ public class KsetRedisService implements KsetRedisOperations {
 
     public static KsetRedisService from(RedisTemplate<String, Object> template) {
         return from(KsetRedisRegistry.PRIMARY_NAME, template,
-                new KsetRedisTtlPolicy(new com.kset.cloud.config.KsetRedisProperties()),
-                new KsetRedisStreamSettings(new com.kset.cloud.config.KsetRedisProperties()));
+                new KsetRedisTtlPolicy(new com.kset.redis.config.KsetRedisProperties()),
+                new KsetRedisStreamSettings(new com.kset.redis.config.KsetRedisProperties()));
     }
 
     public static KsetRedisService from(String name, RedisTemplate<String, Object> template) {
         return from(name, template,
-                new KsetRedisTtlPolicy(new com.kset.cloud.config.KsetRedisProperties()),
-                new KsetRedisStreamSettings(new com.kset.cloud.config.KsetRedisProperties()));
+                new KsetRedisTtlPolicy(new com.kset.redis.config.KsetRedisProperties()),
+                new KsetRedisStreamSettings(new com.kset.redis.config.KsetRedisProperties()));
     }
 
     public static KsetRedisService from(RedisTemplate<String, Object> template,

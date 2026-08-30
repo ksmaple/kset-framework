@@ -1,4 +1,4 @@
-package com.kset.cloud.config;
+package com.kset.datasource.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -7,11 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * <p>MyBatis-Plus、Flyway 和 dynamic-datasource 均优先使用开源组件原生配置：
  * {@code mybatis-plus.*}、{@code spring.flyway.*}、{@code spring.datasource.dynamic.*}。</p>
- *
- * @deprecated 1.0.15 起下沉至 {@code kset-starter-datasource} 的 {@code com.kset.datasource.config.KsetDatasourceProperties}，
- * 本类仅为兼容保留，配置键 {@code kset.datasource.*} 不变；将在后续版本移除。
  */
-@Deprecated(since = "1.0.15", forRemoval = true)
 @ConfigurationProperties(prefix = "kset.datasource")
 public class KsetDatasourceProperties {
 

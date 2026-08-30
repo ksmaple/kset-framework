@@ -39,7 +39,7 @@ class KsetRedisTemplateOperationsTest {
     private KsetRedisTemplateOperations operations;
     private final KsetRedisTtlPolicy ttlPolicy = new KsetRedisTtlPolicy(Duration.ofMinutes(30), null);
     private final KsetRedisStreamSettings streamSettings =
-            new KsetRedisStreamSettings(new com.kset.cloud.config.KsetRedisProperties());
+            new KsetRedisStreamSettings(new com.kset.redis.config.KsetRedisProperties());
 
     @BeforeEach
     void setUp() {

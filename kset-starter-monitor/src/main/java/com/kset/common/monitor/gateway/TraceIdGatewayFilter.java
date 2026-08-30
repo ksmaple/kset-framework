@@ -1,6 +1,5 @@
 package com.kset.common.monitor.gateway;
 
-import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.common.monitor.GatewayTraceBinding;
 import com.kset.common.monitor.Monitor;
 import com.kset.common.monitor.TraceSnapshot;
@@ -21,15 +20,15 @@ import reactor.util.context.Context;
  */
 public class TraceIdGatewayFilter implements GlobalFilter, Ordered {
 
-    private final KsetCloudProperties properties;
+    private final String traceHeader;
 
-    public TraceIdGatewayFilter(KsetCloudProperties properties) {
-        this.properties = properties;
+    public TraceIdGatewayFilter(String traceHeader) {
+        this.traceHeader = traceHeader;
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        String traceHeader = properties.getGateway().getTraceHeader();
+        String traceHeader = this.traceHeader;
         ServerHttpRequest request = exchange.getRequest();
         TraceSnapshot previous = Monitor.capture();
         String incomingTraceId = request.getHeaders().getFirst(traceHeader);

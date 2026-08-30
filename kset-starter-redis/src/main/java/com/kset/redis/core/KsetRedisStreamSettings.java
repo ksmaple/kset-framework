@@ -1,6 +1,6 @@
 package com.kset.redis.core;
 
-import com.kset.cloud.config.KsetRedisProperties;
+import com.kset.redis.config.KsetRedisProperties;
 
 /**
  * 高危 Redis 操作的流式/分批参数（SCAN、UNLINK、分块 MGET 等）。

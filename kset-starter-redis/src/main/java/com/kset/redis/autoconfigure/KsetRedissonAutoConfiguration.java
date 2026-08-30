@@ -1,6 +1,6 @@
 package com.kset.redis.autoconfigure;
 
-import com.kset.cloud.config.KsetRedisProperties;
+import com.kset.redis.config.KsetRedisProperties;
 import com.kset.redis.config.KsetRedissonClientFactory;
 import com.kset.redis.core.KsetRedisTtlPolicy;
 import com.kset.redis.lock.KsetRedisLockExecutor;

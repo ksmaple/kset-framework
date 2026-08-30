@@ -1,7 +1,7 @@
 package com.kset.redis.autoconfigure;
 
 import com.kset.redis.config.KsetRedisTemplateConfiguration;
-import com.kset.cloud.config.KsetRedisProperties;
+import com.kset.redis.config.KsetRedisProperties;
 import com.kset.redis.config.KsetRedisSerializerConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;

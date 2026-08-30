@@ -1,6 +1,6 @@
 package com.kset.redis.autoconfigure;
 
-import com.kset.cloud.config.KsetRedisProperties;
+import com.kset.redis.config.KsetRedisProperties;
 import com.kset.redis.config.KsetRedisConnectionFactoryBuilder;
 import com.kset.redis.config.KsetRedisConnectionCustomizer;
 import com.kset.redis.config.KsetRedisSerializerConfiguration;

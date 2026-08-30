@@ -1,4 +1,4 @@
-package com.kset.cloud.config;
+package com.kset.redis.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -8,12 +8,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Redis 约定配置。
- *
- * @deprecated 1.0.15 起下沉至 {@code kset-starter-redis} 的 {@code com.kset.redis.config.KsetRedisProperties}，
- * 本类仅为兼容保留，配置键 {@code kset.redis.*} 不变；将在后续版本移除。
+ * Redis 约定配置（本 starter 自持；原寄放于 kset-cloud，1.0.15 起下沉）。
  */
-@Deprecated(since = "1.0.15", forRemoval = true)
 @ConfigurationProperties(prefix = "kset.redis")
 public class KsetRedisProperties {
 

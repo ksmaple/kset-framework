@@ -1,6 +1,5 @@
 package com.kset.common.monitor.web;
 
-import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.common.monitor.Monitor;
 import com.kset.common.trace.TraceHeaders;
 import jakarta.servlet.Filter;
@@ -17,10 +16,10 @@ import java.io.IOException;
  */
 public class GrayTagServletFilter implements Filter {
 
-    private final KsetCloudProperties cloudProperties;
+    private final String defaultGrayTag;
 
-    public GrayTagServletFilter(KsetCloudProperties cloudProperties) {
-        this.cloudProperties = cloudProperties;
+    public GrayTagServletFilter(String defaultGrayTag) {
+        this.defaultGrayTag = defaultGrayTag;
     }
 
     @Override
@@ -28,7 +27,7 @@ public class GrayTagServletFilter implements Filter {
             throws IOException, ServletException {
         HttpServletRequest httpRequest = (HttpServletRequest) request;
         String grayTag = httpRequest.getHeader(TraceHeaders.GRAY_TAG_HEADER);
-        Monitor.bindHttpGrayTag(grayTag, cloudProperties.getDubbo().getDefaultGrayTag());
+        Monitor.bindHttpGrayTag(grayTag, defaultGrayTag);
         try {
             chain.doFilter(request, response);
         } finally {
