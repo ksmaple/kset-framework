@@ -13,6 +13,8 @@
 - `GatewayRouteRuleProvider`：`RouteDefinitionWriter` 迁移至 `RouteDefinitionRepository`；路由写入/删除的裸 `subscribe()` 增加错误日志，不再静默吞错
 - `KsetRedis` 静态门面的 `hGetAll`/`sMembers` 同步标记 `@Deprecated`（与接口层弃用语义对齐，消除门面自调用警告）
 - `LogMaskingUtil` 回滚保留方法对 Jackson `ObjectNode.fields()` 弃用警告显式抑制并注释说明
+- `JdbcTaskLockProvider` 入参防御：空锁名 / 非正 `atMostFor` 直接 `IllegalArgumentException`（否则唯一运行语义静默失效）
+- 新增 `KsetTaskLockAnnotationValidator`：启动期校验 `@KsetTaskLock` 的 `atMostFor`/`atLeastFor` 时长格式，非法值 fail-fast 而不是任务触发时才报错
 
 ### 备注
 

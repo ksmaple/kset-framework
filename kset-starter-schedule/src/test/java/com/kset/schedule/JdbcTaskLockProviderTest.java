@@ -102,6 +102,16 @@ class JdbcTaskLockProviderTest {
         org.mockito.Mockito.verify(statement).execute(contains("ENGINE=InnoDB"));
     }
 
+    @Test
+    void rejectsBlankNameAndNonPositiveAtMostFor() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> provider.tryLock(" ", Duration.ofMinutes(1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> provider.tryLock("taskA", Duration.ZERO))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> provider.tryLock("taskA", Duration.ofSeconds(-1)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     private void mockDbNow() {
         when(jdbcTemplate.queryForObject(anyString(), eq(Timestamp.class)))
                 .thenReturn(new Timestamp(System.currentTimeMillis()));

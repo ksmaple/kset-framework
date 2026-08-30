@@ -2,6 +2,7 @@ package com.kset.schedule.autoconfigure;
 
 import com.kset.schedule.aop.KsetTaskLockAspect;
 import com.kset.schedule.config.KsetScheduleProperties;
+import com.kset.schedule.config.KsetTaskLockAnnotationValidator;
 import com.kset.schedule.lock.JdbcTaskLockProvider;
 import com.kset.schedule.lock.TaskLockProvider;
 import org.slf4j.Logger;
@@ -48,6 +49,16 @@ public class KsetScheduleAutoConfiguration {
                                                  KsetScheduleProperties properties) {
         log.info("[kset-schedule] 唯一运行锁已启用（SQL 锁表）");
         return new KsetTaskLockAspect(taskLockProvider, properties);
+    }
+
+    /**
+     * 启动期校验 @KsetTaskLock 注解的时长格式，非法值 fail-fast。
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public KsetTaskLockAnnotationValidator ksetTaskLockAnnotationValidator(
+            org.springframework.context.ApplicationContext applicationContext) {
+        return new KsetTaskLockAnnotationValidator(applicationContext);
     }
 
     /**

@@ -93,6 +93,7 @@ public class JdbcTaskLockProvider implements TaskLockProvider {
 
     @Override
     public boolean tryLock(String name, Duration atMostFor) {
+        validateLockRequest(name, atMostFor);
         Instant now = dbNow();
         Instant lockUntil = now.plus(atMostFor);
         int updated = jdbcTemplate.update(
@@ -122,6 +123,19 @@ public class JdbcTaskLockProvider implements TaskLockProvider {
         jdbcTemplate.update(
                 "UPDATE " + tableName + " SET lock_until = ? WHERE name = ? AND locked_by = ?",
                 Timestamp.from(keepUntil), name, instanceId);
+    }
+
+    /**
+     * 入参防御：空锁名会直接打到 DB；atMostFor 非正数会让锁立即过期，唯一运行语义静默失效。
+     */
+    private static void validateLockRequest(String name, Duration atMostFor) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("lock name must not be blank");
+        }
+        if (atMostFor == null || atMostFor.isZero() || atMostFor.isNegative()) {
+            throw new IllegalArgumentException(
+                    "atMostFor must be positive, otherwise the lock expires immediately and uniqueness is broken: " + atMostFor);
+        }
     }
 
     /**
