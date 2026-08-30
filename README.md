@@ -14,7 +14,7 @@ KSet 公共框架 — 统一版本管理、按能力拆分的 Starter、云服�
 
 > 自 `kset-comm` 更名为 `kset-framework`：根聚合 `artifactId`、BOM `kset-boot-parent`、Starter `kset-starter-*`；子模块 `kset-common` 名称不变。
 
-当前构件版本以 `kset-boot-parent` 的 `<version>` 为准（现为 `1.0.15-SNAPSHOT`）。发布到仓库后去掉 `-SNAPSHOT`。
+当前构件版本以 `kset-boot-parent` 的 `<version>` 为准（现为 `1.0.16-SNAPSHOT`）。发布到仓库后去掉 `-SNAPSHOT`。
 
 ## 模块结构
 
@@ -274,7 +274,7 @@ mvn dependency:tree -Dverbose | findstr "omitted for conflict"
 <parent>
     <groupId>com.kset</groupId>
     <artifactId>kset-boot-parent</artifactId>
-    <version>1.0.15-SNAPSHOT</version>
+    <version>1.0.16-SNAPSHOT</version>
 </parent>
 ```
 
