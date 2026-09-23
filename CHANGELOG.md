@@ -2,6 +2,12 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [Unreleased] - v1.0.17-SNAPSHOT
+
+### 新增
+
+- **kset-starter-agent**：Agent 编排能力公共组件（自 kset-rag `kset-rag-agent` 模块同步核心代码，`com.kset.rag.*` → `com.kset.agent.*`）。包含 ReAct 编排执行器、工具调度/注册、工作流引擎（JDBC/Redis 状态存储、检查点恢复、多实例租约）、代码沙箱、护栏/成本/输出转换扩展点；业务耦合点（模型调用、运行配置、文案、权限、项目/仓库/文档访问、计价、安全上下文）全部抽象为 `com.kset.agent.spi` 端口并提供可覆盖默认实现。宿主应用必须提供 `AgentChatModelPort`、`AiModelProvider`、`WorkflowTaskRepository` 与 `agentToolTaskExecutor` 线程池，详见模块 README
+
 ## [v1.0.16] - 2026-08-30
 
 ### 新增
