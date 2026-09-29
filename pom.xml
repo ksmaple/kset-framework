@@ -44,7 +44,7 @@
         <module>kset-starter-gateway</module>
         <module>kset-starter-monitor</module>
         <module>kset-starter-schedule</module>
-        <module>kset-starter-agent</module>
+        <module>kset-agent-core</module>
     </modules>
 
     <build>

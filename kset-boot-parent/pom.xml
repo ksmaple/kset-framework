@@ -158,7 +158,7 @@
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
-                <artifactId>kset-starter-agent</artifactId>
+                <artifactId>kset-agent-core</artifactId>
                 <version>${kset-framework.version}</version>
             </dependency>
 

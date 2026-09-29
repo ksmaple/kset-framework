@@ -35,7 +35,7 @@ kset-framework/
 ├── kset-starter-dubbo/   # Dubbo RPC + 标签路由
 ├── kset-starter-gateway/ # Spring Cloud Gateway + 动态路由 + Sentinel
 ├── kset-starter-mq/      # RocketMQ 事件门面实现 + topic/tag 约定
-└── kset-starter-agent/   # Agent 编排（ReAct 执行器、工具调度、工作流引擎、扩展 SPI）
+└── kset-agent-core/      # Agent 编排（ReAct 执行器、工具调度、工作流引擎、扩展 SPI）
 ```
 
 ## 包名与模块目录约定
@@ -57,7 +57,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | `kset-starter-dubbo` | `com.kset.dubbo` | Dubbo 治理与路由 |
 | `kset-starter-gateway` | `com.kset.gateway` | Gateway 过滤器与动态路由 |
 | `kset-starter-mq` | `com.kset.mq` | RocketMQ 事件门面实现与 topic/tag 约定 |
-| `kset-starter-agent` | `com.kset.agent` | Agent 编排核心、工具/工作流领域、SPI 端口 |
+| `kset-agent-core` | `com.kset.agent.core` | Agent 编排核心、工具/工作流领域、SPI 端口 |
 
 跨模块依赖时，Starter 实现类引用 `kset-cloud` 中的共享 API（如 `com.kset.cloud.spi.CloudRuleProvider`、`com.kset.cloud.nacos.NacosConfigConvention`）。
 
@@ -85,7 +85,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | [kset-starter-dubbo/README.md](kset-starter-dubbo/README.md) | Dubbo RPC、Nacos 注册与灰度路由 |
 | [kset-starter-gateway/README.md](kset-starter-gateway/README.md) | Gateway 动态路由、灰度、Sentinel 与鉴权 SPI |
 | [kset-starter-mq/README.md](kset-starter-mq/README.md) | RocketMQ 事件门面实现与 topic/tag 约定 |
-| [kset-starter-agent/README.md](kset-starter-agent/README.md) | Agent 编排、工具调度、工作流引擎、SPI 端口与默认实现 |
+| [kset-agent-core/README.md](kset-agent-core/README.md) | Agent 编排、工具调度、工作流引擎、SPI 端口与默认实现 |
 
 ## Starter 能力说明
 
@@ -103,7 +103,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | `kset-starter-gateway` | 动态路由 diff、灰度、可选鉴权、Gateway Sentinel（Trace 见 monitor） | Spring Cloud Gateway |
 | `kset-starter-schedule` | `@KsetScheduled` 继承原生调度 + `@KsetTaskLock` 唯一运行锁（SQL 锁表，启动自动识别方言建表） | Spring Scheduling |
 | `kset-starter-mq` | RocketMQ 组件依赖入口；事件门面默认在 `kset-common` 提供 Spring 本地实现 | RocketMQ V5 Client Spring Boot Starter |
-| `kset-starter-agent` | ReAct 编排执行器、工具调度与注册、工作流引擎（JDBC/Redis 状态存储）、护栏/成本/输出转换扩展点、全量 SPI 端口默认实现 | Spring Context / Jackson / 可选 spring-ai-model、JDBC、Redis |
+| `kset-agent-core` | ReAct 编排执行器、工具调度与注册、工作流引擎（JDBC/Redis 状态存储）、护栏/成本/输出转换扩展点、全量 SPI 端口默认实现 | Spring Context / Jackson / 可选 spring-ai-model、JDBC、Redis |
 
 ## 优雅启停
 
