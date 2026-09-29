@@ -14,7 +14,7 @@ import com.kset.agent.core.dto.ChatDebugInfo;
 import com.kset.agent.core.dto.ToolObservation;
 import com.kset.agent.core.extension.output.AgentOutputConverterRegistry;
 import com.kset.agent.core.spi.AgentRuntimeConfigPort;
-import com.kset.agent.core.spi.AgentChatModelPort;
+import com.kset.agent.core.spi.AgentModelPort;
 import com.kset.agent.core.tool.ToolEntryPermissionPolicy;
 import com.kset.agent.core.spi.AgentMessagePort;
 import com.kset.agent.core.spi.IndexedProjectScopePort;
@@ -79,7 +79,7 @@ public class AgentReActExecutor {
     private static final String CONTEXT_COMPRESSED_NOTICE =
             "\n\n部分较早的查询内容已精简，当前回答可能没有覆盖此前的全部内容。需要时可以缩小范围继续查看。";
     private static final Duration PROGRESS_INTERVAL = Duration.ofSeconds(2);
-    private final AgentChatModelPort aiChatService;
+    private final AgentModelPort aiChatService;
     private final AgentPromptBuilder promptBuilder;
     private final AgentToolActionDispatcher toolActionDispatcher;
     private final ToolRegistry toolRegistry;
@@ -97,7 +97,7 @@ public class AgentReActExecutor {
     private final Executor agentToolTaskExecutor;
     private final AgentOrchestrationProperties orchestrationProperties;
 
-    public AgentReActExecutor(AgentChatModelPort aiChatService,
+    public AgentReActExecutor(AgentModelPort aiChatService,
                               AgentPromptBuilder promptBuilder,
                               AgentToolActionDispatcher toolActionDispatcher,
                               ToolRegistry toolRegistry,

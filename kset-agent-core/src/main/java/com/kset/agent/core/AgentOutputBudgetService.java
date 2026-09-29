@@ -1,6 +1,6 @@
 package com.kset.agent.core;
 
-import com.kset.agent.core.model.AiModelProvider;
+import com.kset.agent.core.spi.AgentModelPort;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,14 +11,14 @@ public class AgentOutputBudgetService {
 
     private static final int MIN_CHINESE_CHARS_PER_TOKEN = 1;
 
-    private final AiModelProvider aiModelProvider;
+    private final AgentModelPort agentModelPort;
 
-    public AgentOutputBudgetService(AiModelProvider aiModelProvider) {
-        this.aiModelProvider = aiModelProvider;
+    public AgentOutputBudgetService(AgentModelPort agentModelPort) {
+        this.agentModelPort = agentModelPort;
     }
 
     public OutputBudget current() {
-        int configuredTokens = aiModelProvider.effectiveMaxOutputTokens(0);
+        int configuredTokens = agentModelPort.effectiveMaxOutputTokens(0);
         if (configuredTokens <= 0) {
             throw new IllegalStateException("当前激活模型 maxTokens 必须大于 0");
         }
@@ -33,7 +33,7 @@ public class AgentOutputBudgetService {
 
     public OutputBudget forInputChars(int inputChars) {
         int estimatedInputTokens = Math.max(1, (int) Math.ceil(Math.max(0, inputChars) / 2.0));
-        int effectiveTokens = aiModelProvider.effectiveMaxOutputTokens(estimatedInputTokens);
+        int effectiveTokens = agentModelPort.effectiveMaxOutputTokens(estimatedInputTokens);
         if (effectiveTokens <= 0) {
             return current();
         }

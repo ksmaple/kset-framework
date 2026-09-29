@@ -1,7 +1,6 @@
 package com.kset.agent.core.autoconfigure;
 
-import com.kset.agent.core.model.AiModelProvider;
-import com.kset.agent.core.spi.AgentChatModelPort;
+import com.kset.agent.core.spi.AgentModelPort;
 import com.kset.agent.core.workflow.WorkflowRuntimeStateStore;
 import com.kset.agent.core.workflow.WorkflowTaskRepository;
 import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
@@ -19,8 +18,7 @@ import java.util.concurrent.Executor;
  * <p>在 Bean 实例化前校验以下接入点是否齐备，缺失时抛出携带接入指引的
  * {@link IllegalStateException}，避免宿主只能看到 Spring 注入失败的晦涩报错：
  * <ul>
- *   <li>{@link AgentChatModelPort} —— 模型调用</li>
- *   <li>{@link AiModelProvider} —— 模型能力描述</li>
+ *   <li>{@link AgentModelPort} —— 模型接入（调用 + 能力/预算描述）</li>
  *   <li>{@link WorkflowTaskRepository} —— 工作流任务持久化</li>
  *   <li>{@link WorkflowRuntimeStateStore} —— 工作流运行时状态存储（确认态/取消标记，宿主自行选择 JDBC/Redis 等实现）</li>
  *   <li>名为 {@code agentToolTaskExecutor} 的 {@link Executor} —— 工具并行执行线程池</li>
@@ -47,11 +45,8 @@ public class AgentRequiredBeanVerifier implements BeanFactoryPostProcessor, Envi
             return;
         }
         List<String> missing = new ArrayList<>();
-        if (beanFactory.getBeanNamesForType(AgentChatModelPort.class, false, false).length == 0) {
-            missing.add(AgentChatModelPort.class.getSimpleName() + "（模型调用，宿主必须实现）");
-        }
-        if (beanFactory.getBeanNamesForType(AiModelProvider.class, false, false).length == 0) {
-            missing.add(AiModelProvider.class.getSimpleName() + "（模型能力描述，宿主必须实现）");
+        if (beanFactory.getBeanNamesForType(AgentModelPort.class, false, false).length == 0) {
+            missing.add(AgentModelPort.class.getSimpleName() + "（模型接入：调用 + 能力/预算描述，宿主必须实现）");
         }
         if (beanFactory.getBeanNamesForType(WorkflowTaskRepository.class, false, false).length == 0) {
             missing.add(WorkflowTaskRepository.class.getSimpleName() + "（工作流任务持久化，宿主必须实现）");

@@ -6,7 +6,7 @@
 
 ### 新增
 
-- **kset-agent-core**：Agent 编排能力公共组件（自 kset-rag `kset-rag-agent` 模块同步核心代码，`com.kset.rag.*` → `com.kset.agent.core.*`）。只保留最核心逻辑：ReAct 编排执行器、agent-json-v1 协议定义/解析、结果模型（WorkflowRequest/Result/Snapshot、错误码）、工具调度/注册与工作流引擎（检查点恢复、多实例租约）、护栏/成本/输出转换扩展点接口；业务耦合点（模型调用、运行配置、文案、权限、项目/仓库/文档访问、计价、安全上下文）全部抽象为 `com.kset.agent.core.spi` 端口。代码沙箱、JDBC/Redis 状态存储、护栏/成本默认适配器等实现已移除，由业务侧自行实现对应 SPI。宿主应用必须提供 `AgentChatModelPort`、`AiModelProvider`、`WorkflowTaskRepository`、`WorkflowRuntimeStateStore` 与 `agentToolTaskExecutor` 线程池，详见模块 README
+- **kset-agent-core**：Agent 编排能力公共组件（自 kset-rag `kset-rag-agent` 模块同步核心代码，`com.kset.rag.*` → `com.kset.agent.core.*`）。只保留最核心逻辑：ReAct 编排执行器、agent-json-v1 协议定义/解析、结果模型（WorkflowRequest/Result/Snapshot、错误码）、工具调度/注册与工作流引擎（检查点恢复、多实例租约）、护栏/成本/输出转换扩展点接口；业务耦合点（模型调用、运行配置、文案、权限、项目/仓库/文档访问、计价、安全上下文）全部抽象为 `com.kset.agent.core.spi` 端口。代码沙箱、JDBC/Redis 状态存储、护栏/成本默认适配器等实现已移除，由业务侧自行实现对应 SPI。宿主应用必须提供 `AgentModelPort`、`WorkflowTaskRepository`、`WorkflowRuntimeStateStore` 与 `agentToolTaskExecutor` 线程池，详见模块 README
 
 ## [v1.0.16] - 2026-08-30
 

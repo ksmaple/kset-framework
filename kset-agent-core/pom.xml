@@ -15,11 +15,6 @@
     <name>kset-agent-core</name>
     <description>KSet Agent Core - ReAct agent orchestration, protocol, workflow engine and extension SPI</description>
 
-    <properties>
-        <!-- spring-ai 不在 kset-boot-parent 统一管理，本模块显式锁定，与来源业务仓保持一致 -->
-        <spring-ai.version>1.0.0</spring-ai.version>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -32,16 +27,6 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.projectreactor</groupId>
-            <artifactId>reactor-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-model</artifactId>
-            <version>${spring-ai.version}</version>
-            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

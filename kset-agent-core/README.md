@@ -21,7 +21,7 @@ Agent 编排能力公共组件：ReAct 编排执行器、工具调度与注册�
 | `com.kset.agent.core.workflow` | WorkflowEngine、WorkflowTask/Step、WorkflowTaskRepository、WorkflowRuntimeStateStore、状态与确认枚举 |
 | `com.kset.agent.core.tool` | ToolDefinition、ToolRegistry、InMemoryToolRegistry、ToolEntryPermissionPolicy |
 | `com.kset.agent.core.memory` | 记忆上下文与优先级/类型 |
-| `com.kset.agent.core.model` | AiModelProvider、ToolSpec、ImageContent、AiCallDimension |
+| `com.kset.agent.core.model` | AiCallDimension |
 | `com.kset.agent.core.context` / `stream` | 执行上下文、调用元数据、流式输出上下文 |
 | `com.kset.agent.core.extension.*` | guardrail / cost / output / workflow 扩展点接口（output 含协议解析默认实现，其余由业务侧实现） |
 | `com.kset.agent.core.port` | 指标与查询端口（no-op 默认实现） |
@@ -33,8 +33,7 @@ Agent 编排能力公共组件：ReAct 编排执行器、工具调度与注册�
 
 | Bean | 说明 |
 |------|------|
-| `com.kset.agent.core.spi.AgentChatModelPort` | 模型调用（`chatWithSystem` / 降级判定 / 激活模型描述） |
-| `com.kset.agent.core.model.AiModelProvider` | 模型能力描述（输出预算计算） |
+| `com.kset.agent.core.spi.AgentModelPort` | 模型接入：调用（`chatWithSystem` / 降级判定）+ 能力/预算描述（均有默认值，可按需覆盖） |
 | `com.kset.agent.core.workflow.WorkflowTaskRepository` | 工作流任务/步骤持久化（含抢占与 fencing） |
 | `com.kset.agent.core.workflow.WorkflowRuntimeStateStore` | 工作流运行时状态存储（确认态/取消标记，宿主自行选择 JDBC/Redis 等实现） |
 | 名为 `agentToolTaskExecutor` 的 `Executor` | 工具并行执行线程池 |

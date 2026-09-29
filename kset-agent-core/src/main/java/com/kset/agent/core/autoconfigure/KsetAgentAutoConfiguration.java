@@ -36,8 +36,7 @@ import java.util.List;
  * <p>宿主应用必须提供的 Bean（由 {@link AgentRequiredBeanVerifier} 在启动时 fail-fast 校验，
  * 可通过 {@code ai.agent.required-bean-check=false} 关闭）：
  * <ul>
- *   <li>{@link com.kset.agent.core.spi.AgentChatModelPort} —— 模型调用</li>
- *   <li>{@link com.kset.agent.core.model.AiModelProvider} —— 模型能力描述</li>
+ *   <li>{@link com.kset.agent.core.spi.AgentModelPort} —— 模型接入（调用 + 能力/预算描述）</li>
  *   <li>{@link com.kset.agent.core.workflow.WorkflowTaskRepository} —— 工作流任务持久化</li>
  *   <li>{@link com.kset.agent.core.workflow.WorkflowRuntimeStateStore} —— 工作流运行时状态存储</li>
  *   <li>名为 {@code agentToolTaskExecutor} 的 {@link java.util.concurrent.Executor} —— 工具并行执行线程池</li>
