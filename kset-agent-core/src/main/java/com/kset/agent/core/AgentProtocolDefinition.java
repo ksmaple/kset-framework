@@ -1,6 +1,5 @@
 package com.kset.agent.core;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -24,15 +23,6 @@ public final class AgentProtocolDefinition {
     public static final String OUTPUT_END_MARKER = "<<<END_AGENT_JSON>>>";
     public static final Set<String> OUTPUT_TYPES = AgentOutputType.codes();
 
-    public static final int FORMAT_RETRY_LIMIT = 2;
-    public static final int MODEL_UNAVAILABLE_RETRY_LIMIT = 3;
-    public static final int MODEL_UNAVAILABLE_RETRY_BACKOFF_MS = 500;
-    public static final int MODEL_CONTEXT_COMPRESSION_RETRY_LIMIT = 2;
-    public static final int PROTOCOL_ERROR_LIMIT = 2;
-    public static final int MAX_STEPS = 20;
-    public static final int MAX_PLAN_TASKS = 3;
-    public static final Duration TOOL_BATCH_TIMEOUT = Duration.ofMinutes(2);
-    public static final int MAX_PARALLEL_TOOLS = 4;
     public static final int OBSERVATION_SUMMARY_CHARS = 500;
     public static final int MAX_EVIDENCE_ITEMS = 8;
     public static final int MAX_EVIDENCE_FIELD_CHARS = 320;
@@ -232,10 +222,6 @@ public final class AgentProtocolDefinition {
         return type != null && OUTPUT_TYPES.contains(type);
     }
 
-    public static String systemPrompt(AgentTurnPromptSpec spec, int maxAnswerCharsPerRound) {
-        return systemPrompt(spec, maxAnswerCharsPerRound, MAX_PLAN_TASKS);
-    }
-
     public static String systemPrompt(AgentTurnPromptSpec spec, int maxAnswerCharsPerRound,
                                       int maxPlanTasks) {
         String overlay = switch (spec.stage()) {
@@ -254,7 +240,8 @@ public final class AgentProtocolDefinition {
      * 保留原因：code-v2 整包系统词被阶段叠加替代；生产路径不得调用。
      */
     static String systemPromptV2ForRollback(int maxAnswerCharsPerRound) {
-        return SYSTEM_PROMPT_TEMPLATE_V2_FOR_ROLLBACK.formatted(MAX_PLAN_TASKS, maxAnswerCharsPerRound);
+        // 回滚冻结代码：计划任务数固定为历史值 3，不跟随 AgentOrchestrationProperties
+        return SYSTEM_PROMPT_TEMPLATE_V2_FOR_ROLLBACK.formatted(3, maxAnswerCharsPerRound);
     }
 
     public static String fieldCombinationRules(AgentTurnPromptSpec spec, int maxAnswerCharsPerRound) {
@@ -296,7 +283,8 @@ public final class AgentProtocolDefinition {
      * 保留原因：code-v1 核心编排系统提示词被后续版本替代；生产路径不得调用。
      */
     static String systemPromptForRollback(int maxAnswerCharsPerRound) {
-        return SYSTEM_PROMPT_TEMPLATE_FOR_ROLLBACK.formatted(MAX_PLAN_TASKS, maxAnswerCharsPerRound);
+        // 回滚冻结代码：计划任务数固定为历史值 3，不跟随 AgentOrchestrationProperties
+        return SYSTEM_PROMPT_TEMPLATE_FOR_ROLLBACK.formatted(3, maxAnswerCharsPerRound);
     }
 
     /**

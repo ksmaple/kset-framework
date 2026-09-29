@@ -1,6 +1,6 @@
 package com.kset.agent.core.extension.output;
 
-import com.kset.common.exception.BusinessException;
+import com.kset.agent.core.AgentCoreException;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -21,7 +21,7 @@ public class AgentOutputConverterRegistry {
     public AgentOutputConversion convert(String protocol, String raw) {
         AgentOutputConverter converter = converters.get(normalize(protocol));
         if (converter == null) {
-            throw new BusinessException("未注册 Agent 输出协议转换器: " + protocol);
+            throw new AgentCoreException("未注册 Agent 输出协议转换器: " + protocol);
         }
         return converter.convert(raw);
     }

@@ -18,7 +18,8 @@ public class AgentWorkflowRequest {
     @NotBlank(message = "任务描述不能为空")
     private String task;
 
-    private int maxSteps = 30;
+    /** 最大编排轮次；0 表示未指定，回落到 ai.agent.orchestration.max-steps。 */
+    private int maxSteps = 0;
 
     private boolean enableTools = true;
 

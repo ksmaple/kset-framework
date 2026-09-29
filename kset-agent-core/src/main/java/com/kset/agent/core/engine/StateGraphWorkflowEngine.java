@@ -25,7 +25,7 @@ import com.kset.agent.core.workflow.AgentStepType;
 import com.kset.agent.core.context.AgentExecutionContext;
 import com.kset.agent.core.stream.ChatStreamContext;
 import com.kset.agent.core.spi.AgentAuthContext;
-import com.kset.common.exception.BusinessException;
+import com.kset.agent.core.AgentCoreException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.TaskScheduler;
@@ -116,20 +116,20 @@ public class StateGraphWorkflowEngine implements WorkflowEngine {
     @Override
     public AgentWorkflowResult resumeInterrupted(String taskId, boolean retryUnknownTool) {
         WorkflowTask task = taskRepository.findByTaskId(taskId)
-                .orElseThrow(() -> new BusinessException("工作流任务不存在"));
+                .orElseThrow(() -> new AgentCoreException("工作流任务不存在"));
         ensureProjectActive(task);
         if (task.getUserId() == null || !task.getUserId().equals(AgentAuthContext.getUserId())) {
-            throw new BusinessException("无权恢复该工作流任务");
+            throw new AgentCoreException("无权恢复该工作流任务");
         }
         if (task.getStatus() != TaskStatus.PAUSED) {
-            throw new BusinessException("工作流任务不处于可恢复状态");
+            throw new AgentCoreException("工作流任务不处于可恢复状态");
         }
         List<WorkflowStep> checkpoints = taskRepository.findStepsByTaskId(taskId);
         boolean unknownToolResult = checkpoints.stream().anyMatch(step -> step.getStatus() == StepStatus.RUNNING
                 && "TOOL".equalsIgnoreCase(step.getExecutionType()));
         if (unknownToolResult) {
             String retryNotice = retryUnknownTool ? "；不允许直接重试" : "";
-            throw new BusinessException("工具节点执行结果未知，需要核验权威执行结果" + retryNotice);
+            throw new AgentCoreException("工具节点执行结果未知，需要核验权威执行结果" + retryNotice);
         }
         AgentWorkflowRequest request;
         try {
@@ -196,25 +196,25 @@ public class StateGraphWorkflowEngine implements WorkflowEngine {
 
     private void ensureProjectActive(WorkflowTask task) {
         if (task.getProjectId() != null && !projectAccessPort.projectExists(task.getProjectId())) {
-            throw new BusinessException("工作流关联项目已删除，无法继续执行");
+            throw new AgentCoreException("工作流关联项目已删除，无法继续执行");
         }
     }
 
     private void ensureTaskOwner(WorkflowTask task) {
         if (task.getUserId() == null || !task.getUserId().equals(AgentAuthContext.getUserId())) {
-            throw new BusinessException("无权恢复该工作流任务");
+            throw new AgentCoreException("无权恢复该工作流任务");
         }
     }
 
     private void validateRequestProjectScope(AgentWorkflowRequest request) {
         Long userId = AgentAuthContext.getUserId();
         if (userId == null) {
-            throw new BusinessException("当前登录态已失效，无法恢复工作流");
+            throw new AgentCoreException("当前登录态已失效，无法恢复工作流");
         }
         if (request.getProjectId() != null && !projectAccessPort.isActiveMember(
                 request.getProjectId(), userId)
                 && !AgentAuthContext.isSuperAdmin()) {
-            throw new BusinessException("工作流目标项目已无权访问，无法继续执行");
+            throw new AgentCoreException("工作流目标项目已无权访问，无法继续执行");
         }
         if (request.getProjectIds() != null) {
             request.setProjectIds(request.getProjectIds().stream()
@@ -533,7 +533,7 @@ public class StateGraphWorkflowEngine implements WorkflowEngine {
     private long claimExecution(String taskId) {
         long fencingToken = taskRepository.claimExecution(taskId, ownerId, leaseSeconds);
         if (fencingToken < 0) {
-            throw new BusinessException("工作流任务已被其他实例执行");
+            throw new AgentCoreException("工作流任务已被其他实例执行");
         }
         return fencingToken;
     }

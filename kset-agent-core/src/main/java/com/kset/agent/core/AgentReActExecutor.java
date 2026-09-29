@@ -32,7 +32,6 @@ import com.kset.agent.core.workflow.AgentStepStage;
 import com.kset.agent.core.workflow.AgentStepType;
 import com.kset.agent.core.workflow.TaskStatus;
 import com.kset.agent.core.model.AiCallDimension;
-import com.kset.common.exception.BusinessException;
 import com.kset.agent.core.context.AiCallContext;
 import com.kset.agent.core.context.AiCallMetadataContext;
 import com.kset.agent.core.context.AgentExecutionContext;
@@ -173,7 +172,7 @@ public class AgentReActExecutor {
             if (tool == null || !tool.isEnabled() || !isToolAllowed(request, toolName)
                     || !toolPermissionService.canUse(toolName)) {
                 AgentWorkflowErrorCode errorCode = AgentWorkflowErrorCode.AGENT_CONFIRMED_TOOL_UNAVAILABLE;
-                throw new BusinessException(errorCode.code(), errorCode.defaultMessage());
+                throw new AgentWorkflowException(errorCode);
             }
             Map<String, Object> arguments = request.getConfirmedToolArguments() != null
                     ? request.getConfirmedToolArguments() : Map.of();
@@ -2025,7 +2024,7 @@ public class AgentReActExecutor {
                     .toList();
             if (ready.isEmpty()) {
                 AgentWorkflowErrorCode errorCode = AgentWorkflowErrorCode.AGENT_TASK_PLAN_INVALID;
-                throw new BusinessException(errorCode.code(), errorCode.defaultMessage());
+                throw new AgentWorkflowException(errorCode);
             }
             List<BatchToolExecution> executions = new ArrayList<>();
             Map<BatchToolExecution, ScheduledFuture<?>> progressHeartbeats = new HashMap<>();
