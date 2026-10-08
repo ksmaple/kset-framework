@@ -13,25 +13,12 @@
     <packaging>jar</packaging>
 
     <name>kset-agent-core</name>
-    <description>KSet Agent Core - ReAct agent orchestration, protocol, workflow engine and extension SPI</description>
+    <description>KSet Agent Core - framework-neutral agent loop kernel and protocol extensions</description>
 
     <dependencies>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework</groupId>
-            <artifactId>spring-context</artifactId>
-        </dependency>
-        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-            <optional>true</optional>
         </dependency>
     </dependencies>
 

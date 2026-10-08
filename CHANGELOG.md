@@ -6,7 +6,7 @@
 
 ### 新增
 
-- **kset-agent-core**：Agent 编排能力公共组件（自 kset-rag `kset-rag-agent` 模块同步核心代码，`com.kset.rag.*` → `com.kset.agent.core.*`）。只保留最核心逻辑：ReAct 编排执行器、agent-json-v1 协议定义/解析、结果模型（WorkflowRequest/Result/Snapshot、错误码）、工具调度/注册与工作流引擎（检查点恢复、多实例租约）、护栏/成本/输出转换扩展点接口；业务耦合点（模型调用、运行配置、文案、权限、项目/仓库/文档访问、计价、安全上下文）全部抽象为 `com.kset.agent.core.spi` 端口。代码沙箱、JDBC/Redis 状态存储、护栏/成本默认适配器等实现已移除，由业务侧自行实现对应 SPI。宿主应用必须提供 `AgentModelPort`、`WorkflowTaskRepository`、`WorkflowRuntimeStateStore` 与 `agentToolTaskExecutor` 线程池，详见模块 README
+- **kset-agent-core**：重建为框架无关的稳定 Agent 循环内核，固定 `RunState → ModelResponse → Decision → Action → Observation → StopDecision` 语义；提供集中式取消/超时/轮次/协议错误/无进展停止控制、版本化快照与宿主检查点端口。内置 ReAct 策略和严格 `agent-json:v1` 协议，同时支持注册自定义推理策略、协议 Codec、动作处理器、停止策略及生命周期监听器。移除 Spring 自动装配、持久化工作流引擎及项目、文档、代码仓库、权限、指标等业务耦合 API
 
 ## [v1.0.16] - 2026-08-30
 

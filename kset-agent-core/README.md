@@ -1,6 +1,6 @@
 # kset-agent-core
 
-Agent 编排能力公共组件：ReAct 编排执行器、工具调度与注册、工作流引擎（任务持久化/异步执行/检查点恢复）、护栏/成本/输出转换扩展点，以及面向宿主应用的全量 SPI 端口。
+框架无关的 Agent 循环内核。模块固定循环、停止与恢复语义，默认提供 ReAct 推理策略和 `agent-json:v1` 协议，同时允许宿主扩展其他推理方式、模型协议和动作。
 
 ## 引入
 
@@ -11,68 +11,100 @@ Agent 编排能力公共组件：ReAct 编排执行器、工具调度与注册�
 </dependency>
 ```
 
-自动装配入口：`com.kset.agent.core.autoconfigure.KsetAgentAutoConfiguration`（`com.kset.agent.core` 组件扫描 + SPI 默认实现）。
+模块只依赖 Java 21 与 Jackson，不包含 Spring 自动装配、数据库、Redis、Web、权限或 RAG 业务模型。
 
-## 包结构
+## 稳定内核
 
-| 包 | 内容 |
-|----|------|
-| `com.kset.agent.core` | AgentReActExecutor、AgentProtocolDefinition、AgentToolActionDispatcher、提示词构建/记忆优化/输出预算 |
-| `com.kset.agent.core.workflow` | WorkflowEngine、WorkflowTask/Step、WorkflowTaskRepository、WorkflowRuntimeStateStore、状态与确认枚举 |
-| `com.kset.agent.core.tool` | ToolDefinition、ToolRegistry、InMemoryToolRegistry、ToolEntryPermissionPolicy |
-| `com.kset.agent.core.memory` | 记忆上下文与优先级/类型 |
-| `com.kset.agent.core.model` | AiCallDimension |
-| `com.kset.agent.core.context` / `stream` | 执行上下文、调用元数据、流式输出上下文 |
-| `com.kset.agent.core.extension.*` | guardrail / cost / output / workflow 扩展点接口（output 含协议解析默认实现，其余由业务侧实现） |
-| `com.kset.agent.core.port` | 指标与查询端口（no-op 默认实现） |
-| `com.kset.agent.core.engine` | StateGraphWorkflowEngine（状态存储由宿主实现 WorkflowRuntimeStateStore） |
-| `com.kset.agent.core.spi` | 宿主应用接入端口（见下） |
-| `com.kset.agent.core.config` | AgentOrchestrationProperties（`ai.agent.orchestration.*`） |
+循环语义固定为：
 
-## 宿主应用必须提供的 Bean
+```text
+RunState -> ModelResponse -> Decision -> Action -> Observation -> StopDecision
+```
 
-| Bean | 说明 |
-|------|------|
-| `com.kset.agent.core.spi.AgentModelPort` | 模型接入：调用（`chatWithSystem` / 降级判定）+ 能力/预算描述（均有默认值，可按需覆盖） |
-| `com.kset.agent.core.workflow.WorkflowTaskRepository` | 工作流任务/步骤持久化（含抢占与 fencing） |
-| `com.kset.agent.core.workflow.WorkflowRuntimeStateStore` | 工作流运行时状态存储（确认态/取消标记，宿主自行选择 JDBC/Redis 等实现） |
-| 名为 `agentToolTaskExecutor` 的 `Executor` | 工具并行执行线程池 |
+| 包 | 职责 |
+| --- | --- |
+| `api` | 请求、结果和运行状态 |
+| `loop` | `AgentLoopKernel`、不可变运行状态、快照与构建器 |
+| `model` | 模型调用及原生 Function Calling 响应抽象 |
+| `protocol` | 版本化 Codec 和注册表 |
+| `strategy` | 推理策略扩展与默认 ReAct 策略 |
+| `action` | 标准动作、动作处理器与注册表 |
+| `tool` | 通用工具描述、注册与结构化执行结果 |
+| `stop` | 集中式停止判断及扩展策略 |
+| `checkpoint` | 宿主持久化端口 |
+| `event` | 只读生命周期监听器 |
 
-启动时由 `AgentRequiredBeanVerifier` 对上述 Bean 做 fail-fast 校验，缺失即抛出携带接入指引的异常；可用 `ai.agent.required-bean-check=false` 关闭校验。
+## 最小接入
 
-## 可覆盖的 SPI（均有默认实现）
+```java
+AgentModel model = request -> ModelResponse.text(callYourModel(request));
 
-| 端口 | 默认行为 |
-|------|----------|
-| `AgentRuntimeConfigPort` | 从 Spring Environment 读取 |
-| `AgentMessagePort` | 返回文案编码本身，语言策略 `auto` |
-| `ContentSecurityPort` | 不清洗、不拦截 |
-| `DocumentAccessPort` | 返回 `null`（不做文档级过滤） |
-| `ModelPricingPort` / `IndexedProjectScopePort` / `CodeRepositoryAccessPort` | 空列表 |
-| `ProjectAccessPort` | 宽松放行（无项目体系场景） |
-| `ToolRegistry` | InMemoryToolRegistry |
-| `ToolCallMetricsPort` / `AgentWorkflowMetricsPort` / `AiFlowMetricsPort` | no-op |
-| `LlmHealthPort` | 不降级、空快照 |
-| `AiSessionQualityQueryPort` | 空列表 |
+InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry();
+tools.register(yourTool);
 
-## 安全上下文
+AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+        .tools(tools)
+        .toolExecutor(yourExecutor)
+        .build();
 
-`AgentAuthContext`（`com.kset.agent.core.spi`）为线程级安全上下文：宿主在请求边界 `setCurrentUser` / `setRequestAccessScope`，结束必须 `clear()`；执行器在异步工具线程内自动重放会话快照。
+AgentRequest request = AgentRequest.of(
+        "分析任务并返回结果",
+        AgentJsonV1Codec.ID);
+AgentResult result = kernel.run(request);
+```
 
-## 配置
+构建器默认使用同步 `Executor`，不会创建或持有线程。需要工具并行执行时，宿主必须通过 `toolExecutor` 提供有界线程池并负责其生命周期。
 
-- `ai.agent.orchestration.*`：max-steps、max-parallel-tools、重试上限、工具批次超时等（见 `AgentOrchestrationProperties`）
-  - `ai.agent.orchestration.identity`：Agent 在系统提示词中的身份称谓（默认 `AI 助手`），仅影响提示词身份描述，不影响协议
-  - `ai.agent.orchestration.tool-entry-permission`：Agent/MCP 工具入口统一校验的功能权限点；留空（默认）不校验
-- `ai.agent.required-bean-check`：宿主必配 Bean 的 fail-fast 校验开关，默认 `true`
-- `ai.workflow.execution.lease-seconds` / `timeout-seconds`
+## 停止语义
 
-## 协议
+`AgentStopController` 是所有循环出口的单一入口，依次处理：
 
-- LLM 输出协议：`agent-json-v1`（`AgentProtocolDefinition` 为单一事实源），控制动作用 `<<<AGENT_JSON>>>` 与 `<<<END_AGENT_JSON>>>` 包裹，支持六种动作：task_plan / tool_call / tool_batch / answer_chunk / final_answer / confirmation；解析走 `AgentOutputConverter` SPI（默认 `JsonAgentOutputConverter`）
-- 流式事件：`ChatStreamEvent`（step / task / status / done / error），由 `ChatStreamContext` 线程级发射
-- 错误码契约：`AgentWorkflowErrorCode`（工作流/模型/协议/工具/确认等类别，含默认文案）
+1. 用户取消和线程中断。
+2. 总超时。
+3. 完成或等待外部输入。
+4. 最大轮次、连续协议错误和连续无进展。
+5. 宿主注册的附加 `AgentStopPolicy`。
 
-## 来源与同步说明
+宿主策略只能追加停止条件，不能取消内核已经作出的停止决定。每个返回结果都携带 `AgentStopReason` 和最新 `AgentRunSnapshot`。
 
-代码同步自 kset-rag 项目 `kset-rag-agent` 模块的编排核心（包名 `com.kset.rag.*` → `com.kset.agent.core.*`），业务耦合点已抽象为 `com.kset.agent.core.spi` 端口。模块只保留最核心逻辑：ReAct 编排、agent-json-v1 协议、结果模型与工作流引擎；代码沙箱、状态存储（JDBC/Redis）、护栏/成本适配器等默认实现已移除，由业务侧自行实现对应 SPI。kset-rag 侧暂未切换到本模块，后续切换时需为各 SPI 提供适配实现并删除已迁移类。
+## 协议扩展
+
+`AgentProtocolCodec` 负责两个方向：
+
+- 在模型调用前补充当前协议说明。
+- 将模型响应转换为协议无关的 `AgentDecision`。
+
+新增协议只需实现 Codec 并注册：
+
+```java
+AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+        .protocol(new NativeFunctionCallingCodec())
+        .build();
+```
+
+内置 `agent-json:v1` 使用 `<<<AGENT_JSON>>>` / `<<<END_AGENT_JSON>>>` 严格包裹控制 JSON；无标记普通文本按最终回答处理。协议支持 `task_plan`、`tool_call`、`tool_batch`、`answer_chunk`、`final_answer` 和 `confirmation`。
+
+自定义协议可以映射到标准动作，也可以返回 `ExtensionAction`。自定义动作必须同时注册对应 `AgentActionHandler`；未注册动作会显式失败。
+
+## 推理策略扩展
+
+`AgentReasoningStrategy` 只负责生成本轮模型请求和校验语义动作。默认 `ReactReasoningStrategy` 的 planning、acting、evaluating、answering 阶段不会进入循环内核。
+
+接入 Plan-and-Execute、Supervisor 或其他策略时，实现 `AgentReasoningStrategy` 并通过构建器替换即可，无需修改协议注册和停止控制。
+
+## 中断与恢复
+
+`AgentRunSnapshot` 不保存模型原始思维链，只保存轮次、标准观察、扩展属性、错误计数和停止结果。宿主可实现 `AgentCheckpointPort`，然后调用：
+
+```java
+kernel.resume(request);             // 从 AgentCheckpointPort 查询
+kernel.resume(request, snapshot);   // 使用已取得的快照
+```
+
+同一运行恢复时不能切换协议，防止旧快照被不同语义解释。
+
+内核会在启动、协议错误、每个动作结果和停止时保存快照。外部工具副作用无法与快照存储形成通用原子事务，工具适配器应以 `ToolCallAction.callId` 实现幂等；检查点写入失败会使本次运行以 `FAILED` 返回，不能继续推进后续动作。
+
+## 迁移说明
+
+本轮直接替换了未发布的旧 API。原 `AgentReActExecutor`、`StateGraphWorkflowEngine`、Spring 自动装配以及项目/文档/代码仓库/权限/指标端口已移除。需要旧实现时可从 Git ref `a7a63f2` 恢复。

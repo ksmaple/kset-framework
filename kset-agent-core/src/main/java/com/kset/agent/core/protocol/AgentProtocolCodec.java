@@ -1,0 +1,16 @@
+package com.kset.agent.core.protocol;
+
+import com.kset.agent.core.model.ModelRequest;
+import com.kset.agent.core.model.ModelResponse;
+
+/** Converts one model protocol into the stable decision model. */
+public interface AgentProtocolCodec {
+
+    AgentProtocolId id();
+
+    default ModelRequest prepare(ModelRequest request, AgentProtocolContext context) {
+        return request;
+    }
+
+    AgentDecision decode(ModelResponse response, AgentProtocolContext context);
+}
