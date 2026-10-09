@@ -13,6 +13,7 @@ public record AgentProtocolId(String name, String version) {
         version = version.trim().toLowerCase(Locale.ROOT);
     }
 
+    /** Human-readable label only; structural identity is the record's name/version pair. */
     public String key() {
         return name + ":" + version;
     }

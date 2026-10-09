@@ -5,33 +5,50 @@ import com.kset.agent.core.api.AgentRunStatus;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Outcome of one dispatched action. A terminal result may only complete or suspend the run;
- * technical failures must be thrown so the kernel can expose an {@code AgentFailure}.
+ * Outcome of one dispatched action. State removals are applied before state writes. A terminal
+ * result may only complete or suspend the run; technical failures must be thrown so the kernel
+ * can expose an {@code AgentFailure}.
  */
 public record AgentActionResult(
         List<AgentObservation> observations,
         AgentRunStatus terminalStatus,
         String answer,
-        Map<String, Object> stateAttributes) {
+        Map<String, Object> stateAttributes,
+        Set<String> removedStateAttributes) {
 
     public AgentActionResult {
         observations = observations == null ? List.of() : List.copyOf(observations);
         stateAttributes = stateAttributes == null
                 ? Map.of() : Map.copyOf(new LinkedHashMap<>(stateAttributes));
+        removedStateAttributes = removedStateAttributes == null
+                ? Set.of() : Set.copyOf(removedStateAttributes);
     }
 
     public static AgentActionResult observed(AgentObservation observation) {
-        return new AgentActionResult(List.of(observation), null, null, Map.of());
+        return observed(observation, Set.of());
+    }
+
+    public static AgentActionResult observed(
+            AgentObservation observation, Set<String> removedStateAttributes) {
+        return new AgentActionResult(
+                List.of(observation), null, null, Map.of(), removedStateAttributes);
     }
 
     public static AgentActionResult completed(String answer) {
-        return new AgentActionResult(List.of(), AgentRunStatus.COMPLETED, answer, Map.of());
+        return completed(answer, Set.of());
+    }
+
+    public static AgentActionResult completed(String answer, Set<String> removedStateAttributes) {
+        return new AgentActionResult(
+                List.of(), AgentRunStatus.COMPLETED, answer, Map.of(), removedStateAttributes);
     }
 
     public static AgentActionResult suspended(String message, Map<String, Object> attributes) {
-        return new AgentActionResult(List.of(), AgentRunStatus.SUSPENDED, message, attributes);
+        return new AgentActionResult(
+                List.of(), AgentRunStatus.SUSPENDED, message, attributes, Set.of());
     }
 
     public boolean madeProgress() {

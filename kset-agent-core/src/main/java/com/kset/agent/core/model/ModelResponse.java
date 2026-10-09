@@ -9,15 +9,23 @@ public record ModelResponse(
         String text,
         List<ModelToolCall> toolCalls,
         String finishReason,
+        ModelCallMetrics metrics,
         Map<String, Object> metadata) {
 
     public ModelResponse {
         text = text == null ? "" : text;
         toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
+        metrics = metrics == null ? ModelCallMetrics.empty() : metrics;
         metadata = metadata == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(metadata));
     }
 
+    /** Compatibility constructor for callers that do not expose standard call metrics yet. */
+    public ModelResponse(String text, List<ModelToolCall> toolCalls,
+                         String finishReason, Map<String, Object> metadata) {
+        this(text, toolCalls, finishReason, ModelCallMetrics.empty(), metadata);
+    }
+
     public static ModelResponse text(String text) {
-        return new ModelResponse(text, List.of(), null, Map.of());
+        return new ModelResponse(text, List.of(), null, ModelCallMetrics.empty(), Map.of());
     }
 }

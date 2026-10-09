@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -59,7 +60,7 @@ public final class StandardActionHandlers {
             Map<String, Object> attributes = Map.of(PLAN_CREATED, true, PLAN_TASKS, tasks);
             AgentObservation observation = new AgentObservation(action.type(), true, true,
                     plan.summary(), null, null, Map.of("tasks", tasks));
-            return new AgentActionResult(List.of(observation), null, null, attributes);
+            return new AgentActionResult(List.of(observation), null, null, attributes, Set.of());
         }
     }
 
@@ -80,7 +81,7 @@ public final class StandardActionHandlers {
             ToolCallAction call = require(action, ToolCallAction.class);
             AgentTool tool = tools.find(call.toolName()).orElse(null);
             if (tool == null) {
-                return AgentActionResult.observed(AgentObservation.failure(
+                return observedAndClearPending(AgentObservation.failure(
                         action.type(), AgentErrorCode.TOOL_NOT_FOUND,
                         "tool not found: " + call.toolName()));
             }
@@ -93,22 +94,22 @@ public final class StandardActionHandlers {
                         call, context, context.request().options().toolCallTimeout(),
                         context.execution().deadline());
                 if (toolContext.isCancellationRequested()) {
-                    return AgentActionResult.observed(AgentObservation.failure(
+                    return observedAndClearPending(AgentObservation.failure(
                             action.type(), AgentErrorCode.TOOL_CANCELLED,
                             "tool execution cancelled"));
                 }
                 if (toolContext.isDeadlineExceeded(context.clock().instant())) {
-                    return AgentActionResult.observed(AgentObservation.failure(
+                    return observedAndClearPending(AgentObservation.failure(
                             action.type(), AgentErrorCode.TOOL_TIMEOUT,
                             "tool deadline reached"));
                 }
-                return AgentActionResult.observed(toObservation(
+                return observedAndClearPending(toObservation(
                         action.type(), tool.execute(call.arguments(), toolContext)));
             } catch (CancellationException error) {
-                return AgentActionResult.observed(AgentObservation.failure(
+                return observedAndClearPending(AgentObservation.failure(
                         action.type(), AgentErrorCode.TOOL_CANCELLED, message(error)));
             } catch (RuntimeException error) {
-                return AgentActionResult.observed(AgentObservation.failure(
+                return observedAndClearPending(AgentObservation.failure(
                         action.type(), AgentErrorCode.TOOL_EXECUTION_FAILED, message(error)));
             }
         }
@@ -144,12 +145,12 @@ public final class StandardActionHandlers {
                     context.execution().remainingFrom(batchStartedAt));
             Duration callTimeout = shorter(context.request().options().toolCallTimeout(), timeout);
             if (context.execution().isCancellationRequested()) {
-                return AgentActionResult.observed(AgentObservation.failure(
+                return observedAndClearPending(AgentObservation.failure(
                         action.type(), AgentErrorCode.TOOL_CANCELLED,
                         "tool batch execution cancelled"));
             }
             if (timeout.isZero()) {
-                return AgentActionResult.observed(AgentObservation.failure(
+                return observedAndClearPending(AgentObservation.failure(
                         action.type(), AgentErrorCode.TOOL_TIMEOUT,
                         "tool batch deadline reached"));
             }
@@ -164,7 +165,7 @@ public final class StandardActionHandlers {
                 CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
                         .get(Math.max(1L, timeout.toMillis()), TimeUnit.MILLISECONDS);
                 return new AgentActionResult(futures.stream().map(CompletableFuture::join).toList(),
-                        null, null, Map.of());
+                        null, null, Map.of(), Set.of(PENDING_ACTION));
             } catch (Exception error) {
                 futures.forEach(future -> future.cancel(true));
                 if (error instanceof InterruptedException) {
@@ -172,7 +173,7 @@ public final class StandardActionHandlers {
                 }
                 AgentErrorCode code = error instanceof TimeoutException
                         ? AgentErrorCode.TOOL_TIMEOUT : AgentErrorCode.TOOL_BATCH_FAILED;
-                return AgentActionResult.observed(AgentObservation.failure(
+                return observedAndClearPending(AgentObservation.failure(
                         action.type(), code, message(error)));
             }
         }
@@ -221,7 +222,7 @@ public final class StandardActionHandlers {
             chunks.add(chunk.text());
             return new AgentActionResult(
                     List.of(AgentObservation.success(action.type(), chunk.text(), true)),
-                    null, null, Map.of(ANSWER_CHUNKS, List.copyOf(chunks)));
+                    null, null, Map.of(ANSWER_CHUNKS, List.copyOf(chunks)), Set.of());
         }
     }
 
@@ -236,7 +237,8 @@ public final class StandardActionHandlers {
             FinalAnswerAction answer = require(action, FinalAnswerAction.class);
             List<String> parts = new ArrayList<>(strings(context.state().attributes().get(ANSWER_CHUNKS)));
             parts.add(answer.answer());
-            return AgentActionResult.completed(String.join("\n\n", parts));
+            return AgentActionResult.completed(
+                    String.join("\n\n", parts), Set.of(PENDING_ACTION));
         }
     }
 
@@ -249,9 +251,17 @@ public final class StandardActionHandlers {
         @Override
         public AgentActionResult handle(AgentAction action, AgentActionContext context) {
             ConfirmationAction confirmation = require(action, ConfirmationAction.class);
+            if (context.request().isActionConfirmed(confirmation.confirmationId())) {
+                return observedAndClearPending(AgentObservation.success(
+                        action.type(), confirmation.message(), true));
+            }
             return AgentActionResult.suspended(confirmation.message(),
                     Map.of(PENDING_ACTION, confirmationState(confirmation)));
         }
+    }
+
+    private static AgentActionResult observedAndClearPending(AgentObservation observation) {
+        return AgentActionResult.observed(observation, Set.of(PENDING_ACTION));
     }
 
     private static boolean needsConfirmation(

@@ -107,6 +107,7 @@ public final class AgentRunState {
         List<AgentObservation> nextObservations = new ArrayList<>(observations);
         nextObservations.addAll(result.observations());
         Map<String, Object> nextAttributes = new LinkedHashMap<>(attributes);
+        result.removedStateAttributes().forEach(nextAttributes::remove);
         nextAttributes.putAll(result.stateAttributes());
         int noProgress = result.madeProgress() ? 0 : consecutiveNoProgress + 1;
         AgentRunStatus nextStatus = result.terminalStatus() == null ? status : result.terminalStatus();

@@ -107,7 +107,8 @@ public final class AgentKernelBuilder {
 
             AgentReasoningStrategy strategyValue = strategy == null
                     ? new ReactReasoningStrategy(fixedTools) : strategy;
-            return new AgentLoopKernel(model, strategyValue,
+            String strategyId = requireStrategyId(strategyValue);
+            return new AgentLoopKernel(model, strategyValue, strategyId,
                     new AgentProtocolRegistry(protocolValues),
                     new AgentActionRegistry(handlerValues),
                     new AgentStopController(stopPolicies), checkpoints, listeners, clock);
@@ -125,6 +126,20 @@ public final class AgentKernelBuilder {
                     name + " must not be null");
         }
         return value;
+    }
+
+    private static String requireStrategyId(AgentReasoningStrategy strategy) {
+        String id = strategy.id();
+        if (id == null || id.isBlank()) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
+                    "strategy id must not be blank");
+        }
+        String normalized = id.trim();
+        if ("agent".equals(normalized) || normalized.startsWith("agent.")) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
+                    "strategy id must not use the agent namespace");
+        }
+        return normalized;
     }
 
     private static String errorMessage(Throwable error) {

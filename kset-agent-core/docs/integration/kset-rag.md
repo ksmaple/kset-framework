@@ -33,20 +33,20 @@ new AgentProtocolId("kset-rag-json", "code-v7")
 | 带 `dependsOn` 的 `tool_batch` | `ExtensionAction("kset-rag.tool-batch", payload)` | kset-rag Handler 按依赖 DAG 分层执行，不能使用标准并发 Handler |
 | `answer_chunk` | `AnswerChunkAction` | `progressSummary`、记忆字段放 metadata |
 | `final_answer` | `FinalAnswerAction` | `resourceRefs`、记忆字段放 metadata，由 Listener/结果装配器读取 |
-| `confirmation` | `ConfirmationAction` | 宿主生成稳定 confirmationId；完整卡片字段放 options/metadata |
+| `confirmation` | `ConfirmationAction` | 宿主生成稳定 confirmationId；完整卡片字段放 options/metadata；恢复请求传入同一 ID 后标准 Handler 会消费确认并继续 |
 | `ToolObservation` | `AgentObservation` | 结果放 output，证据等级和资源放 attributes，错误使用稳定 errorCode |
 
 ## 必需宿主组件
 
 | 组件 | 职责 |
 | --- | --- |
-| `KsetRagAgentModel` | 包装现有 Spring AI 调用，传递 deadline/cancellation，过滤 thinking 内容 |
+| `KsetRagAgentModel` | 包装现有 Spring AI 调用，传递 deadline/cancellation，过滤 thinking 内容并填充 `ModelCallMetrics` |
 | `KsetRagAgentJsonCodec` | 严格解析 `code-v7` 并完成上表映射 |
 | `KsetRagReasoningStrategy` | 保留现有阶段、允许动作、queryAnalysis 和证据完成规则 |
 | `KsetRagToolAdapter` | 权限校验后把现有 ToolRegistry 暴露为 core 工具 |
 | `KsetRagDependentBatchHandler` | 执行带 dependsOn 的批次扩展动作 |
 | `KsetRagCheckpointPort` | 将不可变快照条件写入现有工作流状态存储 |
-| `KsetRagLifecycleListener` | 把 turn、action、stop 和 failure 投影为步骤及 SSE 事件 |
+| `KsetRagLifecycleListener` | 把固定生命周期事件投影为步骤、SSE、日志和工作流指标 |
 
 ## callId
 
@@ -58,12 +58,29 @@ new AgentProtocolId("kset-rag-json", "code-v7")
 
 建议使用 `kset.rag.*` 属性命名空间。`queryAnalysis` 必须由 Strategy 从 Decision metadata 复制到持久属性，不能依赖只保留最近一次值的 `agent.protocolMetadata`。`resourceRefs`、`memoryPriority` 和 `memorySummary` 可在 `afterDecision` 事件中立即投影到宿主结果。
 
+## 观测映射
+
+| core 端点 | kset-rag 现有能力 |
+| --- | --- |
+| `beforeRun/beforeTurn` | 工作流开始日志、轮次步骤和执行阶段 |
+| `beforeModel/afterModel` | 模型耗时、Token 用量、provider/model、finishReason |
+| `afterDecision` | 协议决策步骤、progressSummary、resourceRefs 和记忆建议 |
+| `beforeAction/afterAction` | 工具运行步骤、callId、成功率、错误码和工具耗时 |
+| `afterTurn` | 单轮决策与动作汇总、整轮耗时和最新运行状态 |
+| `onProtocolError` | 协议重试步骤和错误指标 |
+| `beforeCheckpoint/afterCheckpoint` | 带 owner/fencing 的条件写及持久化耗时 |
+| `onStop/onError/afterRun` | 最终任务状态、SSE done/error 和工作流汇总指标 |
+| `onListenerError` | 上报器失败、队列丢弃与告警指标 |
+
+`KsetRagLifecycleListener` 使用 `invocationId + sequence` 作为事件幂等身份，使用 `runId + turn + actionIndex/callId` 关联步骤。模型原文、Prompt、工具参数、Observation 和请求属性不得直接写日志；现有全量模型错误日志在接入前必须改为长度、指纹及脱敏摘要。
+
 ## 并发与恢复
 
-- 一个会话只能有一个活动实例，由 kset-rag 的工作流租约或条件写保证。
+- 一个会话只能有一个活动实例；接入前必须补充基于 `sessionId` 的原子抢占或活动任务唯一约束，现有按 `taskId` 的租约不能替代会话单飞。
 - 不同会话可以并发调用同一个 Kernel；所有共享扩展必须线程安全。
 - core 的 `resume` 只恢复逻辑快照，不负责读取快照、重新抢占任务或判断未知工具结果。
 - 带副作用的工具恢复前必须按原 callId 查询权威结果，再决定复用结果、重试或补偿。
+- kset-rag 的 Strategy 只写 `kset-rag.*`，扩展 Action Handler 也使用该宿主命名空间，不得改写 core 的 `agent.*`/`react.*`。
 
 ## 接入顺序
 

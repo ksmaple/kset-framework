@@ -65,6 +65,8 @@ AgentResult result = kernel.run(request);
 
 `AgentLoopKernel` 可以作为单例供多个独立任务并发调用，但注入的 Model、Strategy、Codec、Handler、Tool、StopPolicy、CheckpointPort 和 Listener 必须线程安全。请求与扩展属性中的复杂对象必须可序列化，并且在一次运行期间不可变。
 
+状态属性有明确所有权：`agent.*` 属于 Kernel，`react.*` 属于内置 ReAct；自定义 Action Handler 不得写入或删除这两个保留命名空间。自定义 Strategy 的 `id()` 必须非空且不能占用 `agent` 命名空间，`afterTurn` 只能修改 `{strategyId}.*`。违反边界时运行返回 `EXTENSION_CONTRACT_VIOLATION`。`AgentActionResult.removedStateAttributes` 显式表达删除，Kernel 总是先删除再合并新值。
+
 ## 对外结果与错误契约
 
 核心把“为何停止”和“哪里出错”分开表达：
@@ -79,6 +81,26 @@ AgentResult result = kernel.run(request);
 | `AgentObservation.errorCode` | 单个工具调用的结构化错误，如未找到、取消、超时或执行失败 | 工具错误作为 Observation 返回，Strategy 可决定是否继续 |
 
 正常完成、等待输入、取消、活动超时、最大轮次、协议错误上限、无进展和容量限制只产生 `AgentStopReason`，`AgentResult.failure()` 为空。只有循环内部的技术故障才同时返回 `FATAL_ERROR` 和非空 `AgentFailure`。未注册协议或动作、扩展返回 `null`、扩展篡改内核状态等均有明确 `AgentErrorCode`。
+
+关键 Listener 的 `critical()` 只影响仍可推进的活动循环回调。`onError`、`onStop` 和 `afterRun` 是终态 best-effort 通知，Kernel 会忽略其异常，不能用它们阻止或改写已经决定的结果；需要可靠落库时应使用 `AgentCheckpointPort`。
+
+## 外部观测
+
+核心不依赖日志、指标或链路框架，通过 `AgentLifecycleListener` 提供固定观测端点。每个新回调都携带 `AgentLifecycleContext`，其中包含版本、`AgentLifecycleEventType`、`RUN/RESUME` 调用类型、唯一 `invocationId`、严格递增序号、`runId`、turn、零基 actionIndex、事件时间、deadline 和阶段耗时。模型、动作与检查点完成事件的耗时只覆盖对应扩展调用，轮次完成事件覆盖整轮处理，最终返回事件覆盖本次 `run/resume` 调用。`eventId()` 可作为同一次调用内的上报幂等键。
+
+| 阶段 | 回调 | 主要数据 |
+| --- | --- | --- |
+| 调用与轮次开始 | `beforeRun`、`beforeTurn` | Request、RunState、调用身份 |
+| 模型调用 | `beforeModel`、`afterModel` | ModelRequest、ModelResponse、调用耗时 |
+| 决策与动作 | `afterDecision`、`beforeAction`、`afterAction` | Decision、Action、Result、actionIndex |
+| 轮次完成 | `afterTurn` | Decision、全部 ActionResult、最新状态 |
+| 协议与快照 | `onProtocolError`、`beforeCheckpoint`、`afterCheckpoint` | 协议扩展码、版本化 Snapshot |
+| 终态 | `onError`、`onStop`、`afterRun` | 技术异常、停止原因、最终 AgentResult |
+| 监听器健康 | `onListenerError` | 失败事件、Listener 类型、critical 标志和异常 |
+
+模型适配器通过 `ModelCallMetrics` 返回 provider、model、requestId 和 Token 用量；供应商特有值继续放在其 attributes 中。Kernel 保证同步扩展调用已经返回后先发出完成事件；动作结果会先应用到状态，再判断调用后的取消或超时，避免已经发生的外部调用在观测和最终快照中消失。
+
+Listener 在循环线程同步执行，耗时计入本次活动 deadline。普通日志、指标和 Trace Listener 应快速写入有界上报队列；独立健康 Listener 可通过 `onListenerError` 观测其他 Listener 的失败。需要阻止循环继续的关键投影才使用 `critical=true`。不得直接记录 Prompt、模型原文、工具参数、Observation 输出或请求属性，宿主必须按字段白名单脱敏和限长。
 
 ## 停止语义
 
@@ -128,6 +150,8 @@ AgentResult result = kernel.run(request);
 
 内置 `agent-json:v1` 使用 `<<<AGENT_JSON>>>` / `<<<END_AGENT_JSON>>>` 严格包裹控制 JSON；无标记普通文本按最终回答处理。协议支持 `task_plan`、`tool_call`、`tool_batch`、`answer_chunk`、`final_answer` 和 `confirmation`，完整字段与错误码见[协议规范](docs/protocols/agent-json-v1.md)。
 
+等待确认时，Kernel 将动作写入 `agent.pendingAction` 并以 `SUSPENDED` 返回。宿主恢复时通过唯一公开请求属性 `agent.confirmedActionIds` 传入确认 ID；内置 ReAct 只把这些 ID 注入模型上下文，不暴露其他宿主请求属性。相同 `confirmationId` 再次出现时会被消费为成功 Observation；确认消费、工具完成或失败以及最终回答都会清理 `agent.pendingAction`。
+
 自定义协议可以映射到标准动作，也可以返回 `ExtensionAction`。自定义动作必须同时注册对应 `AgentActionHandler`；未注册动作会显式失败。
 
 ## 推理策略扩展
@@ -149,7 +173,7 @@ AgentResult result = kernel.resume(request, snapshot);
 
 `resume` 只保证从已保存快照继续内核状态转换，不保证崩溃时未完成的外部副作用自动恢复，也不自动重放“已执行但尚未写入快照”的动作。宿主必须依靠稳定 `callId`、工具幂等结果和权威数据源判断重试或补偿。
 
-`AgentCheckpointPort` 是只写快照端口。内核会在启动、协议错误、每个动作结果和停止时同时传入不可变请求与快照；宿主可从请求属性取得 owner、fencing 等执行凭据，并负责快照查询、revision 及持久化条件写。外部工具副作用无法与快照存储形成通用原子事务，工具适配器必须使用 `AgentToolContext.callId` 作为幂等键；检查点写入失败会使本次运行以 `FAILED` 返回，不能继续推进后续动作。
+`AgentCheckpointPort` 是只写快照端口。内核会在启动、协议错误、每个动作结果和停止时同时传入不可变请求与快照，并在写入前后发出固定观测事件；宿主可从请求属性取得 owner、fencing 等执行凭据，并负责快照查询、revision 及持久化条件写。外部工具副作用无法与快照存储形成通用原子事务，工具适配器必须使用 `AgentToolContext.callId` 作为幂等键；检查点写入失败会使本次运行以 `FAILED` 返回，不能继续推进后续动作。
 
 会话单飞、任务排队、跨节点租约和“同一会话只能运行一个实例”属于宿主工作流职责，不进入单次任务循环内核。不同会话的资源上限由宿主提供的模型连接池和有界 Executor 负责。
 

@@ -47,6 +47,7 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         attributes.put("tools", tools.list());
         attributes.put("observations", state.observations());
         attributes.put("state", state.attributes());
+        attributes.put("confirmedActionIds", confirmedActionIds(request));
         return new AgentTurn(request.protocol(), new ModelRequest(
                 systemPrompt(phase), userPrompt(request, state, tools.list()),
                 request.options().maxOutputTokens(), attributes));
@@ -160,6 +161,10 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         if (!state.attributes().isEmpty()) {
             prompt.append("\n\nRuntime state:\n").append(state.attributes());
         }
+        List<String> confirmedActionIds = confirmedActionIds(request);
+        if (!confirmedActionIds.isEmpty()) {
+            prompt.append("\n\nConfirmed action IDs:\n").append(confirmedActionIds);
+        }
         Object protocolError = state.attributes().get("agent.lastProtocolError");
         if (protocolError != null) {
             prompt.append("\n\nCorrect the previous protocol error: ").append(protocolError);
@@ -172,5 +177,20 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
             return List.of();
         }
         return values.stream().map(String::valueOf).toList();
+    }
+
+    private List<String> confirmedActionIds(AgentRequest request) {
+        Object value = request.attributes().get(AgentRequest.CONFIRMED_ACTION_IDS);
+        if (value instanceof Collection<?> values) {
+            return values.stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(String::valueOf)
+                    .filter(id -> !id.isBlank())
+                    .toList();
+        }
+        if (value == null || String.valueOf(value).isBlank()) {
+            return List.of();
+        }
+        return List.of(String.valueOf(value));
     }
 }

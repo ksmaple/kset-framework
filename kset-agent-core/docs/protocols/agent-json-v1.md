@@ -92,13 +92,13 @@
 }
 ```
 
-`confirmationId` 和 `message` 必填。该动作将运行置为 `SUSPENDED`；宿主保存快照并在恢复请求中通过 `AgentRequest.CONFIRMED_ACTION_IDS` 提供已确认的稳定动作 ID。
+`confirmationId` 和 `message` 必填。未确认时该动作将运行置为 `SUSPENDED`；宿主保存快照并在恢复请求中通过 `AgentRequest.CONFIRMED_ACTION_IDS` 提供已确认的稳定动作 ID。恢复后若模型再次返回相同 `confirmationId`，标准 Handler 将其消费为成功 Observation 并继续循环，不会再次暂停。
 
 ## metadata
 
 根层 `metadata` 是协议中立的扩展数据，只能是 JSON 对象。内核将最近一次 metadata 保存到快照属性 `agent.protocolMetadata`，但不会解释业务内容。需要跨多轮保留的数据应由自定义 Strategy 显式复制到自己的非保留命名空间。
 
-`agent.*` 和 `react.*` 是内核保留属性前缀。请求侧唯一公开的内核属性是 `agent.confirmedActionIds`；宿主扩展应使用自己的命名空间。
+`agent.*` 和 `react.*` 是内核保留属性前缀。请求侧唯一公开的内核属性是 `agent.confirmedActionIds`；宿主扩展应使用自己的命名空间。`agent.pendingAction` 只在等待确认时保留，并在确认消费、工具结束或最终回答时由标准 Handler 删除。
 
 ## 错误码
 

@@ -11,6 +11,8 @@
 5. 在 `AgentRequest.protocol` 中选择本次运行的协议。
 6. 自定义动作同时注册唯一的 `AgentActionHandler`。
 
+注册表以结构化 `AgentProtocolId(name, version)` 作为唯一键，Codec 的 `id()` 只在构建期读取一次；`name + ":" + version` 仅用于展示，不能作为注册或持久化主键。
+
 ## 原生 Function Calling 示例
 
 ```java
@@ -89,6 +91,8 @@ AgentResult result = kernel.run(request);
 
 `AgentDecision.metadata` 适合承载引用、记忆建议、供应商使用量等不改变动作执行语义的数据。内核只保留最近一次协议 metadata。跨轮状态由 Strategy 写入自己的属性命名空间；业务输出可由 Listener 在 `afterDecision` 中投影。
 
+模型供应商、模型名、请求 ID 和 Token 数量不放入协议 metadata，应由 Model Adapter 写入 `ModelResponse.metrics`。供应商特有的可观测字段放入 `ModelCallMetrics.attributes`，业务决策数据仍放在 `AgentDecision.metadata`，两者不得混用。
+
 ## 错误处理
 
 - 可由模型纠正的格式错误：抛出 `AgentProtocolException`，提供稳定 `protocolCode`。
@@ -98,3 +102,16 @@ AgentResult result = kernel.run(request);
 - Codec、Handler 或 Strategy 返回 `null`：`EXTENSION_CONTRACT_VIOLATION`。
 
 自定义 Codec、Strategy 和 Handler 会被 Kernel 单例并发调用，必须线程安全，不得保存单次运行的可变状态。
+
+## 状态扩展边界
+
+- 自定义 Handler 通过 `AgentActionResult.stateAttributes` 写状态，通过 `removedStateAttributes` 删除状态；同一结果不能同时写入和删除同一键。
+- 自定义 Handler 不得修改 `agent.*` 或 `react.*`，应使用宿主自己的命名空间。
+- Strategy ID 在 Kernel 构建期固定；`afterTurn` 只能修改 `{strategyId}.*`，其他字段或属性变化会返回 `EXTENSION_CONTRACT_VIOLATION`。
+- `agent.pendingAction` 由标准确认、工具和最终回答 Handler 管理，扩展动作需要等待外部输入时应使用自己的状态键。
+
+## 生命周期观测
+
+`AgentLifecycleListener` 为每个 `run/resume` 生成独立 invocation，并通过固定 `AgentLifecycleEventType` 暴露调用、轮次、模型、决策、动作、协议错误、检查点和最终结果端点。`AgentLifecycleContext.sequence` 在 invocation 内严格递增，`actionIndex` 为零基序号，非动作事件固定为 `NO_ACTION`。模型、动作和检查点完成事件的 `elapsed` 只计算实际扩展调用，轮次完成事件计算整轮耗时，最终返回事件计算本次 invocation 总耗时。
+
+完成事件只表示同步扩展调用已经返回，不表示检查点已经持久化；可靠恢复以 `afterCheckpoint` 对应的 `AgentCheckpointPort.save` 成功为准。独立健康 Listener 可通过 `onListenerError` 接收其他 Listener 的失败信息。Listener 必须线程安全，不得保存无界的按 run 可变状态。日志和指标实现不得输出未经脱敏的模型文本、工具参数或 Observation 内容。

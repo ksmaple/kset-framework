@@ -13,7 +13,7 @@ public class AgentProtocolException extends AgentCoreException {
     }
 
     public AgentProtocolException(String protocolCode, String message, Throwable cause) {
-        super(AgentErrorCode.PROTOCOL_INVALID, message, cause);
+        super(AgentErrorCode.PROTOCOL_INVALID, normalizeMessage(message), cause);
         if (protocolCode == null || protocolCode.isBlank()) {
             throw new IllegalArgumentException("protocol error code must not be blank");
         }
@@ -22,5 +22,10 @@ public class AgentProtocolException extends AgentCoreException {
 
     public String protocolCode() {
         return protocolCode;
+    }
+
+    private static String normalizeMessage(String message) {
+        return message == null || message.isBlank()
+                ? "protocol response is invalid" : message;
     }
 }
