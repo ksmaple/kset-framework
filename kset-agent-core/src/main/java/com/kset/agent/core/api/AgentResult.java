@@ -3,11 +3,12 @@ package com.kset.agent.core.api;
 import com.kset.agent.core.loop.AgentRunSnapshot;
 import com.kset.agent.core.stop.AgentStopDecision;
 
-/** Final or suspended result returned by the loop kernel. */
+/** Terminal or suspended result returned by one synchronous loop invocation. */
 public record AgentResult(
         String runId,
         AgentRunStatus status,
         String answer,
         AgentStopDecision stop,
-        AgentRunSnapshot snapshot) {
+        AgentRunSnapshot snapshot,
+        AgentFailure failure) {
 }

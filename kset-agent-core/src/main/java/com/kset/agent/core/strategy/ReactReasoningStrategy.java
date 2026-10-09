@@ -160,9 +160,6 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         if (!state.attributes().isEmpty()) {
             prompt.append("\n\nRuntime state:\n").append(state.attributes());
         }
-        if (!request.attributes().isEmpty()) {
-            prompt.append("\n\nExternal input:\n").append(request.attributes());
-        }
         Object protocolError = state.attributes().get("agent.lastProtocolError");
         if (protocolError != null) {
             prompt.append("\n\nCorrect the previous protocol error: ").append(protocolError);

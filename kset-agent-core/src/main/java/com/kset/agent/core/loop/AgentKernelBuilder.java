@@ -1,6 +1,8 @@
 package com.kset.agent.core.loop;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kset.agent.core.AgentCoreException;
+import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.action.AgentActionHandler;
 import com.kset.agent.core.action.AgentActionRegistry;
 import com.kset.agent.core.action.StandardActionHandlers;
@@ -15,15 +17,15 @@ import com.kset.agent.core.stop.AgentStopPolicy;
 import com.kset.agent.core.strategy.AgentReasoningStrategy;
 import com.kset.agent.core.strategy.ReactReasoningStrategy;
 import com.kset.agent.core.tool.AgentToolRegistry;
+import com.kset.agent.core.tool.FixedAgentToolRegistry;
 import com.kset.agent.core.tool.InMemoryAgentToolRegistry;
 
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.Executor;
 
-/** Fluent, framework-neutral assembly entry point for the agent kernel. */
+/** Fluent, framework-neutral assembly entry point. Builders are for single-threaded startup use. */
 public final class AgentKernelBuilder {
 
     private final AgentModel model;
@@ -39,73 +41,94 @@ public final class AgentKernelBuilder {
     private final List<AgentLifecycleListener> listeners = new ArrayList<>();
 
     AgentKernelBuilder(AgentModel model) {
-        this.model = Objects.requireNonNull(model, "model");
+        this.model = requireConfiguration(model, "model");
     }
 
     public AgentKernelBuilder tools(AgentToolRegistry value) {
-        this.tools = Objects.requireNonNull(value, "tools");
+        this.tools = requireConfiguration(value, "tools");
         return this;
     }
 
     public AgentKernelBuilder toolExecutor(Executor value) {
-        this.toolExecutor = Objects.requireNonNull(value, "toolExecutor");
+        this.toolExecutor = requireConfiguration(value, "toolExecutor");
         return this;
     }
 
     public AgentKernelBuilder strategy(AgentReasoningStrategy value) {
-        this.strategy = Objects.requireNonNull(value, "strategy");
+        this.strategy = requireConfiguration(value, "strategy");
         return this;
     }
 
     public AgentKernelBuilder checkpoints(AgentCheckpointPort value) {
-        this.checkpoints = Objects.requireNonNull(value, "checkpoints");
+        this.checkpoints = requireConfiguration(value, "checkpoints");
         return this;
     }
 
     public AgentKernelBuilder clock(Clock value) {
-        this.clock = Objects.requireNonNull(value, "clock");
+        this.clock = requireConfiguration(value, "clock");
         return this;
     }
 
     public AgentKernelBuilder objectMapper(ObjectMapper value) {
-        this.objectMapper = Objects.requireNonNull(value, "objectMapper");
+        this.objectMapper = requireConfiguration(value, "objectMapper");
         return this;
     }
 
     public AgentKernelBuilder protocol(AgentProtocolCodec value) {
-        this.protocols.add(Objects.requireNonNull(value, "protocol"));
+        this.protocols.add(requireConfiguration(value, "protocol"));
         return this;
     }
 
     public AgentKernelBuilder actionHandler(AgentActionHandler value) {
-        this.actionHandlers.add(Objects.requireNonNull(value, "actionHandler"));
+        this.actionHandlers.add(requireConfiguration(value, "actionHandler"));
         return this;
     }
 
     public AgentKernelBuilder stopPolicy(AgentStopPolicy value) {
-        this.stopPolicies.add(Objects.requireNonNull(value, "stopPolicy"));
+        this.stopPolicies.add(requireConfiguration(value, "stopPolicy"));
         return this;
     }
 
     public AgentKernelBuilder listener(AgentLifecycleListener value) {
-        this.listeners.add(Objects.requireNonNull(value, "listener"));
+        this.listeners.add(requireConfiguration(value, "listener"));
         return this;
     }
 
     public AgentLoopKernel build() {
-        List<AgentProtocolCodec> protocolValues = new ArrayList<>();
-        protocolValues.add(new AgentJsonV1Codec(objectMapper));
-        protocolValues.addAll(protocols);
+        try {
+            AgentToolRegistry fixedTools = FixedAgentToolRegistry.copyOf(tools);
+            List<AgentProtocolCodec> protocolValues = new ArrayList<>();
+            protocolValues.add(new AgentJsonV1Codec(objectMapper));
+            protocolValues.addAll(protocols);
 
-        List<AgentActionHandler> handlerValues = new ArrayList<>(
-                StandardActionHandlers.create(tools, toolExecutor));
-        handlerValues.addAll(actionHandlers);
+            List<AgentActionHandler> handlerValues = new ArrayList<>(
+                    StandardActionHandlers.create(fixedTools, toolExecutor));
+            handlerValues.addAll(actionHandlers);
 
-        AgentReasoningStrategy strategyValue = strategy == null
-                ? new ReactReasoningStrategy(tools) : strategy;
-        return new AgentLoopKernel(model, strategyValue,
-                new AgentProtocolRegistry(protocolValues),
-                new AgentActionRegistry(handlerValues),
-                new AgentStopController(stopPolicies), checkpoints, listeners, clock);
+            AgentReasoningStrategy strategyValue = strategy == null
+                    ? new ReactReasoningStrategy(fixedTools) : strategy;
+            return new AgentLoopKernel(model, strategyValue,
+                    new AgentProtocolRegistry(protocolValues),
+                    new AgentActionRegistry(handlerValues),
+                    new AgentStopController(stopPolicies), checkpoints, listeners, clock);
+        } catch (AgentCoreException error) {
+            throw error;
+        } catch (RuntimeException error) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
+                    "agent kernel configuration is invalid: " + errorMessage(error), error);
+        }
+    }
+
+    private static <T> T requireConfiguration(T value, String name) {
+        if (value == null) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
+                    name + " must not be null");
+        }
+        return value;
+    }
+
+    private static String errorMessage(Throwable error) {
+        return error.getMessage() == null || error.getMessage().isBlank()
+                ? error.getClass().getSimpleName() : error.getMessage();
     }
 }

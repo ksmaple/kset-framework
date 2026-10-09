@@ -8,7 +8,11 @@ import com.kset.agent.core.protocol.AgentDecision;
 import java.time.Instant;
 import java.util.List;
 
-/** Decides how a loop turn is prompted and which semantic decisions are valid. */
+/**
+ * Decides how a loop turn is prompted and which semantic decisions are valid.
+ * Implementations shared by a kernel must be thread-safe. {@link #afterTurn} may update strategy
+ * attributes but must preserve all kernel-owned state fields.
+ */
 public interface AgentReasoningStrategy {
 
     String id();

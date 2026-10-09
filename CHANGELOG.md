@@ -6,7 +6,7 @@
 
 ### 新增
 
-- **kset-agent-core**：重建为框架无关的稳定 Agent 循环内核，固定 `RunState → ModelResponse → Decision → Action → Observation → StopDecision` 语义；提供集中式取消/超时/轮次/协议错误/无进展停止控制、版本化快照与宿主检查点端口。内置 ReAct 策略和严格 `agent-json:v1` 协议，同时支持注册自定义推理策略、协议 Codec、动作处理器、停止策略及生命周期监听器。移除 Spring 自动装配、持久化工作流引擎及项目、文档、代码仓库、权限、指标等业务耦合 API
+- **kset-agent-core**：重建为框架无关的稳定 Agent 循环内核，固定 `RunState → ModelResponse → Decision → Action → Observation → StopDecision` 语义；提供集中式取消、活动执行超时、轮次、协议错误、无进展与容量停止控制，模型和工具调用贯穿 deadline/cancellation/callId 上下文。快照端口收敛为同时接收不可变请求与快照的宿主只写边界，恢复快照由宿主显式传入；构建时冻结工具集合并明确所有共享扩展的线程安全契约。新增统一 `AgentErrorCode`、带错误码异常、`AgentFailure` 技术失败结果和工具 Observation 错误码，隔离协议 metadata，并在每个动作后执行停止判断。内置 ReAct 策略和严格且不可覆盖的 `agent-json:v1` 协议，新增固定协议错误枚举、协议扩展指南和 kset-rag 字段映射；请求属性隔离内核保留命名空间，修正确认判断及工具执行前 deadline 检查。支持注册自定义推理策略、协议 Codec、动作处理器、停止策略及生命周期监听器。移除 Spring 自动装配、持久化工作流引擎及项目、文档、代码仓库、权限、指标等业务耦合 API
 
 ## [v1.0.16] - 2026-08-30
 

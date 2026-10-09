@@ -9,10 +9,12 @@ public record ConfirmationAction(
         Map<String, Object> options) implements AgentAction {
 
     public ConfirmationAction {
+        if (confirmationId == null || confirmationId.isBlank()) {
+            throw new IllegalArgumentException("confirmationId must not be blank");
+        }
         if (message == null || message.isBlank()) {
             throw new IllegalArgumentException("confirmation message must not be blank");
         }
-        confirmationId = confirmationId == null ? "" : confirmationId;
         options = options == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(options));
     }
 

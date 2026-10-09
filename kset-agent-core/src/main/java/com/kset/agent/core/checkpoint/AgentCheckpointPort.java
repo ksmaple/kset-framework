@@ -1,26 +1,18 @@
 package com.kset.agent.core.checkpoint;
 
+import com.kset.agent.core.api.AgentRequest;
 import com.kset.agent.core.loop.AgentRunSnapshot;
 
-import java.util.Optional;
-
-/** Host-owned durable state boundary. */
+/**
+ * Thread-safe, host-owned snapshot sink. The host remains responsible for loading snapshots before
+ * resume and for applying any ownership, revision or fencing checks required by its storage model.
+ */
 public interface AgentCheckpointPort {
 
-    void save(AgentRunSnapshot snapshot);
-
-    Optional<AgentRunSnapshot> find(String runId);
+    /** Saves a snapshot using request attributes only as host-side conditional-write context. */
+    void save(AgentRequest request, AgentRunSnapshot snapshot);
 
     static AgentCheckpointPort noop() {
-        return new AgentCheckpointPort() {
-            @Override
-            public void save(AgentRunSnapshot snapshot) {
-            }
-
-            @Override
-            public Optional<AgentRunSnapshot> find(String runId) {
-                return Optional.empty();
-            }
-        };
+        return (request, snapshot) -> { };
     }
 }

@@ -6,7 +6,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Thread-safe registry suitable for tools known inside one process. */
+/**
+ * Thread-safe mutable registry for startup assembly. Kernels capture an immutable copy at build time.
+ */
 public final class InMemoryAgentToolRegistry implements AgentToolRegistry {
 
     private final Map<String, AgentTool> tools = new ConcurrentHashMap<>();

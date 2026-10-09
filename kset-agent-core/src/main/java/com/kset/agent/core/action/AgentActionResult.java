@@ -6,7 +6,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Outcome of one dispatched action. */
+/**
+ * Outcome of one dispatched action. A terminal result may only complete or suspend the run;
+ * technical failures must be thrown so the kernel can expose an {@code AgentFailure}.
+ */
 public record AgentActionResult(
         List<AgentObservation> observations,
         AgentRunStatus terminalStatus,

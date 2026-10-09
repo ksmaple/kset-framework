@@ -1,6 +1,7 @@
 package com.kset.agent.core.protocol;
 
 import com.kset.agent.core.AgentCoreException;
+import com.kset.agent.core.AgentErrorCode;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,7 +25,8 @@ public final class AgentProtocolRegistry {
     public AgentProtocolCodec require(AgentProtocolId id) {
         AgentProtocolCodec codec = codecs.get(id.key());
         if (codec == null) {
-            throw new AgentCoreException("agent protocol is not registered: " + id.key());
+            throw new AgentCoreException(AgentErrorCode.PROTOCOL_NOT_REGISTERED,
+                    "agent protocol is not registered: " + id.key());
         }
         return codec;
     }

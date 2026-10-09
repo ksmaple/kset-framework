@@ -9,7 +9,9 @@ import com.kset.agent.core.protocol.AgentDecision;
 import com.kset.agent.core.protocol.AgentProtocolException;
 import com.kset.agent.core.stop.AgentStopDecision;
 
-/** Read-only lifecycle observer. Listeners cannot override loop or stop decisions. */
+/**
+ * Thread-safe, read-only lifecycle observer. Listeners cannot override loop or stop decisions.
+ */
 public interface AgentLifecycleListener {
 
     default boolean critical() { return false; }

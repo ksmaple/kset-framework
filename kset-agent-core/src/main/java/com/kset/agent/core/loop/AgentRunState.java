@@ -1,5 +1,7 @@
 package com.kset.agent.core.loop;
 
+import com.kset.agent.core.AgentCoreException;
+import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.action.AgentActionResult;
 import com.kset.agent.core.action.AgentObservation;
 import com.kset.agent.core.api.AgentRequest;
@@ -16,6 +18,8 @@ import java.util.Map;
 
 /** Immutable runtime state owned by the loop kernel. */
 public final class AgentRunState {
+
+    public static final String PROTOCOL_METADATA_ATTRIBUTE = "agent.protocolMetadata";
 
     private final String runId;
     private final String task;
@@ -53,12 +57,13 @@ public final class AgentRunState {
 
     public static AgentRunState start(AgentRequest request, Instant now) {
         return new AgentRunState(request.runId(), request.task(), request.protocol(), AgentRunStatus.RUNNING,
-                0, now, now, List.of(), request.attributes(), 0, 0, null, null);
+                0, now, now, List.of(), Map.of(), 0, 0, null, null);
     }
 
     public static AgentRunState restore(AgentRunSnapshot snapshot, Instant now) {
         if (snapshot.version() != AgentRunSnapshot.CURRENT_VERSION) {
-            throw new IllegalArgumentException("unsupported agent snapshot version: " + snapshot.version());
+            throw new AgentCoreException(AgentErrorCode.UNSUPPORTED_SNAPSHOT_VERSION,
+                    "unsupported agent snapshot version: " + snapshot.version());
         }
         return new AgentRunState(snapshot.runId(), snapshot.task(), snapshot.protocol(), AgentRunStatus.RUNNING,
                 snapshot.turn(), snapshot.startedAt(), now, snapshot.observations(), snapshot.attributes(),
@@ -83,7 +88,7 @@ public final class AgentRunState {
         Map<String, Object> nextAttributes = new LinkedHashMap<>(attributes);
         nextAttributes.remove("agent.lastProtocolErrorCode");
         nextAttributes.remove("agent.lastProtocolError");
-        nextAttributes.putAll(decision.metadata());
+        nextAttributes.put(PROTOCOL_METADATA_ATTRIBUTE, decision.metadata());
         nextAttributes.put("agent.lastActionTypes", decision.actions().stream().map(action -> action.type()).toList());
         return copy(status, turn, now, observations, nextAttributes,
                 0, consecutiveNoProgress, answer, stop);

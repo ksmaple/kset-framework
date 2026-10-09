@@ -1,5 +1,7 @@
 package com.kset.agent.core.action;
 
+import com.kset.agent.core.AgentErrorCode;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -23,5 +25,10 @@ public record AgentObservation(
 
     public static AgentObservation failure(String type, String code, String message) {
         return new AgentObservation(type, false, false, null, code, message, Map.of());
+    }
+
+    public static AgentObservation failure(
+            String type, AgentErrorCode code, String message) {
+        return failure(type, code.name(), message);
     }
 }

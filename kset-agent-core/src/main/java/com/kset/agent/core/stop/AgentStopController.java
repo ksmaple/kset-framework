@@ -1,9 +1,11 @@
 package com.kset.agent.core.stop;
 
+import com.kset.agent.core.AgentCoreException;
+import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.api.AgentRunStatus;
 
-import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 /** Centralized stop evaluator. Mandatory limits run before all extension policies. */
 public final class AgentStopController {
@@ -45,15 +47,21 @@ public final class AgentStopController {
             return AgentStopDecision.stop(AgentStopReason.NO_PROGRESS_LIMIT,
                     AgentRunStatus.FAILED, "no-progress limit exceeded");
         }
-        for (AgentStopPolicy policy : policies) {
-            AgentStopDecision decision = policy.evaluate(context).orElse(null);
-            if (decision != null && decision.stop()) {
-                return decision.reason() == AgentStopReason.NONE
-                        ? AgentStopDecision.stop(AgentStopReason.POLICY, decision.status(), decision.detail())
-                        : decision;
-            }
+        return evaluatePolicies(context);
+    }
+
+    /** Checks action-sensitive limits and host policies between actions in the same turn. */
+    public AgentStopDecision evaluateAfterAction(AgentStopContext context) {
+        AgentStopDecision immediate = evaluateImmediate(context);
+        if (immediate.stop()) {
+            return immediate;
         }
-        return AgentStopDecision.continueRun();
+        if (context.state().consecutiveNoProgress()
+                >= context.request().options().noProgressLimit()) {
+            return AgentStopDecision.stop(AgentStopReason.NO_PROGRESS_LIMIT,
+                    AgentRunStatus.FAILED, "no-progress limit exceeded");
+        }
+        return evaluatePolicies(context);
     }
 
     /** Checks cancellation and elapsed time without applying turn or progress limits. */
@@ -63,14 +71,13 @@ public final class AgentStopController {
             return AgentStopDecision.stop(AgentStopReason.THREAD_INTERRUPTED,
                     AgentRunStatus.CANCELLED, "thread interrupted");
         }
-        if (context.request().cancellation().isCancellationRequested()) {
+        if (context.execution().cancellation().isCancellationRequested()) {
             return AgentStopDecision.stop(AgentStopReason.USER_CANCELLED,
                     AgentRunStatus.CANCELLED, "cancellation requested");
         }
-        Duration elapsed = Duration.between(context.state().startedAt(), context.now());
-        if (elapsed.compareTo(context.request().options().timeout()) >= 0) {
+        if (!context.now().isBefore(context.execution().deadline())) {
             return AgentStopDecision.stop(AgentStopReason.TIMEOUT,
-                    AgentRunStatus.FAILED, "run timeout exceeded");
+                    AgentRunStatus.FAILED, "active execution timeout exceeded");
         }
         return AgentStopDecision.continueRun();
     }
@@ -80,5 +87,27 @@ public final class AgentStopController {
         String detail = error.getMessage() == null
                 ? error.getClass().getSimpleName() : error.getMessage();
         return AgentStopDecision.stop(AgentStopReason.FATAL_ERROR, AgentRunStatus.FAILED, detail);
+    }
+
+    private AgentStopDecision evaluatePolicies(AgentStopContext context) {
+        for (AgentStopPolicy policy : policies) {
+            Optional<AgentStopDecision> evaluated;
+            try {
+                evaluated = policy.evaluate(context);
+            } catch (RuntimeException error) {
+                throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
+                        "stop policy failed: " + policy.getClass().getName(), error);
+            }
+            if (evaluated == null) {
+                throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
+                        "stop policy returned null: " + policy.getClass().getName());
+            }
+            AgentStopDecision decision = evaluated.orElse(null);
+            if (decision != null && decision.stop()) {
+                return AgentStopDecision.stop(
+                        AgentStopReason.POLICY, decision.status(), decision.detail());
+            }
+        }
+        return AgentStopDecision.continueRun();
     }
 }

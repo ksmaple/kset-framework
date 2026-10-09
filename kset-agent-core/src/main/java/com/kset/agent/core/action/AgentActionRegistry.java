@@ -1,6 +1,7 @@
 package com.kset.agent.core.action;
 
 import com.kset.agent.core.AgentCoreException;
+import com.kset.agent.core.AgentErrorCode;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,7 +27,8 @@ public final class AgentActionRegistry {
     public AgentActionResult dispatch(AgentAction action, AgentActionContext context) {
         AgentActionHandler handler = handlers.get(normalize(action.type()));
         if (handler == null) {
-            throw new AgentCoreException("no action handler registered for type: " + action.type());
+            throw new AgentCoreException(AgentErrorCode.ACTION_NOT_REGISTERED,
+                    "no action handler registered for type: " + action.type());
         }
         return handler.handle(action, context);
     }

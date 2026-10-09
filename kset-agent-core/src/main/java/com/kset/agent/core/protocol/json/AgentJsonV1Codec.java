@@ -55,13 +55,27 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
             {"type":"answer_chunk","answer":"..."}
             {"type":"final_answer","answer":"..."}
             {"type":"confirmation","confirmation":{"confirmationId":"...","message":"...","options":{}}}
+            callId is required, unique within one decision, and must be reused for the same operation
+            after confirmation, retry, or resume.
             An optional root metadata object may carry protocol-neutral extension data.
             """;
 
     private final ObjectMapper objectMapper;
 
     public AgentJsonV1Codec(ObjectMapper objectMapper) {
-        this.objectMapper = java.util.Objects.requireNonNull(objectMapper, "objectMapper");
+        this.objectMapper = java.util.Objects.requireNonNull(objectMapper, "objectMapper").copy();
+        this.objectMapper.enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
+        this.objectMapper.disable(
+                JsonParser.Feature.ALLOW_COMMENTS,
+                JsonParser.Feature.ALLOW_YAML_COMMENTS,
+                JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES,
+                JsonParser.Feature.ALLOW_SINGLE_QUOTES,
+                JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS,
+                JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
+                JsonParser.Feature.ALLOW_NUMERIC_LEADING_ZEROS,
+                JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS,
+                JsonParser.Feature.ALLOW_MISSING_VALUES,
+                JsonParser.Feature.ALLOW_TRAILING_COMMA);
     }
 
     @Override
@@ -80,11 +94,12 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
     public AgentDecision decode(ModelResponse response, AgentProtocolContext context) {
         String raw = response == null ? "" : response.text().trim();
         if (raw.isBlank()) {
-            throw error("EMPTY_RESPONSE", "model response is empty");
+            throw error(AgentJsonV1ErrorCode.EMPTY_RESPONSE, "model response is empty");
         }
         if (!raw.contains(START_MARKER) && !raw.contains(END_MARKER)) {
             if (looksLikeControlJson(raw)) {
-                throw error("MISSING_MARKERS", "control JSON must be wrapped by protocol markers");
+                throw error(AgentJsonV1ErrorCode.MISSING_MARKERS,
+                        "control JSON must be wrapped by protocol markers");
             }
             return AgentDecision.of(new FinalAnswerAction(raw));
         }
@@ -101,12 +116,13 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
                 case StandardActionTypes.ANSWER_CHUNK -> new AnswerChunkAction(requiredText(root, "answer"));
                 case StandardActionTypes.FINAL_ANSWER -> new FinalAnswerAction(requiredText(root, "answer"));
                 case StandardActionTypes.CONFIRMATION -> confirmation(root.path("confirmation"));
-                default -> throw error("UNSUPPORTED_ACTION", "unsupported action type: " + type);
+                default -> throw error(AgentJsonV1ErrorCode.UNSUPPORTED_ACTION,
+                        "unsupported action type: " + type);
             }), metadata);
         } catch (AgentProtocolException exception) {
             throw exception;
         } catch (IllegalArgumentException exception) {
-            throw new AgentProtocolException("INVALID_SCHEMA",
+            throw new AgentProtocolException(AgentJsonV1ErrorCode.INVALID_SCHEMA.name(),
                     "protocol action fields are invalid", exception);
         }
     }
@@ -115,35 +131,41 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
         int start = raw.indexOf(START_MARKER);
         int end = raw.indexOf(END_MARKER);
         if (start < 0 || end < 0 || end < start) {
-            throw error("INVALID_MARKERS", "protocol markers must be paired and ordered");
+            throw error(AgentJsonV1ErrorCode.INVALID_MARKERS,
+                    "protocol markers must be paired and ordered");
         }
         if (raw.indexOf(START_MARKER, start + START_MARKER.length()) >= 0
                 || raw.indexOf(END_MARKER, end + END_MARKER.length()) >= 0) {
-            throw error("MULTIPLE_ENVELOPES", "only one protocol envelope is allowed");
+            throw error(AgentJsonV1ErrorCode.MULTIPLE_ENVELOPES,
+                    "only one protocol envelope is allowed");
         }
         String before = raw.substring(0, start).trim();
         String after = raw.substring(end + END_MARKER.length()).trim();
         if (!before.isEmpty() || !after.isEmpty()) {
-            throw error("OUTSIDE_CONTENT", "content outside the protocol envelope is not allowed");
+            throw error(AgentJsonV1ErrorCode.OUTSIDE_CONTENT,
+                    "content outside the protocol envelope is not allowed");
         }
         return raw.substring(start + START_MARKER.length(), end).trim();
     }
 
     private JsonNode parseObject(String text) {
         if (!text.startsWith("{") || !text.endsWith("}")) {
-            throw error("INVALID_JSON_BOUNDARY", "protocol payload must be one JSON object");
+            throw error(AgentJsonV1ErrorCode.INVALID_JSON_BOUNDARY,
+                    "protocol payload must be one JSON object");
         }
         try (JsonParser parser = objectMapper.createParser(text)) {
             JsonNode root = objectMapper.readTree(parser);
             JsonToken trailing = parser.nextToken();
             if (root == null || !root.isObject() || trailing != null) {
-                throw error("INVALID_JSON", "protocol payload must contain exactly one JSON object");
+                throw error(AgentJsonV1ErrorCode.INVALID_JSON,
+                        "protocol payload must contain exactly one JSON object");
             }
             return root;
         } catch (AgentProtocolException exception) {
             throw exception;
         } catch (Exception exception) {
-            throw new AgentProtocolException("INVALID_JSON", "protocol JSON cannot be parsed", exception);
+            throw new AgentProtocolException(AgentJsonV1ErrorCode.INVALID_JSON.name(),
+                    "protocol JSON cannot be parsed", exception);
         }
     }
 
@@ -151,24 +173,28 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
         String summary = requiredText(root, "plan");
         JsonNode values = root.path("tasks");
         if (!values.isArray() || values.isEmpty()) {
-            throw error("INVALID_PLAN", "task_plan requires at least one task");
+            throw error(AgentJsonV1ErrorCode.INVALID_PLAN,
+                    "task_plan requires at least one task");
         }
         List<PlanTask> tasks = new ArrayList<>();
         for (int index = 0; index < values.size(); index++) {
             JsonNode value = values.get(index);
             if (!value.isObject()) {
-                throw error("INVALID_PLAN", "tasks[" + index + "] must be an object");
+                throw error(AgentJsonV1ErrorCode.INVALID_PLAN,
+                        "tasks[" + index + "] must be an object");
             }
             requireOnlyFields(value, "tasks[" + index + "]", Set.of("taskId", "title", "dependsOn"));
             List<String> dependencies = new ArrayList<>();
             JsonNode dependencyValues = value.path("dependsOn");
             if (!dependencyValues.isMissingNode() && !dependencyValues.isArray()) {
-                throw error("INVALID_PLAN", "tasks[" + index + "].dependsOn must be an array");
+                throw error(AgentJsonV1ErrorCode.INVALID_PLAN,
+                        "tasks[" + index + "].dependsOn must be an array");
             }
             for (int dependencyIndex = 0; dependencyIndex < dependencyValues.size(); dependencyIndex++) {
                 JsonNode dependency = dependencyValues.get(dependencyIndex);
                 if (!dependency.isTextual() || dependency.asText().isBlank()) {
-                    throw error("INVALID_PLAN", "task dependency ids must be non-blank strings");
+                    throw error(AgentJsonV1ErrorCode.INVALID_PLAN,
+                            "task dependency ids must be non-blank strings");
                 }
                 dependencies.add(dependency.asText());
             }
@@ -180,7 +206,8 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
     private ToolBatchAction toolBatch(JsonNode root) {
         JsonNode values = root.path("toolCalls");
         if (!values.isArray() || values.size() < 2) {
-            throw error("INVALID_TOOL_BATCH", "tool_batch requires at least two tool calls");
+            throw error(AgentJsonV1ErrorCode.INVALID_TOOL_BATCH,
+                    "tool_batch requires at least two tool calls");
         }
         String summary = requiredText(root, "plan");
         List<ToolCallAction> calls = new ArrayList<>();
@@ -192,31 +219,34 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
 
     private ToolCallAction toolCall(JsonNode value, String path) {
         if (!value.isObject()) {
-            throw error("INVALID_TOOL_CALL", path + " must be an object");
+            throw error(AgentJsonV1ErrorCode.INVALID_TOOL_CALL, path + " must be an object");
         }
         requireOnlyFields(value, path, Set.of("callId", "taskId", "toolName", "arguments"));
         String name = requiredText(value, "toolName");
         JsonNode arguments = value.path("arguments");
         if (!arguments.isObject()) {
-            throw error("INVALID_TOOL_ARGUMENTS", path + ".arguments must be an object");
+            throw error(AgentJsonV1ErrorCode.INVALID_TOOL_ARGUMENTS,
+                    path + ".arguments must be an object");
         }
-        return new ToolCallAction(value.path("callId").asText(name), value.path("taskId").asText(null),
+        return new ToolCallAction(requiredText(value, "callId"), value.path("taskId").asText(null),
                 name, objectMapper.convertValue(arguments, MAP_TYPE));
     }
 
     private ConfirmationAction confirmation(JsonNode value) {
         if (!value.isObject()) {
-            throw error("INVALID_CONFIRMATION", "confirmation must be an object");
+            throw error(AgentJsonV1ErrorCode.INVALID_CONFIRMATION,
+                    "confirmation must be an object");
         }
         requireOnlyFields(value, "confirmation",
                 Set.of("confirmationId", "message", "options"));
         JsonNode optionValues = value.path("options");
         if (!optionValues.isMissingNode() && !optionValues.isObject()) {
-            throw error("INVALID_CONFIRMATION", "confirmation.options must be an object");
+            throw error(AgentJsonV1ErrorCode.INVALID_CONFIRMATION,
+                    "confirmation.options must be an object");
         }
         Map<String, Object> options = optionValues.isMissingNode()
                 ? Map.of() : objectMapper.convertValue(optionValues, MAP_TYPE);
-        return new ConfirmationAction(value.path("confirmationId").asText(""),
+        return new ConfirmationAction(requiredText(value, "confirmationId"),
                 requiredText(value, "message"), options);
     }
 
@@ -226,7 +256,7 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
             return Map.of();
         }
         if (!metadata.isObject()) {
-            throw error("INVALID_METADATA", "metadata must be an object");
+            throw error(AgentJsonV1ErrorCode.INVALID_METADATA, "metadata must be an object");
         }
         return objectMapper.convertValue(metadata, MAP_TYPE);
     }
@@ -239,7 +269,8 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
             case StandardActionTypes.ANSWER_CHUNK, StandardActionTypes.FINAL_ANSWER ->
                     Set.of("type", "answer", "metadata");
             case StandardActionTypes.CONFIRMATION -> Set.of("type", "confirmation", "metadata");
-            default -> throw error("UNSUPPORTED_ACTION", "unsupported action type: " + type);
+            default -> throw error(AgentJsonV1ErrorCode.UNSUPPORTED_ACTION,
+                    "unsupported action type: " + type);
         };
         requireOnlyFields(root, "root", allowed);
     }
@@ -247,7 +278,12 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
     private void requireOnlyFields(JsonNode value, String path, Set<String> allowed) {
         value.fieldNames().forEachRemaining(field -> {
             if (!allowed.contains(field)) {
-                throw error("UNKNOWN_FIELD", path + " contains unsupported field: " + field);
+                throw error(AgentJsonV1ErrorCode.UNKNOWN_FIELD,
+                        path + " contains unsupported field: " + field);
+            }
+            if (value.path(field).isNull()) {
+                throw error(AgentJsonV1ErrorCode.INVALID_SCHEMA,
+                        path + " contains null field: " + field);
             }
         });
     }
@@ -255,7 +291,8 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
     private String requiredText(JsonNode node, String field) {
         JsonNode value = node.path(field);
         if (!value.isTextual() || value.asText().isBlank()) {
-            throw error("MISSING_FIELD", field + " must be a non-blank string");
+            throw error(AgentJsonV1ErrorCode.MISSING_FIELD,
+                    field + " must be a non-blank string");
         }
         return value.asText();
     }
@@ -264,15 +301,25 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
         if (!text.startsWith("{") || !text.endsWith("}")) {
             return false;
         }
-        try {
-            JsonNode root = objectMapper.readTree(text);
-            return root != null && root.isObject() && STANDARD_TYPES.contains(root.path("type").asText());
+        try (JsonParser parser = objectMapper.createParser(text)) {
+            parser.disable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
+            JsonToken token;
+            while ((token = parser.nextToken()) != null) {
+                if (token == JsonToken.FIELD_NAME && "type".equals(parser.currentName())) {
+                    JsonToken value = parser.nextToken();
+                    if (value == JsonToken.VALUE_STRING
+                            && STANDARD_TYPES.contains(parser.getValueAsString())) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         } catch (Exception ignored) {
             return false;
         }
     }
 
-    private AgentProtocolException error(String code, String message) {
-        return new AgentProtocolException(code, message);
+    private AgentProtocolException error(AgentJsonV1ErrorCode code, String message) {
+        return new AgentProtocolException(code.name(), message);
     }
 }

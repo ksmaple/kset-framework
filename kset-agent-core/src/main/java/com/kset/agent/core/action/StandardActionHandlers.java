@@ -1,20 +1,25 @@
 package com.kset.agent.core.action;
 
 import com.kset.agent.core.AgentCoreException;
+import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.tool.AgentTool;
+import com.kset.agent.core.tool.AgentToolContext;
 import com.kset.agent.core.tool.AgentToolRegistry;
 import com.kset.agent.core.tool.ToolExecutionResult;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /** Factory for handlers of the standard protocol-neutral actions. */
 public final class StandardActionHandlers {
@@ -76,17 +81,35 @@ public final class StandardActionHandlers {
             AgentTool tool = tools.find(call.toolName()).orElse(null);
             if (tool == null) {
                 return AgentActionResult.observed(AgentObservation.failure(
-                        action.type(), "TOOL_NOT_FOUND", "tool not found: " + call.toolName()));
+                        action.type(), AgentErrorCode.TOOL_NOT_FOUND,
+                        "tool not found: " + call.toolName()));
             }
             if (needsConfirmation(tool, call, context)) {
                 return AgentActionResult.suspended("tool confirmation required",
                         Map.of(PENDING_ACTION, toolCallState(call)));
             }
             try {
-                return AgentActionResult.observed(toObservation(action.type(), tool.execute(call.arguments())));
+                AgentToolContext toolContext = toolContext(
+                        call, context, context.request().options().toolCallTimeout(),
+                        context.execution().deadline());
+                if (toolContext.isCancellationRequested()) {
+                    return AgentActionResult.observed(AgentObservation.failure(
+                            action.type(), AgentErrorCode.TOOL_CANCELLED,
+                            "tool execution cancelled"));
+                }
+                if (toolContext.isDeadlineExceeded(context.clock().instant())) {
+                    return AgentActionResult.observed(AgentObservation.failure(
+                            action.type(), AgentErrorCode.TOOL_TIMEOUT,
+                            "tool deadline reached"));
+                }
+                return AgentActionResult.observed(toObservation(
+                        action.type(), tool.execute(call.arguments(), toolContext)));
+            } catch (CancellationException error) {
+                return AgentActionResult.observed(AgentObservation.failure(
+                        action.type(), AgentErrorCode.TOOL_CANCELLED, message(error)));
             } catch (RuntimeException error) {
-                return AgentActionResult.observed(AgentObservation.failure(action.type(),
-                        "TOOL_EXECUTION_FAILED", error.getMessage()));
+                return AgentActionResult.observed(AgentObservation.failure(
+                        action.type(), AgentErrorCode.TOOL_EXECUTION_FAILED, message(error)));
             }
         }
     }
@@ -116,13 +139,30 @@ public final class StandardActionHandlers {
                 }
             }
 
-            List<CompletableFuture<AgentObservation>> futures = batch.calls().stream()
-                    .map(call -> CompletableFuture.supplyAsync(() -> executeCall(call), executor))
-                    .toList();
-            Duration timeout = context.request().options().toolBatchTimeout();
+            Instant batchStartedAt = context.clock().instant();
+            Duration timeout = shorter(context.request().options().toolBatchTimeout(),
+                    context.execution().remainingFrom(batchStartedAt));
+            Duration callTimeout = shorter(context.request().options().toolCallTimeout(), timeout);
+            if (context.execution().isCancellationRequested()) {
+                return AgentActionResult.observed(AgentObservation.failure(
+                        action.type(), AgentErrorCode.TOOL_CANCELLED,
+                        "tool batch execution cancelled"));
+            }
+            if (timeout.isZero()) {
+                return AgentActionResult.observed(AgentObservation.failure(
+                        action.type(), AgentErrorCode.TOOL_TIMEOUT,
+                        "tool batch deadline reached"));
+            }
+            Instant batchDeadline = batchStartedAt.plus(timeout);
+
+            List<CompletableFuture<AgentObservation>> futures = new ArrayList<>();
             try {
+                for (ToolCallAction call : batch.calls()) {
+                    futures.add(CompletableFuture.supplyAsync(
+                            () -> executeCall(call, context, callTimeout, batchDeadline), executor));
+                }
                 CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-                        .get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+                        .get(Math.max(1L, timeout.toMillis()), TimeUnit.MILLISECONDS);
                 return new AgentActionResult(futures.stream().map(CompletableFuture::join).toList(),
                         null, null, Map.of());
             } catch (Exception error) {
@@ -130,22 +170,40 @@ public final class StandardActionHandlers {
                 if (error instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
-                return AgentActionResult.observed(AgentObservation.failure(action.type(),
-                        "TOOL_BATCH_FAILED", error.getMessage()));
+                AgentErrorCode code = error instanceof TimeoutException
+                        ? AgentErrorCode.TOOL_TIMEOUT : AgentErrorCode.TOOL_BATCH_FAILED;
+                return AgentActionResult.observed(AgentObservation.failure(
+                        action.type(), code, message(error)));
             }
         }
 
-        private AgentObservation executeCall(ToolCallAction call) {
+        private AgentObservation executeCall(
+                ToolCallAction call, AgentActionContext context,
+                Duration timeout, Instant batchDeadline) {
             AgentTool tool = tools.find(call.toolName()).orElse(null);
             if (tool == null) {
                 return AgentObservation.failure(StandardActionTypes.TOOL_CALL,
-                        "TOOL_NOT_FOUND", "tool not found: " + call.toolName());
+                        AgentErrorCode.TOOL_NOT_FOUND, "tool not found: " + call.toolName());
             }
             try {
-                return toObservation(StandardActionTypes.TOOL_CALL, tool.execute(call.arguments()));
+                AgentToolContext toolContext = toolContext(
+                        call, context, timeout, batchDeadline);
+                if (toolContext.isCancellationRequested()) {
+                    return AgentObservation.failure(StandardActionTypes.TOOL_CALL,
+                            AgentErrorCode.TOOL_CANCELLED, "tool execution cancelled");
+                }
+                if (toolContext.isDeadlineExceeded(context.clock().instant())) {
+                    return AgentObservation.failure(StandardActionTypes.TOOL_CALL,
+                            AgentErrorCode.TOOL_TIMEOUT, "tool deadline reached");
+                }
+                return toObservation(StandardActionTypes.TOOL_CALL,
+                        tool.execute(call.arguments(), toolContext));
+            } catch (CancellationException error) {
+                return AgentObservation.failure(StandardActionTypes.TOOL_CALL,
+                        AgentErrorCode.TOOL_CANCELLED, message(error));
             } catch (RuntimeException error) {
                 return AgentObservation.failure(StandardActionTypes.TOOL_CALL,
-                        "TOOL_EXECUTION_FAILED", error.getMessage());
+                        AgentErrorCode.TOOL_EXECUTION_FAILED, message(error));
             }
         }
     }
@@ -202,9 +260,29 @@ public final class StandardActionHandlers {
                 && !context.request().isActionConfirmed(call.callId());
     }
 
+    private static AgentToolContext toolContext(
+            ToolCallAction call, AgentActionContext context,
+            Duration timeout, Instant maximumDeadline) {
+        Instant startedAt = context.clock().instant();
+        Instant deadline = earliest(
+                startedAt.plus(timeout), maximumDeadline, context.execution().deadline());
+        return new AgentToolContext(context.execution(), call.callId(), call.taskId(),
+                call.toolName(), deadline);
+    }
+
+    private static Instant earliest(Instant first, Instant second, Instant third) {
+        Instant earliest = first.isBefore(second) ? first : second;
+        return earliest.isBefore(third) ? earliest : third;
+    }
+
+    private static Duration shorter(Duration left, Duration right) {
+        return left.compareTo(right) <= 0 ? left : right;
+    }
+
     private static AgentObservation toObservation(String actionType, ToolExecutionResult result) {
         if (result == null) {
-            return AgentObservation.failure(actionType, "TOOL_RESULT_MISSING", "tool returned null");
+            return AgentObservation.failure(
+                    actionType, AgentErrorCode.TOOL_RESULT_MISSING, "tool returned null");
         }
         return new AgentObservation(actionType, result.success(), result.progress(), result.output(),
                 result.errorCode(), result.errorMessage(), result.attributes());
@@ -246,8 +324,14 @@ public final class StandardActionHandlers {
 
     private static <T> T require(AgentAction action, Class<T> type) {
         if (!type.isInstance(action)) {
-            throw new AgentCoreException("action type mismatch: expected " + type.getSimpleName());
+            throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
+                    "action type mismatch: expected " + type.getSimpleName());
         }
         return type.cast(action);
+    }
+
+    private static String message(Throwable error) {
+        return error.getMessage() == null || error.getMessage().isBlank()
+                ? error.getClass().getSimpleName() : error.getMessage();
     }
 }
