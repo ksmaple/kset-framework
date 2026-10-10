@@ -65,7 +65,7 @@ Java API 使用以下固定术语，宿主适配器和扩展实现不应再引�
 
 所有公开对象与字段的含义、所有者、空值、作用域和持久化边界统一见[对象与字段契约](docs/core-object-contract.md)；同名 `attributes`/`metadata` 不得跨层混用。
 
-`agentRunId` 是 Java API、快照、宿主日志和持久化字段的唯一名称，不再使用 `runId` 别名。`sessionId` 标识会话，一个会话可以包含多个 Agent 任务；计划 `taskId` 标识计划内任务；`invocationId` 只标识一次 `run/resume` 调用。上述 ID 不可互换，尤其不能以 `sessionId` 或计划 `taskId` 代替工具幂等键中的 `agentRunId`。
+`agentRunId` 是 Java API、快照、宿主日志和持久化字段中一次可恢复 Agent 任务的 ID。`sessionId` 标识会话，一个会话可以包含多个 Agent 任务；计划 `taskId` 标识计划内任务；`invocationId` 只标识一次 `run/resume` 调用。上述 ID 不可互换，尤其不能以 `sessionId` 或计划 `taskId` 代替工具幂等键中的 `agentRunId`。
 
 ### 核心专用对象
 
@@ -84,7 +84,7 @@ Java API 使用以下固定术语，宿主适配器和扩展实现不应再引�
 
 `AgentRunStatus` 表示运行状态；`AgentLifecycleContext.eventStatus()` 返回的是由事件类型推导的 `AgentLifecycleStatus`，仅用于步骤日志，二者不能混用。`AgentErrorCode`、`AgentStopReason`、`AgentLifecycleEventType`、`AgentLifecycleStatus` 和 `AgentLifecycleStepType` 均为稳定枚举，外部逻辑应按枚举分支，不应解析说明文本。
 
-`AgentResult.answer` 只在 `COMPLETED` 时返回最终回答。`SUSPENDED` 时它为 `null`，等待提示由 `AgentResult.stopDecision().stopMessage()` 返回；快照 v4 独立保存 `suspensionMessage`、批次批准约束与未知结果核验标记。旧 v1/v2/v3 快照不能直接按 v4 恢复，已有持久化数据需由宿主显式迁移。
+`AgentResult.answer` 只在 `COMPLETED` 时返回最终回答。`SUSPENDED` 时它为 `null`，等待提示由 `AgentResult.stopDecision().stopMessage()` 返回；当前快照版本为 v4，独立保存 `suspensionMessage`、批次批准约束与未知结果核验标记。`resume` 只接受当前版本的快照。
 
 ## 最小接入
 
@@ -187,7 +187,7 @@ Model 和 Tool 是同步边界，内核不会为它们创建线程。适配器�
 
 `AgentLoopOptions` 同时限制每轮动作数量、工具批次大小、单工具时限和批次时限。容量超限以 `CAPACITY_LIMIT` 结束，不进入后续动作。工具 `callId` 在同一决策内由 Kernel 判重，并且在整个 run 内只能标识一个工具操作；Kernel 会把 `callId/taskId/toolName/arguments` 身份写入快照账本，跨轮复用同 ID 但更换身份时以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。后续轮次的新操作必须使用新 ID，只有确认、重试、核验或恢复同一操作时才复用原 ID。工具持久化幂等身份固定为结构化 `AgentToolIdempotencyKey(agentRunId, callId)`，禁止单独使用 `callId` 或用无边界字符串拼接替代结构化字段。适配器仍必须保存 `toolName + 规范化 arguments` 参数指纹，作为跨进程和外部副作用的最终防线：同身份同指纹返回原结果，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。每条标准工具 Observation 固定携带 `callId`、可选 `taskId` 和 `toolName`，工具自定义 attributes 不能覆盖这些身份字段。
 
-标准 `tool_batch` 使用宿主提供的 Executor 并发执行。只要已有任务提交后发生超时、线程中断或提交/汇总异常，Kernel 就将结果标记为 `TOOL_RESULT_UNKNOWN`、保留完整 `agent.pendingAction`，并以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止本次调用。工具适配器主动返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)` 时采用相同出口：单工具保存原调用，批次任一调用未知则保存完整批次及全部 Observation。该停止优先于同一批次等待期间发生的通用超时或线程中断，避免未知副作用被覆盖为不可恢复终态；线程中断标志仍会保留。宿主恢复前必须按每个 `AgentToolIdempotencyKey` 查询权威结果；带依赖关系的批次仍应使用自定义 Action/Handler。
+标准 `tool_batch` 将调用提交给宿主配置的 Executor；默认 Executor 同步执行，只有宿主提供并行 Executor 时工具才会并发。已有任务提交后，若批次等待超时、线程中断或提交/汇总异常导致结果无法确认，Kernel 会将结果标记为 `TOOL_RESULT_UNKNOWN`、保留完整 `agent.pendingAction`，并以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止本次调用。默认同步 Executor 不会强制中断尚未返回的工具调用。工具适配器主动返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)` 时采用相同出口：单工具保存原调用，批次任一调用未知则保存完整批次及全部 Observation。该核验停止优先于同一批次等待期间发生的通用超时或线程中断；线程中断标志仍会保留。宿主恢复前必须按每个 `AgentToolIdempotencyKey` 查询权威结果；带依赖关系的批次仍应使用自定义 Action/Handler。
 
 `RECONCILIATION_REQUIRED` 快照禁止空输入恢复。若核验终态的检查点写入失败，返回的 `FAILED` 快照也保留 `agent.reconciliationPending`，同样必须先核验，不能作为普通失败直接续跑。宿主必须为 pending 中每个调用提供一条权威 `tool_call` Observation，并通过 `AgentResumeInput` 调用三参数 `resume`；`callId/taskId/toolName` 必须是与 pending 完整匹配的字符串身份，不能依赖数字等值的隐式转换。空输入、非工具动作或仍为 `TOOL_RESULT_UNKNOWN` 的结果返回 `INVALID_RESUME_INPUT`；缺项、重复项和身份不匹配返回 `PENDING_ACTION_MISMATCH`。校验成功后 Kernel 清理 pending 与核验标记、保存新快照并进入下一模型轮次。
 
@@ -253,7 +253,7 @@ AgentResumeInput input = new AgentResumeInput(List.of(observation));
 AgentResult result = kernel.resume(request, snapshot, input);
 ```
 
-同一运行恢复时不能切换协议，防止旧快照被不同语义解释。
+同一运行恢复时不能切换协议，保证快照与后续决策使用同一语义。
 
 `resume` 只保证从已保存快照继续内核状态转换，不保证崩溃时未完成的外部副作用自动恢复，也不自动重放“已执行但尚未写入快照”的动作。对于 Kernel 已经以 `RECONCILIATION_REQUIRED` 暂停的标准工具动作，宿主必须依靠稳定 `callId` 和权威数据源核验，并通过 `AgentResumeInput` 注入确定结果；其他崩溃恢复、重试和补偿仍由宿主处理。
 
@@ -264,7 +264,3 @@ AgentResult result = kernel.resume(request, snapshot, input);
 ## 非目标
 
 核心只保证一次同步 `run/resume` 调用内的循环顺序、状态转换、停止优先级、容量边界和结构化失败。Kernel 的 RunState、生命周期 eventSequence、invocationId、deadline 和临时集合都是调用局部变量，不会在不同调用间共享；同一个 Kernel 可以并发执行不同 run。共享 Model、Strategy、Codec、Handler、Tool、StopPolicy、CheckpointPort、Listener、Clock 和 Executor 必须线程安全；结构化容器由 core 递归快照，不透明业务 DTO 仍须不可变或按调用隔离。会话并发控制、数据库租约与 fencing、exactly-once、崩溃动作续跑、异步强制中止、业务补偿以及 RAG 检索、文档和权限模型均由宿主实现。
-
-## 迁移说明
-
-本轮直接替换了未发布的旧 API。原 `AgentReActExecutor`、`StateGraphWorkflowEngine`、Spring 自动装配以及项目/文档/代码仓库/权限/指标端口已移除。2026-10-09 进一步移除了核心主动查询快照的入口，并补齐 deadline-aware 模型/工具上下文和容量限制。需要上一版循环契约时可从 Git ref `db91ee5` 恢复；需要旧业务编排实现时可从 Git ref `a7a63f2` 恢复。

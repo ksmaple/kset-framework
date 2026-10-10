@@ -26,7 +26,7 @@ new AgentProtocolId("kset-rag-json", "code-v7")
 
 core 与 kset-rag 宿主的 Java API、日志和持久化字段统一命名为 `agentRunId`，表示一次可恢复的 Agent 任务，不需要双重生成。`sessionId` 表示会话，一个会话可关联多个 `agentRunId`，但同一时刻只能有一个活动 Agent 实例；core 动作的 `taskId` 表示计划任务，宿主既有的 `taskId` 可表示业务工作流任务，均不能默认当作 `agentRunId`；`invocationId` 则只覆盖一次 `run/resume` 调用。创建新 Agent 任务时必须生成或提供独立的 `agentRunId`，恢复时沿用快照中的值。
 
-宿主字段映射以[Core 对象与字段契约](../core-object-contract.md)为准。完成态读取 `AgentResult.answer`；等待批准或结果核验时读取 `stopDecision.stopMessage`，此时 `answer` 为 `null`。持久化快照为 v4；旧 v1/v2/v3 快照不能直接恢复，需显式迁移。
+宿主字段映射以[Core 对象与字段契约](../core-object-contract.md)为准。完成态读取 `AgentResult.answer`；等待批准或结果核验时读取 `stopDecision.stopMessage`，此时 `answer` 为 `null`。宿主持久化当前 v4 快照，并在 `resume` 时传入该版本快照。
 
 ## 字段映射
 
@@ -56,7 +56,7 @@ core 与 kset-rag 宿主的 Java API、日志和持久化字段统一命名为 `
 
 ## callId
 
-`callId` 是运行内工具副作用标识，一个 ID 在整个 run 内只能表示一个操作；新协议应优先要求模型显式返回。core 会把完整操作身份写入快照并拒绝跨轮同 ID 异身份，实际持久化幂等身份仍使用结构化 `(agentRunId, callId)`。兼容旧输出缺省时，宿主可以按 `turn + 当前决策内序号` 生成首次调用 ID，并在动作执行前随快照或待确认动作持久化。同一操作在确认、结果未知重试和恢复时必须读取并复用已保存 ID，不得重新生成。kset-rag 工具结果表还必须保存 `toolName + 规范化 arguments` 指纹，作为跨进程最终防线，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。标准工具 Observation 已固定回传 `callId/taskId/toolName`，kset-rag 可直接用于步骤关联和上报去重。
+`callId` 是运行内工具副作用标识，一个 ID 在整个 run 内只能表示一个操作；`code-v7` Codec 应要求模型显式返回，或为本次调用生成稳定 ID。core 会把完整操作身份写入快照并拒绝跨轮同 ID 异身份，实际持久化幂等身份仍使用结构化 `(agentRunId, callId)`。模型输出缺少 `callId` 时，宿主可以按 `turn + 当前决策内序号` 生成首次调用 ID，并在动作执行前随快照或待确认动作持久化。同一操作在确认、结果未知重试和恢复时必须读取并复用已保存 ID，不得重新生成。kset-rag 工具结果表还必须保存 `toolName + 规范化 arguments` 指纹，作为跨进程最终防线，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。标准工具 Observation 已固定回传 `callId/taskId/toolName`，kset-rag 可直接用于步骤关联和上报去重。
 
 现有 `planTaskId + "#" + 序号` 只能保证单个决策内唯一，同一计划任务跨轮再次调用时可能碰撞，不能直接作为稳定幂等键。
 

@@ -62,7 +62,7 @@
 
 至少包含两个调用。标准批处理语义是所有调用互相独立并可并发执行，不支持调用间 `dependsOn`。有依赖的批次必须使用自定义动作和 Handler。
 
-已有批次任务提交后发生超时、线程中断或汇总异常时，标准处理器返回 `TOOL_RESULT_UNKNOWN`，Kernel 以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止，不会继续下一轮。该核验停止优先于批次等待期间同时出现的通用超时或线程中断；宿主必须逐个查询 `(agentRunId, callId)` 的权威结果后再恢复，禁止直接重新生成 callId 或盲目重试。
+已有批次任务提交后，若等待超时、线程中断或提交/汇总异常导致结果无法确认，标准处理器返回 `TOOL_RESULT_UNKNOWN`，Kernel 以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止，不会继续下一轮。默认同步 Executor 不会强制中断尚未返回的工具调用。该核验停止优先于批次等待期间同时出现的通用超时或线程中断；宿主必须逐个查询 `(agentRunId, callId)` 的权威结果后再恢复，禁止直接重新生成 callId 或盲目重试。
 
 工具适配器自身发现远程结果未知时必须返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)`。单工具调用会保存原动作并暂停；批次中任一调用未知会保留全部 Observation、保存完整批次并暂停。明确失败仍返回其具体工具错误码，由 Strategy 决定是否继续。
 
