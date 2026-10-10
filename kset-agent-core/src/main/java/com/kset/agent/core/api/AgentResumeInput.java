@@ -7,7 +7,7 @@ import com.kset.agent.core.action.AgentObservation;
 import java.util.List;
 
 /**
- * Authoritative external results used to resume a suspended reconciliation. Build entries with
+ * Authoritative external results used to resume a pending reconciliation. Build entries with
  * {@link AgentObservation#toolResult(String, String, String,
  * com.kset.agent.core.tool.ToolExecutionResult)}.
  */

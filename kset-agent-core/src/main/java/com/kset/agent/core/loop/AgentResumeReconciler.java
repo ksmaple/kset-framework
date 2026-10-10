@@ -34,10 +34,8 @@ final class AgentResumeReconciler {
             AgentRequest request, AgentRunSnapshot snapshot, AgentRunState state,
             AgentResumeInput input, Instant now) {
         if (!input.hasReconciledObservations()) {
-            if (snapshot.stopDecision() != null
-                    && snapshot.stopDecision().stopReason()
-                    == AgentStopReason.RECONCILIATION_REQUIRED) {
-                throw invalid("RECONCILIATION_REQUIRED snapshot requires reconciled observations");
+            if (requiresReconciliation(snapshot)) {
+                throw invalid("pending tool outcome requires reconciled observations");
             }
             requirePendingConfirmation(request, snapshot);
             return state;
@@ -54,13 +52,18 @@ final class AgentResumeReconciler {
         }
         AgentActionResult reconciled = new AgentActionResult(
                 input.reconciledObservations(), null, null, null, Map.of(),
-                Set.of(StandardActionHandlers.PENDING_ACTION));
+                Set.of(StandardActionHandlers.PENDING_ACTION,
+                        StandardActionHandlers.PENDING_BATCH,
+                        StandardActionHandlers.RECONCILIATION_PENDING));
         return state.apply(reconciled, now);
     }
 
     static void validatePendingDecision(AgentRunState state, AgentDecision decision) {
         Object value = state.attributes().get(StandardActionHandlers.PENDING_ACTION);
         if (value == null) {
+            if (state.attributes().containsKey(StandardActionHandlers.PENDING_BATCH)) {
+                throw invalidSnapshot("pending batch has no pending tool call");
+            }
             return;
         }
         if (!(value instanceof Map<?, ?> pending)) {
@@ -78,8 +81,14 @@ final class AgentResumeReconciler {
                     firstAction instanceof ConfirmationAction confirmation
                             && confirmationState(confirmation).equals(pending);
             case StandardActionTypes.TOOL_CALL -> matchesPendingToolCall(firstAction, pending);
-            default -> true;
+            default -> throw invalidSnapshot("unsupported pending action type: " + type);
         };
+        Object pendingBatch = state.attributes().get(StandardActionHandlers.PENDING_BATCH);
+        if (pendingBatch != null) {
+            matches = matches && firstAction instanceof ToolBatchAction batch
+                    && batch.toolCalls().stream()
+                    .map(ToolCallAction::operationDefinition).toList().equals(pendingBatch);
+        }
         if (!matches) {
             throw new AgentProtocolException(
                     AgentErrorCode.PENDING_ACTION_MISMATCH.name(),
@@ -91,6 +100,9 @@ final class AgentResumeReconciler {
             AgentRequest request, AgentRunSnapshot snapshot) {
         Object value = snapshot.attributes().get(StandardActionHandlers.PENDING_ACTION);
         if (value == null) {
+            if (snapshot.attributes().containsKey(StandardActionHandlers.PENDING_BATCH)) {
+                throw invalidSnapshot("pending batch has no pending tool call");
+            }
             return;
         }
         if (!(value instanceof Map<?, ?> pending)) {
@@ -101,6 +113,11 @@ final class AgentResumeReconciler {
         if (type == null) {
             throw new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT,
                     "pending action type must not be blank");
+        }
+        Object pendingBatch = snapshot.attributes().get(StandardActionHandlers.PENDING_BATCH);
+        if (pendingBatch != null && (!StandardActionTypes.TOOL_CALL.equals(type)
+                || !(pendingBatch instanceof java.util.List<?> values) || values.isEmpty())) {
+            throw invalidSnapshot("pending batch must contain tool calls awaiting approval");
         }
         if (StandardActionTypes.CONFIRMATION.equals(type)) {
             String confirmationId = requiredText(pending.get("confirmationId"),
@@ -113,6 +130,8 @@ final class AgentResumeReconciler {
             if (!request.isToolCallApproved(callId)) {
                 throw invalid("pending tool call requires approval: " + callId);
             }
+        } else {
+            throw invalidSnapshot("unsupported pending action type: " + type);
         }
     }
 
@@ -143,12 +162,22 @@ final class AgentResumeReconciler {
     }
 
     private static void requireReconciliationSnapshot(AgentRunSnapshot snapshot) {
-        if (snapshot.runStatus() != AgentRunStatus.SUSPENDED
-                || snapshot.stopDecision() == null
-                || snapshot.stopDecision().stopReason()
-                != AgentStopReason.RECONCILIATION_REQUIRED) {
-            throw invalid("reconciled observations require a RECONCILIATION_REQUIRED snapshot");
+        boolean suspendedForReconciliation = snapshot.runStatus() == AgentRunStatus.SUSPENDED
+                && snapshot.stopDecision().stopReason()
+                == AgentStopReason.RECONCILIATION_REQUIRED;
+        boolean failedWhileReconciling = snapshot.runStatus() == AgentRunStatus.FAILED
+                && Boolean.TRUE.equals(snapshot.attributes().get(
+                        StandardActionHandlers.RECONCILIATION_PENDING));
+        if (!suspendedForReconciliation && !failedWhileReconciling) {
+            throw invalid("reconciled observations require a pending tool outcome");
         }
+    }
+
+    private static boolean requiresReconciliation(AgentRunSnapshot snapshot) {
+        return (snapshot.stopDecision() != null && snapshot.stopDecision().stopReason()
+                == AgentStopReason.RECONCILIATION_REQUIRED)
+                || Boolean.TRUE.equals(snapshot.attributes().get(
+                        StandardActionHandlers.RECONCILIATION_PENDING));
     }
 
     private static Map<String, PendingToolCall> pendingCalls(AgentRunSnapshot snapshot) {
@@ -204,7 +233,9 @@ final class AgentResumeReconciler {
         }
         String toolName = requiredText(
                 observation.attributes().get(AgentObservation.TOOL_NAME), "observation toolName");
-        String taskId = text(observation.attributes().get(AgentObservation.TOOL_TASK_ID));
+        String taskId = observation.attributes().containsKey(AgentObservation.TOOL_TASK_ID)
+                ? requiredText(observation.attributes().get(AgentObservation.TOOL_TASK_ID),
+                        "observation taskId") : null;
         if (!expected.toolName().equals(toolName) || !Objects.equals(expected.taskId(), taskId)) {
             throw mismatch("observation identity does not match pending callId: " + callId);
         }
@@ -219,10 +250,10 @@ final class AgentResumeReconciler {
     }
 
     private static String text(Object value) {
-        if (value == null || String.valueOf(value).isBlank()) {
+        if (!(value instanceof String text) || text.isBlank()) {
             return null;
         }
-        return String.valueOf(value).trim();
+        return text.trim();
     }
 
     private static AgentCoreException invalid(String errorMessage) {
@@ -231,6 +262,10 @@ final class AgentResumeReconciler {
 
     private static AgentCoreException mismatch(String errorMessage) {
         return new AgentCoreException(AgentErrorCode.PENDING_ACTION_MISMATCH, errorMessage);
+    }
+
+    private static AgentCoreException invalidSnapshot(String errorMessage) {
+        return new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT, errorMessage);
     }
 
     private record PendingToolCall(String callId, String taskId, String toolName) {

@@ -77,14 +77,15 @@
 
 | 对象 | 字段 | 固定含义 |
 | --- | --- | --- |
-| `AgentRunState` / `AgentRunSnapshot` | `agentRunId/task/protocolId/runStatus/turn` | 当前 run 身份、完整任务、固定协议、运行状态、累计轮数；快照只由 Kernel 投影，`version = 3`。 |
+| `AgentRunState` / `AgentRunSnapshot` | `agentRunId/task/protocolId/runStatus/turn` | 当前 run 身份、完整任务、固定协议、运行状态、累计轮数；快照只由 Kernel 投影，`version = 4`。 |
 | `AgentRunState` / `AgentRunSnapshot` | `startedAt/updatedAt/observations/attributes` | run 初始时间、最近状态更新时间、累计观察、持久化运行属性。`attributes` 含 Kernel `agent.*`、ReAct `react.*` 和扩展命名空间，不等同于请求属性。 |
+| `AgentRunState` / `AgentRunSnapshot` | `agent.pendingAction/agent.pendingBatch/agent.reconciliationPending` | 分别表示待批准或待核验动作、逐项批准时不可改写的完整工具批次、未知工具结果必须核验的标记；均由 Kernel 管理。v4 快照在构造时校验待处理确认、工具调用及批次的固定字段和成员关系，并拒绝核验标记与停止原因冲突或未知工具结果缺失核验标记；损坏的内部状态返回 `INVALID_SNAPSHOT`。核验检查点失败导致状态变为 `FAILED/FATAL_ERROR` 时仍保留标记。 |
 | `AgentRunState` / `AgentRunSnapshot` | `consecutiveProtocolErrors/consecutiveNoProgress` | 连续协议纠错次数与连续无进展次数，成功决策或有效动作按规则清零。 |
-| `AgentRunState` / `AgentRunSnapshot` | `answer/suspensionMessage/stopDecision` | 只在 `COMPLETED` 有最终回答；只在 `SUSPENDED` 可有等待提示；非运行态有停止决定。v1/v2 快照不能直接恢复为 v3，须由宿主显式迁移。 |
+| `AgentRunState` / `AgentRunSnapshot` | `answer/suspensionMessage/stopDecision` | 只在 `COMPLETED` 有最终回答；只在 `SUSPENDED` 可有等待提示；非运行态有停止决定。v1/v2/v3 快照不能直接恢复为 v4，须由宿主显式迁移。 |
 | `AgentResult` | `agentRunId/runStatus/answer/stopDecision/snapshot/failure` | 单次同步调用结果；只有完成态可有 `answer`。`snapshot` 是返回时状态投影，不代表宿主已成功持久化；技术故障通过可空 `failure` 表达。 |
 | `AgentFailure` | `errorCode/errorMessage/retryable` | 活动循环技术失败的稳定枚举、说明及可重试标记；不得依赖消息文本作分支。 |
 | `AgentStopDecision` | `shouldStop/stopReason/runStatus/stopMessage` | 是否停止、枚举原因、目标运行状态、可读说明；暂停动作的等待提示由 `stopMessage` 对外返回，说明文本不是分支依据。 |
-| `AgentResumeInput` | `reconciledObservations` | 核验暂停后由宿主提供的完整权威工具结果；普通恢复为空。 |
+| `AgentResumeInput` | `reconciledObservations` | 核验暂停后由宿主提供的完整权威工具结果；普通恢复为空。每条标准工具 Observation 的 `callId/taskId/toolName` 必须为字符串身份（`taskId` 可缺省），与 pending 完整匹配，不接受数字等值的隐式转换。 |
 | `AgentStopContext` | `request/state/executionContext/now` | 一次停止策略评估的只读输入及评估时刻。 |
 | `AgentLifecycleContext` | `version/eventType/invocationType/eventSequence` | 固定观测协议版本、事件枚举、run 或 resume、invocation 内事件序号；当前版本为 3。 |
 | `AgentLifecycleContext` | `agentRunId/invocationId/stepId/parentStepId/stepType/operation` | 事件追踪身份；`eventId()` 按 invocation 与序号派生，不是额外存储字段。 |

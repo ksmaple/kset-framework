@@ -10,7 +10,7 @@
 - 每轮最多一个标记信封，信封外不得有内容。
 - 信封内必须是单个 JSON 对象，重复字段、未知字段、尾随对象和 `null` 占位均不属于有效输入。
 - 无标记且不是控制 JSON 的普通文本映射为 `final_answer`。
-- 无标记但包含受支持 `type` 的控制 JSON 返回 `MISSING_MARKERS`。
+- 无标记且以对象开头、包含受支持 `type` 的控制 JSON（包括截断的对象）返回 `MISSING_MARKERS`。
 
 ## 动作
 
@@ -66,7 +66,7 @@
 
 工具适配器自身发现远程结果未知时必须返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)`。单工具调用会保存原动作并暂停；批次中任一调用未知会保留全部 Observation、保存完整批次并暂停。明确失败仍返回其具体工具错误码，由 Strategy 决定是否继续。
 
-核验完成后，宿主使用 `AgentObservation.toolResult` 为 pending 中每个调用构造一条携带相同 `callId/taskId/toolName` 的权威 `tool_call` Observation，通过 `AgentResumeInput` 调用三参数 `resume`。结果必须完整覆盖 pending 调用且不得继续使用 `TOOL_RESULT_UNKNOWN`；空输入、缺项或身份不匹配会在进入模型循环前分别以 `INVALID_RESUME_INPUT` 或 `PENDING_ACTION_MISMATCH` 拒绝。
+核验完成后，宿主使用 `AgentObservation.toolResult` 为 pending 中每个调用构造一条携带相同 `callId/taskId/toolName` 字符串身份的权威 `tool_call` Observation，通过 `AgentResumeInput` 调用三参数 `resume`。结果必须完整覆盖 pending 调用且不得继续使用 `TOOL_RESULT_UNKNOWN`；空输入、非工具动作或仍未知的结果以 `INVALID_RESUME_INPUT` 拒绝，缺项、重复项、非字符串身份或身份不匹配以 `PENDING_ACTION_MISMATCH` 拒绝。
 
 ### answer_chunk
 
@@ -108,7 +108,7 @@
 
 `agentRunId`、`invocationId`、`stepId`、`parentStepId`、`stepType` 和 `operation` 属于 Kernel 固定的执行追踪信封，不属于模型 JSON 字段。Kernel 在入口绑定调用方提供或生成的 `agentRunId`；它是一次可恢复 Agent 任务的唯一命名身份，不能用会话 `sessionId` 或计划 `taskId` 替代。Codec 不得从模型输出读取或覆盖这些身份；外部适配器应从 `AgentExecutionContext`、`AgentToolContext` 或 `AgentLifecycleContext` 获取。
 
-模型 JSON 中的 `answer` 是动作文本：`final_answer` 完成后才成为 `AgentResult.answer`；`confirmation.message` 是暂停提示，只进入快照 v3 的 `suspensionMessage` 和结果的 `stopDecision.stopMessage`。Java 对象的完整字段定义见[对象与字段契约](../core-object-contract.md)。
+模型 JSON 中的 `answer` 是动作文本：`final_answer` 完成后才成为 `AgentResult.answer`；`confirmation.message` 是暂停提示，只进入快照 v4 的 `suspensionMessage` 和结果的 `stopDecision.stopMessage`。Java 对象的完整字段定义见[对象与字段契约](../core-object-contract.md)。
 
 ## 错误码
 

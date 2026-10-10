@@ -15,6 +15,7 @@
 
 ## 文档导航
 
+- [对象与字段契约](docs/core-object-contract.md)
 - [内置 `agent-json:v1` 协议](docs/protocols/agent-json-v1.md)
 - [自定义协议扩展指南](docs/protocol-extension-guide.md)
 - [kset-rag 接入映射](docs/integration/kset-rag.md)
@@ -83,7 +84,7 @@ Java API 使用以下固定术语，宿主适配器和扩展实现不应再引�
 
 `AgentRunStatus` 表示运行状态；`AgentLifecycleContext.eventStatus()` 返回的是由事件类型推导的 `AgentLifecycleStatus`，仅用于步骤日志，二者不能混用。`AgentErrorCode`、`AgentStopReason`、`AgentLifecycleEventType`、`AgentLifecycleStatus` 和 `AgentLifecycleStepType` 均为稳定枚举，外部逻辑应按枚举分支，不应解析说明文本。
 
-`AgentResult.answer` 只在 `COMPLETED` 时返回最终回答。`SUSPENDED` 时它为 `null`，等待提示由 `AgentResult.stopDecision().stopMessage()` 返回；快照 v3 独立保存 `suspensionMessage`。旧 v1/v2 快照不能直接按 v3 恢复，已有持久化数据需由宿主显式迁移。
+`AgentResult.answer` 只在 `COMPLETED` 时返回最终回答。`SUSPENDED` 时它为 `null`，等待提示由 `AgentResult.stopDecision().stopMessage()` 返回；快照 v4 独立保存 `suspensionMessage`、批次批准约束与未知结果核验标记。旧 v1/v2/v3 快照不能直接按 v4 恢复，已有持久化数据需由宿主显式迁移。
 
 ## 最小接入
 
@@ -188,7 +189,7 @@ Model 和 Tool 是同步边界，内核不会为它们创建线程。适配器�
 
 标准 `tool_batch` 使用宿主提供的 Executor 并发执行。只要已有任务提交后发生超时、线程中断或提交/汇总异常，Kernel 就将结果标记为 `TOOL_RESULT_UNKNOWN`、保留完整 `agent.pendingAction`，并以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止本次调用。工具适配器主动返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)` 时采用相同出口：单工具保存原调用，批次任一调用未知则保存完整批次及全部 Observation。该停止优先于同一批次等待期间发生的通用超时或线程中断，避免未知副作用被覆盖为不可恢复终态；线程中断标志仍会保留。宿主恢复前必须按每个 `AgentToolIdempotencyKey` 查询权威结果；带依赖关系的批次仍应使用自定义 Action/Handler。
 
-`RECONCILIATION_REQUIRED` 快照禁止空输入恢复。宿主必须为 pending 中每个调用提供一条权威 `tool_call` Observation，并通过 `AgentResumeInput` 调用三参数 `resume`；Kernel 会校验 `callId/taskId/toolName` 完整匹配，拒绝缺项、重复项、非 pending 调用和仍为 `TOOL_RESULT_UNKNOWN` 的结果。结构无效返回 `INVALID_RESUME_INPUT`，身份不匹配返回 `PENDING_ACTION_MISMATCH`，校验成功后 Kernel 清理 pending、保存新快照并进入下一模型轮次。
+`RECONCILIATION_REQUIRED` 快照禁止空输入恢复。若核验终态的检查点写入失败，返回的 `FAILED` 快照也保留 `agent.reconciliationPending`，同样必须先核验，不能作为普通失败直接续跑。宿主必须为 pending 中每个调用提供一条权威 `tool_call` Observation，并通过 `AgentResumeInput` 调用三参数 `resume`；`callId/taskId/toolName` 必须是与 pending 完整匹配的字符串身份，不能依赖数字等值的隐式转换。空输入、非工具动作或仍为 `TOOL_RESULT_UNKNOWN` 的结果返回 `INVALID_RESUME_INPUT`；缺项、重复项和身份不匹配返回 `PENDING_ACTION_MISMATCH`。校验成功后 Kernel 清理 pending 与核验标记、保存新快照并进入下一模型轮次。
 
 工具适配器必须区分“明确执行失败”和“可能已产生副作用但响应未知”。前者返回具体失败码并允许 Strategy 决定下一步；后者必须返回 `TOOL_RESULT_UNKNOWN`，不得仅抛普通运行时异常或降级成 `TOOL_EXECUTION_FAILED`。
 
@@ -223,7 +224,7 @@ AgentResult result = kernel.run(request);
 
 内置 `agent-json:v1` 使用 `<<<AGENT_JSON>>>` / `<<<END_AGENT_JSON>>>` 严格包裹控制 JSON；无标记普通文本按最终回答处理。协议支持 `task_plan`、`tool_call`、`tool_batch`、`answer_chunk`、`final_answer` 和 `confirmation`，完整字段与错误码见[协议规范](docs/protocols/agent-json-v1.md)。
 
-等待批准时，Kernel 将动作写入 `agent.pendingAction` 并以 `SUSPENDED` 返回。宿主恢复确认动作时通过 `agent.approvedConfirmationIds` 传入 `confirmationId`，恢复危险工具时通过 `agent.approvedToolCallIds` 传入 `callId`；缺少对应批准 ID 会在模型调用前以 `INVALID_RESUME_INPUT` 拒绝。批准后，模型本轮的首个动作必须重述同一待处理动作，危险工具须完整匹配 `callId/taskId/toolName/arguments`；批次可包含待批准的原工具调用并继续逐项批准。不匹配计入可纠正的 `PENDING_ACTION_MISMATCH` 协议错误，不允许其他动作清理 pending。新 run 预置批准 ID 不能绕过暂停。内置 ReAct 只把这两类公开批准 ID 注入模型上下文，不暴露其他宿主请求属性和内部操作账本。相同且已批准的操作可安全重试；批准消费、工具完成或失败以及最终回答都会清理 `agent.pendingAction`。
+等待批准时，Kernel 将动作写入 `agent.pendingAction` 并以 `SUSPENDED` 返回。宿主恢复确认动作时通过 `agent.approvedConfirmationIds` 传入 `confirmationId`，恢复危险工具时通过 `agent.approvedToolCallIds` 传入 `callId`；缺少对应批准 ID 会在模型调用前以 `INVALID_RESUME_INPUT` 拒绝。批准后，模型本轮的首个动作必须重述同一待处理动作，危险工具须完整匹配 `callId/taskId/toolName/arguments`；批次可包含待批准的原工具调用并继续逐项批准。批次等待后续批准时，Kernel 还会在 `agent.pendingBatch` 固定完整工具调用清单；模型不得删减、替换或重排该批次，否则计入可纠正的 `PENDING_ACTION_MISMATCH` 协议错误。不允许其他动作清理 pending。新 run 预置批准 ID 不能绕过暂停。内置 ReAct 只把这两类公开批准 ID 注入模型上下文，不暴露其他宿主请求属性和内部操作账本。相同且已批准的操作可安全重试；批准消费、工具完成或失败以及最终回答都会清理对应 pending 状态。
 
 自定义协议可以映射到标准动作，也可以返回 `ExtensionAction`。自定义动作必须同时注册对应 `AgentActionHandler`；未注册动作会显式失败。只有标准 `ToolCallAction` 和 `ToolBatchAction` 的 `TOOL_RESULT_UNKNOWN` 会触发内置 `RECONCILIATION_REQUIRED`；扩展动作应使用自己的 pending 状态和恢复协议，其未知结果不会被误解释为标准工具核验。
 
@@ -235,7 +236,7 @@ AgentResult result = kernel.run(request);
 
 ## 中断与恢复
 
-`AgentRunSnapshot` v3 不保存模型原始思维链，只保存轮次、标准观察、扩展属性、错误计数、最终回答或暂停提示以及停止结果。宿主负责读取快照，再显式恢复：
+`AgentRunSnapshot` v4 不保存模型原始思维链，只保存轮次、标准观察、扩展属性、错误计数、最终回答或暂停提示以及停止结果。宿主负责读取快照，再显式恢复：
 
 ```java
 String agentRunId = request.agentRunId();

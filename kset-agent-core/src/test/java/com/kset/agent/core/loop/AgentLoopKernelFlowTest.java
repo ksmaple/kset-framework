@@ -71,6 +71,12 @@ class AgentLoopKernelFlowTest {
                 .isInstanceOfSatisfying(AgentCoreException.class,
                         error -> assertThat(error.errorCode())
                                 .isEqualTo(AgentErrorCode.UNSUPPORTED_SNAPSHOT_VERSION));
+        assertThatThrownBy(() -> new AgentRunSnapshot(
+                3, "legacy-run", "task", protocolId, AgentRunStatus.RUNNING,
+                0, now, now, List.of(), Map.of(), 0, 0, null, null, null))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.UNSUPPORTED_SNAPSHOT_VERSION));
 
         AgentStopDecision stopped = AgentStopDecision.stop(
                 AgentStopReason.WAITING_INPUT, AgentRunStatus.SUSPENDED, "confirm");
@@ -78,6 +84,117 @@ class AgentLoopKernelFlowTest {
                 AgentRunSnapshot.CURRENT_VERSION, "paused-run", "task", protocolId,
                 AgentRunStatus.SUSPENDED, 1, now, now, List.of(), Map.of(),
                 0, 0, "confirm", null, stopped))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_SNAPSHOT));
+    }
+
+    @Test
+    void resumesARunningCheckpointWithoutAStopDecision() {
+        Instant now = Instant.parse("2024-01-01T00:00:00Z");
+        AgentRequest request = request("running-checkpoint");
+        AgentRunSnapshot snapshot = new AgentRunSnapshot(
+                AgentRunSnapshot.CURRENT_VERSION, request.agentRunId(), request.task(),
+                request.protocolId(), AgentRunStatus.RUNNING, 0, now, now,
+                List.of(), Map.of(), 0, 0, null, null, null);
+        AgentLoopKernel kernel = AgentLoopKernel.builder((modelRequest, context) ->
+                ModelResponse.text("resumed answer")).build();
+
+        AgentResult result = kernel.resume(request, snapshot);
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.answer()).isEqualTo("resumed answer");
+    }
+
+    @Test
+    void rejectsInconsistentPendingSnapshotState() {
+        AgentRequest request = request("invalid-pending-snapshot");
+        Instant now = Instant.parse("2026-10-10T00:00:00Z");
+        Map<String, Object> firstCall = Map.of(
+                "callId", "first", "toolName", "write", "arguments", Map.of());
+        Map<String, Object> secondCall = Map.of(
+                "callId", "second", "toolName", "write", "arguments", Map.of());
+        Map<String, Object> thirdCall = Map.of(
+                "callId", "third", "toolName", "write", "arguments", Map.of());
+        Map<String, Object> pendingCall = Map.of(
+                "type", StandardActionTypes.TOOL_CALL,
+                "callId", "first", "toolName", "write", "arguments", Map.of());
+        Map<String, Object> pendingBatch = Map.of(
+                "type", StandardActionTypes.TOOL_BATCH,
+                "summary", "write both", "toolCalls", List.of(firstCall, secondCall));
+        AgentStopDecision reconciliationStop = AgentStopDecision.stop(
+                AgentStopReason.RECONCILIATION_REQUIRED, AgentRunStatus.SUSPENDED,
+                "reconcile");
+        AgentStopDecision waitingStop = AgentStopDecision.stop(
+                AgentStopReason.WAITING_INPUT, AgentRunStatus.SUSPENDED, "approve");
+
+        List<Map<String, Object>> invalidRunningAttributes = List.of(
+                Map.of(StandardActionHandlers.PENDING_BATCH, List.of(firstCall, secondCall)),
+                Map.of(StandardActionHandlers.PENDING_ACTION, pendingCall,
+                        StandardActionHandlers.PENDING_BATCH, List.of(secondCall, thirdCall)),
+                Map.of(StandardActionHandlers.PENDING_ACTION, pendingCall,
+                        StandardActionHandlers.PENDING_BATCH, List.of(firstCall, firstCall)),
+                Map.of(StandardActionHandlers.PENDING_ACTION, pendingCall,
+                        StandardActionHandlers.RECONCILIATION_PENDING, false),
+                Map.of(StandardActionHandlers.RECONCILIATION_PENDING, true),
+                Map.of(StandardActionHandlers.PENDING_ACTION, pendingBatch),
+                Map.of(StandardActionHandlers.PENDING_ACTION, Map.of(
+                        "type", StandardActionTypes.TOOL_CALL,
+                        "callId", "first", "arguments", Map.of())),
+                Map.of(StandardActionHandlers.PENDING_ACTION, Map.of(
+                        "type", StandardActionTypes.TOOL_CALL,
+                        "callId", "first", "toolName", "write", "arguments", "invalid")),
+                Map.of(StandardActionHandlers.PENDING_ACTION, Map.of(
+                        "type", StandardActionTypes.CONFIRMATION,
+                        "message", "approve", "options", Map.of())),
+                Map.of(StandardActionHandlers.PENDING_ACTION, pendingCall,
+                        StandardActionHandlers.PENDING_BATCH, List.of(firstCall, Map.of(
+                                "callId", "second", "toolName", "write"))));
+        for (Map<String, Object> attributes : invalidRunningAttributes) {
+            assertThatThrownBy(() -> new AgentRunSnapshot(
+                    AgentRunSnapshot.CURRENT_VERSION, request.agentRunId(), request.task(),
+                    request.protocolId(), AgentRunStatus.RUNNING, 1, now, now,
+                    List.of(), attributes, 0, 0, null, null, null))
+                    .isInstanceOfSatisfying(AgentCoreException.class,
+                            error -> assertThat(error.errorCode())
+                                    .isEqualTo(AgentErrorCode.INVALID_SNAPSHOT));
+        }
+        assertThatThrownBy(() -> new AgentRunSnapshot(
+                AgentRunSnapshot.CURRENT_VERSION, request.agentRunId(), request.task(),
+                request.protocolId(), AgentRunStatus.SUSPENDED, 1, now, now,
+                List.of(), Map.of(StandardActionHandlers.PENDING_ACTION, pendingCall),
+                0, 0, null, "reconcile", reconciliationStop))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_SNAPSHOT));
+        assertThatThrownBy(() -> new AgentRunSnapshot(
+                AgentRunSnapshot.CURRENT_VERSION, request.agentRunId(), request.task(),
+                request.protocolId(), AgentRunStatus.SUSPENDED, 1, now, now,
+                List.of(), Map.of(StandardActionHandlers.PENDING_ACTION, pendingCall,
+                        StandardActionHandlers.RECONCILIATION_PENDING, true),
+                0, 0, null, "approve", waitingStop))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_SNAPSHOT));
+        assertThatThrownBy(() -> new AgentRunSnapshot(
+                AgentRunSnapshot.CURRENT_VERSION, request.agentRunId(), request.task(),
+                request.protocolId(), AgentRunStatus.SUSPENDED, 1, now, now,
+                List.of(), Map.of(StandardActionHandlers.PENDING_ACTION, pendingBatch,
+                        StandardActionHandlers.RECONCILIATION_PENDING, true),
+                0, 0, null, "reconcile", reconciliationStop))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_SNAPSHOT));
+        AgentObservation unknown = AgentObservation.toolResult(
+                "first", null, "write", ToolExecutionResult.failure(
+                        AgentErrorCode.TOOL_RESULT_UNKNOWN, "result unknown"));
+        AgentStopDecision fatalStop = AgentStopDecision.stop(
+                AgentStopReason.FATAL_ERROR, AgentRunStatus.FAILED, "checkpoint failed");
+        assertThatThrownBy(() -> new AgentRunSnapshot(
+                AgentRunSnapshot.CURRENT_VERSION, request.agentRunId(), request.task(),
+                request.protocolId(), AgentRunStatus.FAILED, 1, now, now,
+                List.of(unknown), Map.of(StandardActionHandlers.PENDING_ACTION, pendingCall),
+                0, 0, null, null, fatalStop))
                 .isInstanceOfSatisfying(AgentCoreException.class,
                         error -> assertThat(error.errorCode())
                                 .isEqualTo(AgentErrorCode.INVALID_SNAPSHOT));
@@ -362,6 +479,107 @@ class AgentLoopKernelFlowTest {
         assertThat(listener.byInvocation()).hasSize(2);
         listener.byInvocation().values().forEach(events ->
                 assertLifecycleTrace(events, "reconcile-run"));
+    }
+
+    @Test
+    void rejectsNonStringReconciliationIdentity() {
+        AgentRequest request = request("numeric-reconciliation-id");
+        Instant now = Instant.parse("2026-10-10T00:00:00Z");
+        Map<String, Object> pendingCall = Map.of(
+                "type", StandardActionTypes.TOOL_CALL,
+                "callId", "7", "toolName", "writer", "arguments", Map.of());
+        AgentRunSnapshot snapshot = new AgentRunSnapshot(
+                AgentRunSnapshot.CURRENT_VERSION, request.agentRunId(), request.task(),
+                request.protocolId(), AgentRunStatus.SUSPENDED, 1, now, now,
+                List.of(AgentObservation.toolResult("7", null, "writer",
+                        ToolExecutionResult.failure(AgentErrorCode.TOOL_RESULT_UNKNOWN,
+                                "result unknown"))),
+                Map.of(StandardActionHandlers.PENDING_ACTION, pendingCall,
+                        StandardActionHandlers.RECONCILIATION_PENDING, true),
+                0, 0, null, "reconcile",
+                AgentStopDecision.stop(AgentStopReason.RECONCILIATION_REQUIRED,
+                        AgentRunStatus.SUSPENDED, "reconcile"));
+        AgentObservation invalid = new AgentObservation(
+                StandardActionTypes.TOOL_CALL, true, true, "saved", null, null,
+                Map.of(AgentObservation.TOOL_CALL_ID, 7,
+                        AgentObservation.TOOL_NAME, "writer"));
+        AgentLoopKernel kernel = AgentLoopKernel.builder((modelRequest, context) ->
+                ModelResponse.text("unused")).build();
+
+        assertThatThrownBy(() -> kernel.resume(
+                request, snapshot, new AgentResumeInput(List.of(invalid))))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.PENDING_ACTION_MISMATCH));
+
+        AgentObservation invalidTaskId = new AgentObservation(
+                StandardActionTypes.TOOL_CALL, true, true, "saved", null, null,
+                Map.of(AgentObservation.TOOL_CALL_ID, "7",
+                        AgentObservation.TOOL_TASK_ID, 9,
+                        AgentObservation.TOOL_NAME, "writer"));
+        assertThatThrownBy(() -> kernel.resume(
+                request, snapshot, new AgentResumeInput(List.of(invalidTaskId))))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.PENDING_ACTION_MISMATCH));
+    }
+
+    @Test
+    void requiresReconciliationAfterUnknownBatchCheckpointFailure() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"read","tasks":[
+                          {"taskId":"read","title":"Read","dependsOn":[]}
+                        ]}
+                        """),
+                envelope("""
+                        {"type":"tool_batch","plan":"read both","toolCalls":[
+                          {"callId":"read#1","taskId":"read","toolName":"first","arguments":{}},
+                          {"callId":"read#2","taskId":"read","toolName":"second","arguments":{}}
+                        ]}
+                        """),
+                "reconciled answer");
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(tool("first", (arguments, context) -> ToolExecutionResult.failure(
+                        AgentErrorCode.TOOL_RESULT_UNKNOWN, "remote result unknown")))
+                .register(tool("second", (arguments, context) -> ToolExecutionResult.success("two")));
+        AtomicReference<AgentRunSnapshot> saved = new AtomicReference<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools)
+                .checkpoints((request, snapshot) -> {
+                    if (snapshot.stopDecision() != null && snapshot.stopDecision().stopReason()
+                            == AgentStopReason.RECONCILIATION_REQUIRED) {
+                        throw new IllegalStateException("checkpoint unavailable");
+                    }
+                    saved.set(snapshot);
+                }).build();
+        AgentRequest request = request("failed-reconciliation-checkpoint");
+
+        AgentResult failed = kernel.run(request);
+
+        assertThat(failed.runStatus()).isEqualTo(AgentRunStatus.FAILED);
+        assertThat(failed.failure().errorCode()).isEqualTo(AgentErrorCode.CHECKPOINT_FAILED);
+        assertThat(saved.get()).isEqualTo(failed.snapshot());
+        assertThat(failed.snapshot().attributes())
+                .containsEntry(StandardActionHandlers.RECONCILIATION_PENDING, true)
+                .containsKey(StandardActionHandlers.PENDING_ACTION);
+        assertThatThrownBy(() -> kernel.resume(request, failed.snapshot()))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_RESUME_INPUT));
+        assertThat(model.calls()).isEqualTo(2);
+
+        AgentResult resumed = kernel.resume(request, failed.snapshot(), new AgentResumeInput(
+                List.of(
+                        AgentObservation.toolResult("read#1", "read", "first",
+                                ToolExecutionResult.success("one")),
+                        AgentObservation.toolResult("read#2", "read", "second",
+                                ToolExecutionResult.success("two")))));
+
+        assertThat(resumed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(resumed.answer()).isEqualTo("reconciled answer");
+        assertThat(resumed.snapshot().attributes())
+                .doesNotContainKeys(StandardActionHandlers.PENDING_ACTION,
+                        StandardActionHandlers.RECONCILIATION_PENDING);
     }
 
     @Test
@@ -1033,6 +1251,75 @@ class AgentLoopKernelFlowTest {
         assertThat(secondWait.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
         assertThat(completed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
         assertThat(completed.answer()).isEqualTo("both written");
+        assertThat(toolCalls).hasValue(2);
+    }
+
+    @Test
+    void keepsTheWholeBatchPendingWhenTheApprovedCallIsLast() {
+        String batch = envelope("""
+                {"type":"tool_batch","plan":"write both","toolCalls":[
+                  {"callId":"write#2","taskId":"write","toolName":"second","arguments":{}},
+                  {"callId":"write#1","taskId":"write","toolName":"first","arguments":{}}
+                ]}
+                """);
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"write","tasks":[
+                          {"taskId":"write","title":"Write","dependsOn":[]}
+                        ]}
+                        """),
+                envelope("""
+                        {"type":"tool_call","toolCall":{
+                          "callId":"write#1","taskId":"write",
+                          "toolName":"first","arguments":{}
+                        }}
+                        """),
+                batch,
+                envelope("""
+                        {"type":"tool_call","toolCall":{
+                          "callId":"write#2","taskId":"write",
+                          "toolName":"second","arguments":{}
+                        }}
+                        """),
+                batch, "both written");
+        AtomicInteger toolCalls = new AtomicInteger();
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(dangerousTool("first", (arguments, context) -> {
+                    toolCalls.incrementAndGet();
+                    return ToolExecutionResult.success("first done");
+                }))
+                .register(dangerousTool("second", (arguments, context) -> {
+                    toolCalls.incrementAndGet();
+                    return ToolExecutionResult.success("second done");
+                }));
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools)
+                .listener(listener).build();
+        AgentRequest initial = request("reordered-batch-confirmation");
+
+        AgentResult firstWait = kernel.run(initial);
+        AgentRequest approveFirst = request("reordered-batch-confirmation", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#1")), null);
+        AgentResult secondWait = kernel.resume(approveFirst, firstWait.snapshot());
+
+        assertThat(secondWait.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
+        assertThat(secondWait.snapshot().attributes())
+                .containsKey(StandardActionHandlers.PENDING_BATCH);
+        assertThat(((Map<?, ?>) secondWait.snapshot().attributes()
+                .get(StandardActionHandlers.APPROVED_TOOL_OPERATIONS))
+                .containsKey("write#1")).isTrue();
+        assertThat(toolCalls).hasValue(0);
+
+        AgentRequest approveSecond = request("reordered-batch-confirmation", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#2")), null);
+        AgentResult completed = kernel.resume(approveSecond, secondWait.snapshot());
+
+        assertThat(completed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(completed.answer()).isEqualTo("both written");
+        assertThat(completed.snapshot().attributes())
+                .doesNotContainKeys(StandardActionHandlers.PENDING_ACTION,
+                        StandardActionHandlers.PENDING_BATCH);
+        assertThat(listener.protocolErrors()).isEqualTo(1);
         assertThat(toolCalls).hasValue(2);
     }
 

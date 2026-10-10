@@ -300,7 +300,7 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
     }
 
     private boolean looksLikeControlJson(String text) {
-        if (!text.startsWith("{") || !text.endsWith("}")) {
+        if (!text.startsWith("{")) {
             return false;
         }
         try (JsonParser parser = objectMapper.createParser(text)) {

@@ -26,7 +26,7 @@ new AgentProtocolId("kset-rag-json", "code-v7")
 
 core 与 kset-rag 宿主的 Java API、日志和持久化字段统一命名为 `agentRunId`，表示一次可恢复的 Agent 任务，不需要双重生成。`sessionId` 表示会话，一个会话可关联多个 `agentRunId`，但同一时刻只能有一个活动 Agent 实例；core 动作的 `taskId` 表示计划任务，宿主既有的 `taskId` 可表示业务工作流任务，均不能默认当作 `agentRunId`；`invocationId` 则只覆盖一次 `run/resume` 调用。创建新 Agent 任务时必须生成或提供独立的 `agentRunId`，恢复时沿用快照中的值。
 
-宿主字段映射以[Core 对象与字段契约](../core-object-contract.md)为准。完成态读取 `AgentResult.answer`；等待批准或结果核验时读取 `stopDecision.stopMessage`，此时 `answer` 为 `null`。持久化快照为 v3；旧 v1/v2 快照不能直接恢复，需显式迁移。
+宿主字段映射以[Core 对象与字段契约](../core-object-contract.md)为准。完成态读取 `AgentResult.answer`；等待批准或结果核验时读取 `stopDecision.stopMessage`，此时 `answer` 为 `null`。持久化快照为 v4；旧 v1/v2/v3 快照不能直接恢复，需显式迁移。
 
 ## 字段映射
 

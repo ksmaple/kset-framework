@@ -30,6 +30,8 @@ public final class StandardActionHandlers {
     public static final String PLAN_TASKS = "react.planTasks";
     public static final String ANSWER_CHUNKS = "agent.answerChunks";
     public static final String PENDING_ACTION = "agent.pendingAction";
+    public static final String PENDING_BATCH = "agent.pendingBatch";
+    public static final String RECONCILIATION_PENDING = "agent.reconciliationPending";
     public static final String APPROVED_TOOL_OPERATIONS = "agent.approvedToolOperations";
 
     private StandardActionHandlers() {
@@ -144,18 +146,25 @@ public final class StandardActionHandlers {
         public AgentActionResult handle(AgentAction action, AgentActionContext context) {
             ToolBatchAction batch = require(action, ToolBatchAction.class);
             List<ToolCallAction> approvedCalls = new ArrayList<>();
+            ToolCallAction nextPending = null;
             for (ToolCallAction call : batch.toolCalls()) {
                 AgentTool tool = toolRegistry.find(call.toolName()).orElse(null);
                 if (tool != null && requiresConfirmation(tool)) {
                     if (!isToolApproved(tool, call, context)) {
-                        AgentActionResult suspended = AgentActionResult.suspended(
-                                "tool confirmation required",
-                                Map.of(PENDING_ACTION, toolCallState(call)));
-                        return rememberApprovedOperations(
-                                approvedCalls, context, suspended);
+                        if (nextPending == null) {
+                            nextPending = call;
+                        }
+                    } else {
+                        approvedCalls.add(call);
                     }
-                    approvedCalls.add(call);
                 }
+            }
+            if (nextPending != null) {
+                AgentActionResult suspended = AgentActionResult.suspended(
+                        "tool confirmation required",
+                        Map.of(PENDING_ACTION, toolCallState(nextPending),
+                                PENDING_BATCH, pendingBatchState(batch)));
+                return rememberApprovedOperations(approvedCalls, context, suspended);
             }
 
             Instant batchStartedAt = context.clock().instant();
@@ -196,7 +205,8 @@ public final class StandardActionHandlers {
                 }
                 return rememberApprovedOperations(approvedCalls, context,
                         new AgentActionResult(
-                                observations, null, null, null, Map.of(), Set.of(PENDING_ACTION)));
+                                observations, null, null, null, Map.of(),
+                                Set.of(PENDING_ACTION, PENDING_BATCH)));
             } catch (Exception error) {
                 futures.forEach(future -> future.cancel(true));
                 if (error instanceof InterruptedException) {
@@ -274,7 +284,7 @@ public final class StandardActionHandlers {
             List<String> parts = new ArrayList<>(strings(context.state().attributes().get(ANSWER_CHUNKS)));
             parts.add(answer.answer());
             return AgentActionResult.completed(
-                    String.join("\n\n", parts), Set.of(PENDING_ACTION));
+                    String.join("\n\n", parts), Set.of(PENDING_ACTION, PENDING_BATCH));
         }
     }
 
@@ -299,7 +309,7 @@ public final class StandardActionHandlers {
     }
 
     private static AgentActionResult observedAndClearPending(AgentObservation observation) {
-        return AgentActionResult.observed(observation, Set.of(PENDING_ACTION));
+        return AgentActionResult.observed(observation, Set.of(PENDING_ACTION, PENDING_BATCH));
     }
 
     private static AgentActionResult suspendUnknownBatch(
@@ -326,7 +336,8 @@ public final class StandardActionHandlers {
             String suspensionMessage) {
         return new AgentActionResult(
                 observations, AgentRunStatus.SUSPENDED, null, suspensionMessage,
-                Map.of(PENDING_ACTION, pendingAction), Set.of());
+                Map.of(PENDING_ACTION, pendingAction, RECONCILIATION_PENDING, true),
+                Set.of(PENDING_BATCH));
     }
 
     private static boolean isResultUnknown(AgentObservation observation) {
@@ -466,6 +477,10 @@ public final class StandardActionHandlers {
                 "toolCalls", batch.toolCalls().stream()
                         .map(StandardActionHandlers::toolCallState)
                         .toList());
+    }
+
+    private static List<Map<String, Object>> pendingBatchState(ToolBatchAction batch) {
+        return batch.toolCalls().stream().map(ToolCallAction::operationDefinition).toList();
     }
 
     private static Map<String, Object> confirmationState(ConfirmationAction confirmation) {

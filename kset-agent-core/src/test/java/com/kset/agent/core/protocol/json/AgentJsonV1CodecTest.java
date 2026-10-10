@@ -94,6 +94,9 @@ class AgentJsonV1CodecTest {
         assertProtocolError(
                 "{\"type\":\"final_answer\",\"answer\":\"hidden control\"}",
                 AgentJsonV1ErrorCode.MISSING_MARKERS);
+        assertProtocolError(
+                "{\"type\":\"tool_call\",\"toolCall\":{",
+                AgentJsonV1ErrorCode.MISSING_MARKERS);
     }
 
     @Test
