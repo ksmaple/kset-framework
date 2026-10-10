@@ -62,7 +62,7 @@ public final class NativeFunctionCallingCodec implements AgentProtocolCodec {
 NativeFunctionCallingCodec codec = new NativeFunctionCallingCodec();
 AgentLoopKernel kernel = AgentLoopKernel.builder(model)
         .protocol(codec)
-        .runIdGenerator(new SnowflakeAgentIdGenerator(datacenterId, workerId))
+        .agentRunIdGenerator(new SnowflakeAgentRunIdGenerator(datacenterId, workerId))
         .build();
 
 AgentRequest request = AgentRequest.of(
@@ -104,7 +104,7 @@ AgentResult result = kernel.run(request);
 
 附加 `AgentStopPolicy` 只能追加停止条件，不得返回 `COMPLETED` 代替产生最终回答的 Action；这种返回会转换为 `EXTENSION_CONTRACT_VIOLATION`。只有标准 `ToolCallAction` 和 `ToolBatchAction` 的 `TOOL_RESULT_UNKNOWN` 会进入内置 `RECONCILIATION_REQUIRED`。扩展动作即使返回同名错误码，也仍按其 `SUSPENDED` 结果解释为 `WAITING_INPUT`，必须由扩展自己的恢复协议处理。
 
-扩展 Handler 返回 `COMPLETED` 时只填 `AgentActionResult.answer`；返回 `SUSPENDED` 时只填 `suspensionMessage`。后者通过结果的 `stopDecision.stopMessage` 对外显示，不得写成最终回答。
+扩展 Handler 使用 `AgentActionResult.requestedRunStatus` 请求 `COMPLETED` 时只填 `answer`；请求 `SUSPENDED` 时只填 `suspensionMessage`，`null` 则继续运行。暂停提示通过结果的 `stopDecision.stopMessage` 对外显示，不得写成最终回答。
 
 自定义 Codec、Strategy 和 Handler 会被 Kernel 单例并发调用，必须线程安全，不得保存单次运行的可变状态。
 
@@ -119,7 +119,7 @@ AgentResult result = kernel.run(request);
 
 `AgentLifecycleListener` 为每个 `run/resume` 生成独立 invocation，并通过固定 `AgentLifecycleEventType` 暴露调用、轮次、模型、决策、动作、协议错误、检查点和最终结果端点。`AgentLifecycleContext.eventSequence` 在 invocation 内严格递增，`actionIndex` 为零基序号，非动作事件固定为 `NO_ACTION`。模型完成事件的 `elapsed` 包含该步骤内全部调用尝试和重试等待；动作与检查点完成事件只计算对应扩展调用，轮次完成事件计算整轮耗时，最终返回事件计算本次 invocation 总耗时。
 
-调用追踪信封属于固定内核协议，不属于 Codec 的外部数据格式。Kernel 在入口绑定调用方提供或生成的 `runId`，再生成 `invocationId/stepId/parentStepId/stepType/operation` 并写入 `AgentExecutionContext`；Model、Action、Tool 和 StopPolicy 只能读取，外部协议不得声明、覆盖或重映射这些字段。Java API 的 `runId` 是一次可恢复 Agent 任务的身份，宿主日志和存储字段应命名为 `agentRunId` 并直接映射该值；它不是 `sessionId`、计划 `taskId` 或单次调用的 `invocationId`。Model 获得 model step，Action 及其 Tool 获得 action step，Tool 使用 `callId` 区分同一动作内的具体操作。
+调用追踪信封属于固定内核协议，不属于 Codec 的外部数据格式。Kernel 在入口绑定调用方提供或生成的 `agentRunId`，再生成 `invocationId/stepId/parentStepId/stepType/operation` 并写入 `AgentExecutionContext`；Model、Action、Tool 和 StopPolicy 只能读取，外部协议不得声明、覆盖或重映射这些字段。Java API、快照与宿主日志统一使用 `agentRunId`，它不是 `sessionId`、计划 `taskId` 或单次调用的 `invocationId`。Model 获得 model step，Action 及其 Tool 获得 action step，Tool 使用 `callId` 区分同一动作内的具体操作。
 
 完成事件只表示同步扩展调用已经返回，不表示检查点已经持久化；可靠恢复以 `afterCheckpoint` 对应的 `AgentCheckpointPort.save` 成功为准。保存失败会发出 `CHECKPOINT_FAILED` 并调用 best-effort `onCheckpointError`，该回调异常不能覆盖原检查点错误。独立健康 Listener 可通过 `onListenerError` 接收其他 Listener 的失败信息。Listener 必须线程安全，不得保存无界的按 run 可变状态。日志和指标实现不得输出未经脱敏的模型文本、工具参数或 Observation 内容。
 

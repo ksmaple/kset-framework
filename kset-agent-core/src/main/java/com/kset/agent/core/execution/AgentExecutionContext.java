@@ -11,7 +11,7 @@ import java.util.Objects;
 
 /** Immutable trace, cancellation and timing context for one active kernel operation. */
 public record AgentExecutionContext(
-        String runId,
+        String agentRunId,
         String invocationId,
         String stepId,
         String parentStepId,
@@ -25,8 +25,8 @@ public record AgentExecutionContext(
         Map<String, Object> attributes) {
 
     public AgentExecutionContext {
-        if (runId == null || runId.isBlank()) {
-            throw new IllegalArgumentException("runId must not be blank");
+        if (agentRunId == null || agentRunId.isBlank()) {
+            throw new IllegalArgumentException("agentRunId must not be blank");
         }
         if (invocationId == null || invocationId.isBlank()) {
             throw new IllegalArgumentException("invocationId must not be blank");
@@ -40,7 +40,7 @@ public record AgentExecutionContext(
         if (operation == null || operation.isBlank()) {
             throw new IllegalArgumentException("operation must not be blank");
         }
-        runId = runId.trim();
+        agentRunId = agentRunId.trim();
         invocationId = invocationId.trim();
         stepId = stepId.trim();
         operation = operation.trim();

@@ -56,11 +56,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AgentLoopKernelFlowTest {
 
     @Test
-    void rejectsLegacySnapshotAndSuspendedAnswer() {
+    void rejectsLegacySnapshotsAndSuspendedAnswer() {
         Instant now = Instant.parse("2026-10-10T00:00:00Z");
         AgentProtocolId protocolId = new AgentProtocolId("agent-json", "v1");
         assertThatThrownBy(() -> new AgentRunSnapshot(
                 1, "legacy-run", "task", protocolId, AgentRunStatus.RUNNING,
+                0, now, now, List.of(), Map.of(), 0, 0, null, null, null))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.UNSUPPORTED_SNAPSHOT_VERSION));
+        assertThatThrownBy(() -> new AgentRunSnapshot(
+                2, "legacy-run", "task", protocolId, AgentRunStatus.RUNNING,
                 0, now, now, List.of(), Map.of(), 0, 0, null, null, null))
                 .isInstanceOfSatisfying(AgentCoreException.class,
                         error -> assertThat(error.errorCode())
@@ -96,8 +102,8 @@ class AgentLoopKernelFlowTest {
         InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
                 .register(tool("search", (arguments, context) -> {
                     toolCalls.incrementAndGet();
-                    assertThat(context.operationId().runId()).isEqualTo("flow-run");
-                    assertThat(context.operationId().callId()).isEqualTo("inspect#1");
+                    assertThat(context.idempotencyKey().agentRunId()).isEqualTo("flow-run");
+                    assertThat(context.idempotencyKey().callId()).isEqualTo("inspect#1");
                     return ToolExecutionResult.success(Map.of("hits", 1));
                 }));
         AgentTestSupport.RecordingCheckpoint checkpoints =
@@ -208,7 +214,7 @@ class AgentLoopKernelFlowTest {
     }
 
     @Test
-    void suspendsForConfirmationAndConsumesConfirmedIdOnResume() {
+    void suspendsForConfirmationAndConsumesApprovedIdOnResume() {
         AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
                 confirmation("confirm-1"), confirmation("confirm-1"), "confirmed answer");
         AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
@@ -227,9 +233,9 @@ class AgentLoopKernelFlowTest {
         assertThat(suspended.snapshot().attributes())
                 .containsKey(StandardActionHandlers.PENDING_ACTION);
 
-        AgentRequest confirmed = request("confirmation-run", initial.options(),
-                Map.of(AgentRequest.CONFIRMED_ACTION_IDS, List.of("confirm-1")), null);
-        AgentResult resumed = kernel.resume(confirmed, suspended.snapshot());
+        AgentRequest approved = request("confirmation-run", initial.options(),
+                Map.of(AgentRequest.APPROVED_CONFIRMATION_IDS, List.of("confirm-1")), null);
+        AgentResult resumed = kernel.resume(approved, suspended.snapshot());
 
         assertThat(resumed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
         assertThat(resumed.answer()).isEqualTo("confirmed answer");
@@ -245,6 +251,54 @@ class AgentLoopKernelFlowTest {
         assertThat(listener.byInvocation().values())
                 .extracting(events -> events.getFirst().invocationType())
                 .containsExactlyInAnyOrder(AgentInvocationType.RUN, AgentInvocationType.RESUME);
+    }
+
+    @Test
+    void requiresConfirmationBeforeResumingTheModelLoop() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                confirmation("confirm-1"), confirmation("confirm-1"), "confirmed answer");
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).build();
+        AgentRequest initial = request("missing-confirmation");
+        AgentResult suspended = kernel.run(initial);
+
+        assertThatThrownBy(() -> kernel.resume(initial, suspended.snapshot()))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_RESUME_INPUT));
+        assertThat(model.calls()).isEqualTo(1);
+
+        AgentRequest wrongApprovalType = request("missing-confirmation", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("confirm-1")), null);
+        assertThatThrownBy(() -> kernel.resume(wrongApprovalType, suspended.snapshot()))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_RESUME_INPUT));
+        assertThat(model.calls()).isEqualTo(1);
+
+        AgentRequest approved = request("missing-confirmation", initial.options(),
+                Map.of(AgentRequest.APPROVED_CONFIRMATION_IDS, List.of("confirm-1")), null);
+        assertThat(kernel.resume(approved, suspended.snapshot()).answer())
+                .isEqualTo("confirmed answer");
+    }
+
+    @Test
+    void rejectsDifferentDecisionUntilPendingConfirmationIsConsumed() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                confirmation("confirm-1"), "premature answer",
+                confirmation("confirm-1"), "confirmed answer");
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).listener(listener).build();
+        AgentRequest initial = request("changed-confirmation-action");
+        AgentResult suspended = kernel.run(initial);
+        AgentRequest approved = request("changed-confirmation-action", initial.options(),
+                Map.of(AgentRequest.APPROVED_CONFIRMATION_IDS, List.of("confirm-1")), null);
+
+        AgentResult resumed = kernel.resume(approved, suspended.snapshot());
+
+        assertThat(resumed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(resumed.answer()).isEqualTo("confirmed answer");
+        assertThat(listener.protocolErrors()).isEqualTo(1);
+        assertThat(model.calls()).isEqualTo(4);
     }
 
     @Test
@@ -914,20 +968,76 @@ class AgentLoopKernelFlowTest {
         AgentRequest initial = request("tool-confirmation");
 
         AgentResult suspended = kernel.run(initial);
-        AgentRequest confirmed = request("tool-confirmation", initial.options(),
-                Map.of(AgentRequest.CONFIRMED_ACTION_IDS, List.of("write#1")), null);
-        AgentResult resumed = kernel.resume(confirmed, suspended.snapshot());
+        assertThatThrownBy(() -> kernel.resume(initial, suspended.snapshot()))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_RESUME_INPUT));
+        assertThat(toolCalls).hasValue(0);
+        assertThat(model.calls()).isEqualTo(2);
+        AgentRequest wrongApprovalType = request("tool-confirmation", initial.options(),
+                Map.of(AgentRequest.APPROVED_CONFIRMATION_IDS, List.of("write#1")), null);
+        assertThatThrownBy(() -> kernel.resume(wrongApprovalType, suspended.snapshot()))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_RESUME_INPUT));
+        assertThat(model.calls()).isEqualTo(2);
+        AgentRequest approved = request("tool-confirmation", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#1")), null);
+        AgentResult resumed = kernel.resume(approved, suspended.snapshot());
 
         assertThat(suspended.stopDecision().stopReason()).isEqualTo(AgentStopReason.WAITING_INPUT);
         assertThat(resumed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
         assertThat(resumed.answer()).isEqualTo("written");
         assertThat(toolCalls).hasValue(1);
         assertThat(resumed.snapshot().attributes())
-                .containsKey(StandardActionHandlers.CONFIRMED_TOOL_OPERATIONS);
+                .containsKey(StandardActionHandlers.APPROVED_TOOL_OPERATIONS);
     }
 
     @Test
-    void rejectsChangedToolArgumentsAfterConfirmation() {
+    void confirmsToolBatchCallsOneAtATimeBeforeExecution() {
+        String batch = envelope("""
+                {"type":"tool_batch","plan":"write both","toolCalls":[
+                  {"callId":"write#1","taskId":"write","toolName":"first","arguments":{}},
+                  {"callId":"write#2","taskId":"write","toolName":"second","arguments":{}}
+                ]}
+                """);
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"write","tasks":[
+                          {"taskId":"write","title":"Write","dependsOn":[]}
+                        ]}
+                        """),
+                batch, batch, batch, "both written");
+        AtomicInteger toolCalls = new AtomicInteger();
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(dangerousTool("first", (arguments, context) -> {
+                    toolCalls.incrementAndGet();
+                    return ToolExecutionResult.success("first done");
+                }))
+                .register(dangerousTool("second", (arguments, context) -> {
+                    toolCalls.incrementAndGet();
+                    return ToolExecutionResult.success("second done");
+                }));
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools).build();
+        AgentRequest initial = request("batch-confirmation");
+
+        AgentResult firstWait = kernel.run(initial);
+        AgentRequest confirmFirst = request("batch-confirmation", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#1")), null);
+        AgentResult secondWait = kernel.resume(confirmFirst, firstWait.snapshot());
+        AgentRequest confirmSecond = request("batch-confirmation", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#2")), null);
+        AgentResult completed = kernel.resume(confirmSecond, secondWait.snapshot());
+
+        assertThat(firstWait.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
+        assertThat(secondWait.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
+        assertThat(completed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(completed.answer()).isEqualTo("both written");
+        assertThat(toolCalls).hasValue(2);
+    }
+
+    @Test
+    void correctsChangedToolArgumentsBeforeExecution() {
         AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
                 envelope("""
                         {"type":"task_plan","plan":"write","tasks":[
@@ -936,7 +1046,8 @@ class AgentLoopKernelFlowTest {
                         """),
                 toolCall("write#1", "write", "writer", "x"),
                 toolCall("write#1", "write", "writer", "changed"),
-                "operation rejected");
+                toolCall("write#1", "write", "writer", "x"),
+                "operation corrected");
         AtomicInteger toolCalls = new AtomicInteger();
         AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
         AgentLoopKernel kernel = AgentLoopKernel.builder(model)
@@ -949,15 +1060,15 @@ class AgentLoopKernelFlowTest {
                 .build();
         AgentRequest initial = request("changed-confirmation");
         AgentResult suspended = kernel.run(initial);
-        AgentRequest confirmed = request("changed-confirmation", initial.options(),
-                Map.of(AgentRequest.CONFIRMED_ACTION_IDS, List.of("write#1")), null);
+        AgentRequest approved = request("changed-confirmation", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#1")), null);
 
-        AgentResult resumed = kernel.resume(confirmed, suspended.snapshot());
+        AgentResult resumed = kernel.resume(approved, suspended.snapshot());
 
         assertThat(resumed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
-        assertThat(resumed.answer()).isEqualTo("operation rejected");
+        assertThat(resumed.answer()).isEqualTo("operation corrected");
         assertThat(listener.protocolErrors()).isEqualTo(1);
-        assertThat(toolCalls).hasValue(0);
+        assertThat(toolCalls).hasValue(1);
     }
 
     @Test
@@ -982,7 +1093,7 @@ class AgentLoopKernelFlowTest {
 
         AgentResult result = kernel.run(request(
                 "preconfirmed", AgentLoopOptions.defaults(),
-                Map.of(AgentRequest.CONFIRMED_ACTION_IDS, List.of("write#1")), null));
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#1")), null));
 
         assertThat(result.runStatus()).isEqualTo(AgentRunStatus.FAILED);
         assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.PENDING_ACTION_MISMATCH);
@@ -993,7 +1104,7 @@ class AgentLoopKernelFlowTest {
     }
 
     @Test
-    void allowsRetryOfTheSameToolOperationIdentity() {
+    void allowsRetryOfTheSameToolOperationDefinition() {
         AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
                 envelope("""
                         {"type":"task_plan","plan":"read","tasks":[

@@ -1,7 +1,11 @@
 package com.kset.agent.core.action;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public record TaskPlanAction(String summary, List<PlanTask> tasks) implements AgentAction {
@@ -35,33 +39,32 @@ public record TaskPlanAction(String summary, List<PlanTask> tasks) implements Ag
     }
 
     private static boolean hasCycle(List<PlanTask> tasks, Set<String> ids) {
-        Set<String> visited = new HashSet<>();
-        Set<String> visiting = new HashSet<>();
+        Map<String, Integer> remainingDependencies = new HashMap<>();
+        Map<String, List<String>> dependents = new HashMap<>();
+        for (PlanTask task : tasks) {
+            remainingDependencies.put(task.taskId(), task.dependsOn().size());
+            for (String dependency : task.dependsOn()) {
+                dependents.computeIfAbsent(dependency, ignored -> new ArrayList<>())
+                        .add(task.taskId());
+            }
+        }
+        ArrayDeque<String> ready = new ArrayDeque<>();
         for (String taskId : ids) {
-            if (visit(taskId, tasks, visited, visiting)) {
-                return true;
+            if (remainingDependencies.get(taskId) == 0) {
+                ready.add(taskId);
             }
         }
-        return false;
-    }
-
-    private static boolean visit(String taskId, List<PlanTask> tasks,
-                                 Set<String> visited, Set<String> visiting) {
-        if (visited.contains(taskId)) {
-            return false;
-        }
-        if (!visiting.add(taskId)) {
-            return true;
-        }
-        PlanTask task = tasks.stream()
-                .filter(item -> item.taskId().equals(taskId)).findFirst().orElseThrow();
-        for (String dependencyTaskId : task.dependsOn()) {
-            if (visit(dependencyTaskId, tasks, visited, visiting)) {
-                return true;
+        int visited = 0;
+        while (!ready.isEmpty()) {
+            String completed = ready.remove();
+            visited++;
+            for (String dependent : dependents.getOrDefault(completed, List.of())) {
+                int remaining = remainingDependencies.merge(dependent, -1, Integer::sum);
+                if (remaining == 0) {
+                    ready.add(dependent);
+                }
             }
         }
-        visiting.remove(taskId);
-        visited.add(taskId);
-        return false;
+        return visited != tasks.size();
     }
 }

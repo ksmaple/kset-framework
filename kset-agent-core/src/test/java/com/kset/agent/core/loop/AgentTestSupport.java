@@ -34,14 +34,14 @@ final class AgentTestSupport {
                 + AgentJsonV1Codec.END_MARKER;
     }
 
-    static AgentRequest request(String runId) {
-        return request(runId, AgentLoopOptions.defaults(), Map.of(), AgentCancellation.none());
+    static AgentRequest request(String agentRunId) {
+        return request(agentRunId, AgentLoopOptions.defaults(), Map.of(), AgentCancellation.none());
     }
 
     static AgentRequest request(
-            String runId, AgentLoopOptions options, Map<String, Object> attributes,
+            String agentRunId, AgentLoopOptions options, Map<String, Object> attributes,
             AgentCancellation cancellation) {
-        return new AgentRequest(runId, "test task", AgentJsonV1Codec.ID,
+        return new AgentRequest(agentRunId, "test task", AgentJsonV1Codec.ID,
                 options, attributes, cancellation);
     }
 
@@ -53,7 +53,7 @@ final class AgentTestSupport {
                 maxActions, maxBatchCalls);
     }
 
-    static void assertLifecycleTrace(List<AgentLifecycleContext> events, String runId) {
+    static void assertLifecycleTrace(List<AgentLifecycleContext> events, String agentRunId) {
         assertThat(events).isNotEmpty();
         AgentLifecycleContext runStarted = events.getFirst();
         assertThat(runStarted.eventType()).isEqualTo(AgentLifecycleEventType.RUN_STARTED);
@@ -62,7 +62,9 @@ final class AgentTestSupport {
         Map<String, AgentLifecycleContext> openSteps = new HashMap<>();
         for (int index = 0; index < events.size(); index++) {
             AgentLifecycleContext event = events.get(index);
-            assertThat(event.runId()).isEqualTo(runId);
+            assertThat(event.version()).isEqualTo(AgentLifecycleContext.CURRENT_VERSION);
+            assertThat(event.eventStatus()).isNotNull();
+            assertThat(event.agentRunId()).isEqualTo(agentRunId);
             assertThat(event.invocationId()).isEqualTo(runStarted.invocationId());
             assertThat(event.eventSequence()).isEqualTo(index + 1L);
             assertThat(event.eventId())
@@ -121,7 +123,7 @@ final class AgentTestSupport {
             calls.incrementAndGet();
             String response = responses.poll();
             if (response == null) {
-                throw new IllegalStateException("no scripted model response for " + context.runId());
+                throw new IllegalStateException("no scripted model response for " + context.agentRunId());
             }
             return ModelResponse.text(response);
         }
@@ -137,18 +139,18 @@ final class AgentTestSupport {
 
         @Override
         public void save(AgentRequest request, AgentRunSnapshot snapshot) {
-            snapshots.computeIfAbsent(request.runId(), ignored -> new CopyOnWriteArrayList<>())
+            snapshots.computeIfAbsent(request.agentRunId(), ignored -> new CopyOnWriteArrayList<>())
                     .add(snapshot);
         }
 
-        AgentRunSnapshot latest(String runId) {
+        AgentRunSnapshot latest(String agentRunId) {
             List<AgentRunSnapshot> values = snapshots.getOrDefault(
-                    runId, new CopyOnWriteArrayList<>());
+                    agentRunId, new CopyOnWriteArrayList<>());
             return values.isEmpty() ? null : values.getLast();
         }
 
-        List<AgentRunSnapshot> all(String runId) {
-            return List.copyOf(snapshots.getOrDefault(runId, new CopyOnWriteArrayList<>()));
+        List<AgentRunSnapshot> all(String agentRunId) {
+            return List.copyOf(snapshots.getOrDefault(agentRunId, new CopyOnWriteArrayList<>()));
         }
     }
 

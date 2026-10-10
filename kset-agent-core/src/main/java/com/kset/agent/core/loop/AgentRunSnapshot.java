@@ -12,10 +12,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-/** Serializable run state. Version 2 separates final answer from suspended wait text. */
+/** Serializable run state. Version 3 uses the canonical Agent run identity field. */
 public record AgentRunSnapshot(
         int version,
-        String runId,
+        String agentRunId,
         String task,
         AgentProtocolId protocolId,
         AgentRunStatus runStatus,
@@ -30,15 +30,15 @@ public record AgentRunSnapshot(
         String suspensionMessage,
         AgentStopDecision stopDecision) {
 
-    public static final int CURRENT_VERSION = 2;
+    public static final int CURRENT_VERSION = 3;
 
     public AgentRunSnapshot {
         if (version != CURRENT_VERSION) {
             throw new AgentCoreException(AgentErrorCode.UNSUPPORTED_SNAPSHOT_VERSION,
                     "unsupported agent snapshot version: " + version);
         }
-        if (runId == null || runId.isBlank() || task == null || task.isBlank()) {
-            throw invalid("snapshot runId and task must not be blank");
+        if (agentRunId == null || agentRunId.isBlank() || task == null || task.isBlank()) {
+            throw invalid("snapshot agentRunId and task must not be blank");
         }
         if (protocolId == null || runStatus == null
                 || startedAt == null || updatedAt == null) {

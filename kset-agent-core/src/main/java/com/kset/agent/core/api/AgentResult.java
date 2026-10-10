@@ -12,7 +12,7 @@ import java.util.Objects;
  * {@code stopDecision.stopMessage}, never in {@code answer}.
  */
 public record AgentResult(
-        String runId,
+        String agentRunId,
         AgentRunStatus runStatus,
         String answer,
         AgentStopDecision stopDecision,
@@ -20,8 +20,8 @@ public record AgentResult(
         AgentFailure failure) {
 
     public AgentResult {
-        if (runId == null || runId.isBlank()) {
-            throw new IllegalArgumentException("runId must not be blank");
+        if (agentRunId == null || agentRunId.isBlank()) {
+            throw new IllegalArgumentException("agentRunId must not be blank");
         }
         Objects.requireNonNull(runStatus, "runStatus");
         Objects.requireNonNull(stopDecision, "stopDecision");
@@ -30,7 +30,7 @@ public record AgentResult(
                 || stopDecision.runStatus() != runStatus
                 || snapshot.runStatus() != runStatus
                 || !stopDecision.equals(snapshot.stopDecision())
-                || !runId.equals(snapshot.runId())) {
+                || !agentRunId.equals(snapshot.agentRunId())) {
             throw new IllegalArgumentException("result status, stop decision and snapshot must match");
         }
         if (runStatus == AgentRunStatus.COMPLETED && (answer == null || answer.isBlank())) {

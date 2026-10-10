@@ -35,9 +35,9 @@ public record AgentToolContext(
         return executionContext.isCancellationRequested();
     }
 
-    /** Stable structural idempotency identity; never persist {@code callId} by itself. */
-    public AgentToolOperationId operationId() {
-        return new AgentToolOperationId(executionContext.runId(), callId);
+    /** Stable structural idempotency key; never persist {@code callId} by itself. */
+    public AgentToolIdempotencyKey idempotencyKey() {
+        return new AgentToolIdempotencyKey(executionContext.agentRunId(), callId);
     }
 
     public boolean isDeadlineExceeded(Instant now) {

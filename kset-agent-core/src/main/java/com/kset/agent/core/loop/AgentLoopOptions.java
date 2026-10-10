@@ -5,10 +5,10 @@ import com.kset.agent.core.AgentErrorCode;
 
 import java.time.Duration;
 
-/** Immutable safety and capacity limits for one agent run. */
+/** Immutable run limits and per-invocation execution deadlines. */
 public record AgentLoopOptions(
         int maxTurns,
-        Duration timeout,
+        Duration invocationTimeout,
         int protocolErrorLimit,
         int noProgressLimit,
         int maxOutputTokens,
@@ -22,8 +22,9 @@ public record AgentLoopOptions(
                 || maxActionsPerDecision < 1 || maxToolCallsPerBatch < 2) {
             throw invalid("agent loop numeric limits are invalid");
         }
-        if (timeout == null || timeout.isZero() || timeout.isNegative()) {
-            throw invalid("timeout must be positive");
+        if (invocationTimeout == null || invocationTimeout.isZero()
+                || invocationTimeout.isNegative()) {
+            throw invalid("invocationTimeout must be positive");
         }
         if (toolCallTimeout == null || toolCallTimeout.isZero() || toolCallTimeout.isNegative()) {
             throw invalid("toolCallTimeout must be positive");

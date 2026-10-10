@@ -27,7 +27,7 @@
 }
 ```
 
-`plan`、非空 `tasks`、每个任务的 `taskId` 和 `title` 必填。任务 ID 必须唯一，依赖必须引用当前计划中的其他任务，且不得形成环路。
+`plan`、非空 `tasks`、每个任务的字符串 `taskId` 和 `title` 必填。任务 ID 必须唯一，依赖必须引用当前计划中的其他任务，且不得形成环路。
 
 ### tool_call
 
@@ -44,7 +44,7 @@
 }
 ```
 
-`callId`、`toolName` 和对象类型 `arguments` 必填。`callId` 在整个 run 内只能标识一个工具操作；后续轮次的不同操作必须使用新 ID，确认、重试、核验和恢复同一副作用时必须复用原 ID。Kernel 会在单个决策内判重，并把 `callId/taskId/toolName/arguments` 身份写入快照账本；跨轮同 ID 异身份以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。持久化时仍须使用结构化 `(runId, callId)` 作为操作身份，并保存 `toolName + 规范化 arguments` 指纹，作为跨进程和外部副作用的最终防线；同身份异指纹必须返回 `TOOL_IDEMPOTENCY_CONFLICT`。标准工具 Observation 的 attributes 固定返回 `callId`、可选 `taskId` 和 `toolName`。
+`callId`、`toolName` 和对象类型 `arguments` 必填；可选 `taskId` 若出现，必须是非空字符串，不接受数字或其他 JSON 类型。`callId` 在整个 run 内只能标识一个工具操作；后续轮次的不同操作必须使用新 ID，确认、重试、核验和恢复同一副作用时必须复用原 ID。Kernel 会在单个决策内判重，并把 `callId/taskId/toolName/arguments` 身份写入快照账本；跨轮同 ID 异身份以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。持久化时仍须使用结构化 `(agentRunId, callId)` 作为操作身份，并保存 `toolName + 规范化 arguments` 指纹，作为跨进程和外部副作用的最终防线；同身份异指纹必须返回 `TOOL_IDEMPOTENCY_CONFLICT`。标准工具 Observation 的 attributes 固定返回 `callId`、可选 `taskId` 和 `toolName`。
 
 ### tool_batch
 
@@ -62,7 +62,7 @@
 
 至少包含两个调用。标准批处理语义是所有调用互相独立并可并发执行，不支持调用间 `dependsOn`。有依赖的批次必须使用自定义动作和 Handler。
 
-已有批次任务提交后发生超时、线程中断或汇总异常时，标准处理器返回 `TOOL_RESULT_UNKNOWN`，Kernel 以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止，不会继续下一轮。该核验停止优先于批次等待期间同时出现的通用超时或线程中断；宿主必须逐个查询 `(runId, callId)` 的权威结果后再恢复，禁止直接重新生成 callId 或盲目重试。
+已有批次任务提交后发生超时、线程中断或汇总异常时，标准处理器返回 `TOOL_RESULT_UNKNOWN`，Kernel 以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止，不会继续下一轮。该核验停止优先于批次等待期间同时出现的通用超时或线程中断；宿主必须逐个查询 `(agentRunId, callId)` 的权威结果后再恢复，禁止直接重新生成 callId 或盲目重试。
 
 工具适配器自身发现远程结果未知时必须返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)`。单工具调用会保存原动作并暂停；批次中任一调用未知会保留全部 Observation、保存完整批次并暂停。明确失败仍返回其具体工具错误码，由 Strategy 决定是否继续。
 
@@ -98,17 +98,17 @@
 }
 ```
 
-`confirmationId` 和 `message` 必填。未确认时该动作将运行置为 `SUSPENDED`；宿主保存快照并在恢复请求中通过 `AgentRequest.CONFIRMED_ACTION_IDS` 提供已确认的稳定动作 ID。恢复后动作必须与 `agent.pendingAction` 完整匹配，标准 Handler 才会消费确认并继续循环；在新 run 中预置确认 ID 或确认后修改动作内容都会返回 `PENDING_ACTION_MISMATCH`。危险工具采用相同规则，并额外绑定 `callId/taskId/toolName/arguments` 的完整操作身份。
+`confirmationId` 和 `message` 必填。未批准时该动作将运行置为 `SUSPENDED`；宿主保存快照并在恢复请求中通过 `AgentRequest.APPROVED_CONFIRMATION_IDS` 提供 `confirmationId`。危险工具使用独立的 `AgentRequest.APPROVED_TOOL_CALL_IDS`，其中仅包含 `callId`。缺少待处理类型对应批准 ID 的恢复在调用模型前以 `INVALID_RESUME_INPUT` 拒绝。批准后模型首先必须重述与 `agent.pendingAction` 完整匹配的动作，不匹配作为可纠正协议错误 `PENDING_ACTION_MISMATCH` 处理；标准 Handler 消费批准后才继续循环。在新 run 中预置批准 ID 仍不能绕过 pending 校验。危险工具还须绑定 `callId/taskId/toolName/arguments` 的完整操作定义；批次工具保持逐项批准。
 
 ## metadata
 
 根层 `metadata` 是协议中立的扩展数据，只能是 JSON 对象。内核将最近一次 metadata 保存到快照属性 `agent.protocolMetadata`，但不会解释业务内容。需要跨多轮保留的数据应由自定义 Strategy 显式复制到自己的非保留命名空间。
 
-`agent.*` 和 `react.*` 是内核保留属性前缀。请求侧唯一公开的内核属性是 `agent.confirmedActionIds`；宿主不得写入快照中的内部工具操作或确认账本，扩展应使用自己的命名空间。`agent.pendingAction` 只在等待确认或标准工具结果核验时保留，并在确认消费、工具结束、核验恢复或最终回答时由内核删除。内部账本不会进入默认 ReAct Prompt。
+`agent.*` 和 `react.*` 是内核保留属性前缀。请求侧仅公开 `agent.approvedConfirmationIds` 与 `agent.approvedToolCallIds`，两类 ID 不得混用；宿主不得写入快照中的内部工具操作或确认账本，扩展应使用自己的命名空间。`agent.pendingAction` 只在等待批准或标准工具结果核验时保留，并在批准消费、工具结束、核验恢复或最终回答时由内核删除。内部账本不会进入默认 ReAct Prompt。
 
-`runId`、`invocationId`、`stepId`、`parentStepId`、`stepType` 和 `operation` 属于 Kernel 固定的执行追踪信封，不属于模型 JSON 字段。Kernel 在入口绑定调用方提供或生成的 `runId`。该值是一次可恢复 Agent 任务的 ID，宿主跨系统字段应称为 `agentRunId` 并映射同一值；不能用会话 `sessionId` 或计划 `taskId` 替代。Codec 不得从模型输出读取或覆盖这些身份；外部适配器应从 `AgentExecutionContext`、`AgentToolContext` 或 `AgentLifecycleContext` 获取。
+`agentRunId`、`invocationId`、`stepId`、`parentStepId`、`stepType` 和 `operation` 属于 Kernel 固定的执行追踪信封，不属于模型 JSON 字段。Kernel 在入口绑定调用方提供或生成的 `agentRunId`；它是一次可恢复 Agent 任务的唯一命名身份，不能用会话 `sessionId` 或计划 `taskId` 替代。Codec 不得从模型输出读取或覆盖这些身份；外部适配器应从 `AgentExecutionContext`、`AgentToolContext` 或 `AgentLifecycleContext` 获取。
 
-模型 JSON 中的 `answer` 是动作文本：`final_answer` 完成后才成为 `AgentResult.answer`；`confirmation.message` 是暂停提示，只进入快照 v2 的 `suspensionMessage` 和结果的 `stopDecision.stopMessage`。Java 对象的完整字段定义见[对象与字段契约](../core-object-contract.md)。
+模型 JSON 中的 `answer` 是动作文本：`final_answer` 完成后才成为 `AgentResult.answer`；`confirmation.message` 是暂停提示，只进入快照 v3 的 `suspensionMessage` 和结果的 `stopDecision.stopMessage`。Java 对象的完整字段定义见[对象与字段契约](../core-object-contract.md)。
 
 ## 错误码
 
@@ -123,4 +123,4 @@
 - 修正文案但不改变字段语义时保留 `v1`。
 - 新增可选字段、改变字段含义或动作执行语义时必须发布新版本。
 - 自定义协议必须使用独立名称或版本，不能注册为 `agent-json:v1`。
-- 同一 `runId` 的 `resume` 必须继续使用快照中的协议 ID。
+- 同一 `agentRunId` 的 `resume` 必须继续使用快照中的协议 ID。

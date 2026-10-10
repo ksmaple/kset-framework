@@ -23,7 +23,7 @@ public record AgentStopDecision(
         if (shouldStop
                 && (stopReason == AgentStopReason.NONE
                 || runStatus == AgentRunStatus.RUNNING)) {
-            throw new IllegalArgumentException("stop decision requires a reason and terminal status");
+            throw new IllegalArgumentException("stop decision requires a reason and non-running status");
         }
     }
 

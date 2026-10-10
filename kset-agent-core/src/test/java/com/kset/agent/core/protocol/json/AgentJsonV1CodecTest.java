@@ -6,6 +6,7 @@ import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.action.AnswerChunkAction;
 import com.kset.agent.core.action.ConfirmationAction;
 import com.kset.agent.core.action.FinalAnswerAction;
+import com.kset.agent.core.action.PlanTask;
 import com.kset.agent.core.action.TaskPlanAction;
 import com.kset.agent.core.action.ToolBatchAction;
 import com.kset.agent.core.action.ToolCallAction;
@@ -22,6 +23,7 @@ import com.kset.agent.core.protocol.AgentProtocolId;
 import com.kset.agent.core.stop.AgentCancellation;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -108,6 +110,41 @@ class AgentJsonV1CodecTest {
         assertProtocolError(envelope(
                 "{\"type\":\"final_answer\",\"answer\":\"one\",\"answer\":\"two\"}"),
                 AgentJsonV1ErrorCode.INVALID_JSON);
+    }
+
+    @Test
+    void rejectsNonStringOrBlankOptionalToolTaskId() {
+        assertProtocolError(envelope("""
+                {"type":"tool_call","toolCall":{
+                  "callId":"call-1","taskId":123,"toolName":"search","arguments":{}
+                }}
+                """), AgentJsonV1ErrorCode.MISSING_FIELD);
+        assertProtocolError(envelope("""
+                {"type":"tool_call","toolCall":{
+                  "callId":"call-1","taskId":" ","toolName":"search","arguments":{}
+                }}
+                """), AgentJsonV1ErrorCode.MISSING_FIELD);
+        assertThat(decode("""
+                {"type":"tool_call","toolCall":{
+                  "callId":"call-1","toolName":"search","arguments":{}
+                }}
+                """).actions().getFirst()).isInstanceOfSatisfying(
+                ToolCallAction.class, action -> assertThat(action.taskId()).isNull());
+    }
+
+    @Test
+    void validatesDeepPlanDependenciesWithoutRecursiveTraversal() {
+        List<PlanTask> tasks = new ArrayList<>();
+        for (int index = 0; index < 5_000; index++) {
+            tasks.add(new PlanTask("task-" + index, "Task " + index,
+                    index == 0 ? List.of() : List.of("task-" + (index - 1))));
+        }
+
+        assertThat(new TaskPlanAction("deep plan", tasks).tasks()).hasSize(5_000);
+        assertThatThrownBy(() -> new TaskPlanAction("cycle", List.of(
+                new PlanTask("first", "First", List.of("second")),
+                new PlanTask("second", "Second", List.of("first")))))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

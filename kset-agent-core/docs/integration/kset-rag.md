@@ -24,9 +24,9 @@ new AgentProtocolId("kset-rag-json", "code-v7")
 
 ## Agent 任务身份
 
-core 的 `runId` 在 kset-rag 宿主日志和持久化字段中应命名为 `agentRunId`，表示一次可恢复的 Agent 任务；两者是同一个值，不需要双重生成。`sessionId` 表示会话，一个会话可关联多个 `agentRunId`，但同一时刻只能有一个活动 Agent 实例；core 动作的 `taskId` 表示计划任务，宿主既有的 `taskId` 可表示业务工作流任务，均不能默认当作 `agentRunId`；`invocationId` 则只覆盖一次 `run/resume` 调用。创建新 Agent 任务时必须生成或提供独立的 `agentRunId`，恢复时沿用快照中的值。
+core 与 kset-rag 宿主的 Java API、日志和持久化字段统一命名为 `agentRunId`，表示一次可恢复的 Agent 任务，不需要双重生成。`sessionId` 表示会话，一个会话可关联多个 `agentRunId`，但同一时刻只能有一个活动 Agent 实例；core 动作的 `taskId` 表示计划任务，宿主既有的 `taskId` 可表示业务工作流任务，均不能默认当作 `agentRunId`；`invocationId` 则只覆盖一次 `run/resume` 调用。创建新 Agent 任务时必须生成或提供独立的 `agentRunId`，恢复时沿用快照中的值。
 
-宿主字段映射以[Core 对象与字段契约](../core-object-contract.md)为准。完成态读取 `AgentResult.answer`；等待确认或结果核验时读取 `stopDecision.stopMessage`，此时 `answer` 为 `null`。持久化快照为 v2；旧 v1 快照不能直接恢复，需显式迁移。
+宿主字段映射以[Core 对象与字段契约](../core-object-contract.md)为准。完成态读取 `AgentResult.answer`；等待批准或结果核验时读取 `stopDecision.stopMessage`，此时 `answer` 为 `null`。持久化快照为 v3；旧 v1/v2 快照不能直接恢复，需显式迁移。
 
 ## 字段映射
 
@@ -39,7 +39,7 @@ core 的 `runId` 在 kset-rag 宿主日志和持久化字段中应命名为 `age
 | 带 `dependsOn` 的 `tool_batch` | `ExtensionAction("kset-rag.tool-batch", payload)` | kset-rag Handler 按依赖 DAG 分层执行，不能使用标准并发 Handler |
 | `answer_chunk` | `AnswerChunkAction` | `progressSummary`、记忆字段放 metadata |
 | `final_answer` | `FinalAnswerAction` | `resourceRefs`、记忆字段放 metadata，由 Listener/结果装配器读取 |
-| `confirmation` | `ConfirmationAction` | 宿主生成稳定 confirmationId；完整卡片字段放 options/metadata；恢复请求传入同一 ID 后标准 Handler 会消费确认并继续 |
+| `confirmation` | `ConfirmationAction` | 宿主生成稳定 confirmationId；完整卡片字段放 options/metadata；恢复请求通过 `agent.approvedConfirmationIds` 传入同一 ID 后标准 Handler 会消费批准并继续 |
 | `ToolObservation` | `AgentObservation` | 结果放 output，证据等级和资源放 attributes，错误使用稳定 errorCode |
 
 ## 必需宿主组件
@@ -56,7 +56,7 @@ core 的 `runId` 在 kset-rag 宿主日志和持久化字段中应命名为 `age
 
 ## callId
 
-`callId` 是运行内工具副作用标识，一个 ID 在整个 run 内只能表示一个操作；新协议应优先要求模型显式返回。core 会把完整操作身份写入快照并拒绝跨轮同 ID 异身份，实际持久化幂等身份仍使用结构化 `(runId, callId)`。兼容旧输出缺省时，宿主可以按 `turn + 当前决策内序号` 生成首次调用 ID，并在动作执行前随快照或待确认动作持久化。同一操作在确认、结果未知重试和恢复时必须读取并复用已保存 ID，不得重新生成。kset-rag 工具结果表还必须保存 `toolName + 规范化 arguments` 指纹，作为跨进程最终防线，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。标准工具 Observation 已固定回传 `callId/taskId/toolName`，kset-rag 可直接用于步骤关联和上报去重。
+`callId` 是运行内工具副作用标识，一个 ID 在整个 run 内只能表示一个操作；新协议应优先要求模型显式返回。core 会把完整操作身份写入快照并拒绝跨轮同 ID 异身份，实际持久化幂等身份仍使用结构化 `(agentRunId, callId)`。兼容旧输出缺省时，宿主可以按 `turn + 当前决策内序号` 生成首次调用 ID，并在动作执行前随快照或待确认动作持久化。同一操作在确认、结果未知重试和恢复时必须读取并复用已保存 ID，不得重新生成。kset-rag 工具结果表还必须保存 `toolName + 规范化 arguments` 指纹，作为跨进程最终防线，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。标准工具 Observation 已固定回传 `callId/taskId/toolName`，kset-rag 可直接用于步骤关联和上报去重。
 
 现有 `planTaskId + "#" + 序号` 只能保证单个决策内唯一，同一计划任务跨轮再次调用时可能碰撞，不能直接作为稳定幂等键。
 
@@ -66,11 +66,11 @@ core 的 `runId` 在 kset-rag 宿主日志和持久化字段中应命名为 `age
 
 ## 观测映射
 
-kset-rag 应在创建 Kernel 时注册 `SnowflakeAgentIdGenerator(datacenterId, workerId)`，节点号来自宿主配置或现有节点分配机制，不能硬编码成所有实例相同的值。新 Agent 任务由 Kernel 在首个事件前绑定雪花 `runId`，宿主记录为 `agentRunId`；已有独立的 Agent 任务唯一 ID 可直接作为请求 `runId`，但不得用 `sessionId` 或计划 `taskId` 代替；恢复必须使用快照原值。
+kset-rag 应在创建 Kernel 时注册 `SnowflakeAgentRunIdGenerator(datacenterId, workerId)`，节点号来自宿主配置或现有节点分配机制，不能硬编码成所有实例相同的值。新 Agent 任务由 Kernel 在首个事件前绑定雪花 `agentRunId`；已有独立的 Agent 任务唯一 ID 可直接作为请求 `agentRunId`，但不得用 `sessionId` 或计划 `taskId` 代替；恢复必须使用快照原值。
 
 | core 端点 | kset-rag 现有能力 |
 | --- | --- |
-| `onEvent` | 将 core `runId` 记录为 `agentRunId`，并输出 invocationId、stepId、parentStepId、eventId、状态和 operation |
+| `onEvent` | 输出 `agentRunId`、invocationId、stepId、parentStepId、eventId、eventStatus 和 operation |
 | `beforeRun/beforeTurn` | 工作流开始日志、轮次步骤和执行阶段 |
 | `beforeModel/afterModel` | 模型耗时、Token 用量、provider/model、finishReason |
 | `afterDecision` | 协议决策步骤、progressSummary、resourceRefs 和记忆建议 |
@@ -81,17 +81,17 @@ kset-rag 应在创建 Kernel 时注册 `SnowflakeAgentIdGenerator(datacenterId, 
 | `onStop/onError/afterRun` | 最终任务状态、SSE done/error 和工作流汇总指标 |
 | `onListenerError` | 上报器失败、队列丢弃与告警指标 |
 
-`KsetRagLifecycleListener` 使用 `eventId` 作为单条消息幂等身份，使用 `agentRunId = event.runId()` 关联完整 Agent 任务，使用 `invocationId` 区分每次 run/resume，使用 `stepId/parentStepId` 配对并组织步骤层级。工具 Action 在专用回调中追加 `callId/taskId/toolName/success/errorCode`。模型原文、Prompt、工具参数、Observation 和请求属性不得直接写日志；现有全量模型错误日志在接入前必须改为长度、指纹及脱敏摘要。
+`KsetRagLifecycleListener` 使用 `eventId` 作为单条消息幂等身份，使用 `agentRunId = event.agentRunId()` 关联完整 Agent 任务，使用 `invocationId` 区分每次 run/resume，使用 `stepId/parentStepId` 配对并组织步骤层级。工具 Action 在专用回调中追加 `callId/taskId/toolName/success/errorCode`。模型原文、Prompt、工具参数、Observation 和请求属性不得直接写日志；现有全量模型错误日志在接入前必须改为长度、指纹及脱敏摘要。
 
-`KsetRagModelAdapter` 必须从 `AgentExecutionContext` 读取并透传 `runId/invocationId/stepId`，宿主日志将 `runId` 写入 `agentRunId` 字段；`KsetRagToolAdapter` 从 `AgentToolContext.executionContext()` 读取相同身份，并追加 `callId/taskId/toolName`。同一底层调用的开始、响应、异常与重试日志必须沿用这些值，禁止由适配器另行生成 invocationId 或 stepId，否则无法与 `KsetRagLifecycleListener` 的最终步骤清单对账。
+`KsetRagModelAdapter` 必须从 `AgentExecutionContext` 读取并透传 `agentRunId/invocationId/stepId`；`KsetRagToolAdapter` 从 `AgentToolContext.executionContext()` 读取相同身份，并追加 `callId/taskId/toolName`。同一底层调用的开始、响应、异常与重试日志必须沿用这些值，禁止由适配器另行生成 invocationId 或 stepId，否则无法与 `KsetRagLifecycleListener` 的最终步骤清单对账。
 
 ## 并发与恢复
 
 - 一个会话只能有一个活动实例；接入前必须补充基于 `sessionId` 的原子抢占或活动任务唯一约束，现有按 `taskId` 的租约不能替代会话单飞。
 - 不同会话可以并发调用同一个 Kernel；所有共享扩展必须线程安全。
 - core 的 `resume` 只恢复宿主传入的逻辑快照，不负责读取快照、重新抢占任务或查询未知工具结果；`RECONCILIATION_REQUIRED` 快照必须同时传入 `AgentResumeInput`。
-- 带副作用的工具恢复前必须按原 `(runId, callId)` 查询权威结果并校验参数指纹，再决定复用结果、重试或补偿。
-- 危险工具或普通确认的恢复请求必须从已持久化快照的 `agent.pendingAction` 生成，并原样绑定 pending 身份；禁止在新 run 中预置确认 ID，也禁止确认后替换工具名、任务或参数。
+- 带副作用的工具恢复前必须按原 `(agentRunId, callId)` 查询权威结果并校验参数指纹，再决定复用结果、重试或补偿。
+- 危险工具或普通确认的恢复请求必须从已持久化快照的 `agent.pendingAction` 生成：前者通过 `agent.approvedToolCallIds` 传入原 `callId`，后者通过 `agent.approvedConfirmationIds` 传入原 `confirmationId`；禁止在新 run 中预置批准 ID，也禁止批准后替换工具名、任务或参数。
 - 标准工具返回 `TOOL_RESULT_UNKNOWN` 时，结果固定为 `RECONCILIATION_REQUIRED + SUSPENDED`；必须逐项完成权威结果核验，使用 `AgentObservation.toolResult` 为 pending 中每个调用构造携带原 `callId/taskId/toolName` 的最终 Observation，再通过三参数 `resume` 恢复。空输入、缺项或身份不匹配会被 core 拒绝，不得让仍可能运行的旧批次与新一轮动作并行。
 - kset-rag 工具适配器遇到远程超时、断流或响应丢失且无法确认副作用时，必须返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)`；单工具和批次都会由 core 自动保存 pending action 并暂停，禁止映射成普通 `TOOL_EXECUTION_FAILED`。
 - kset-rag 的 Strategy 只写 `kset-rag.*`，扩展 Action Handler 也使用该宿主命名空间，不得改写 core 的 `agent.*`/`react.*`。

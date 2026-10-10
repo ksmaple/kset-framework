@@ -8,34 +8,35 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Outcome of one dispatched action. State removals are applied before state writes. A terminal
- * result may only complete or suspend the run. {@code answer} is only a completed final answer;
+ * Outcome of one dispatched action. State removals are applied before state writes. A requested
+ * run status may only complete or suspend the current invocation; null means continue.
+ * {@code answer} is only a completed final answer;
  * {@code suspensionMessage} is only a prompt for a suspended run. Technical failures must be
  * thrown so the kernel can expose an {@code AgentFailure}.
  */
 public record AgentActionResult(
         List<AgentObservation> observations,
-        AgentRunStatus terminalRunStatus,
+        AgentRunStatus requestedRunStatus,
         String answer,
         String suspensionMessage,
         Map<String, Object> stateAttributes,
         Set<String> removedStateAttributes) {
 
     public AgentActionResult {
-        if (terminalRunStatus != null
-                && terminalRunStatus != AgentRunStatus.COMPLETED
-                && terminalRunStatus != AgentRunStatus.SUSPENDED) {
+        if (requestedRunStatus != null
+                && requestedRunStatus != AgentRunStatus.COMPLETED
+                && requestedRunStatus != AgentRunStatus.SUSPENDED) {
             throw new IllegalArgumentException(
-                    "terminalRunStatus must be COMPLETED or SUSPENDED");
+                    "requestedRunStatus must be COMPLETED or SUSPENDED");
         }
-        if (terminalRunStatus == null && (answer != null || suspensionMessage != null)) {
-            throw new IllegalArgumentException("non-terminal action result must not provide terminal content");
+        if (requestedRunStatus == null && (answer != null || suspensionMessage != null)) {
+            throw new IllegalArgumentException("continuing action result must not provide stop content");
         }
-        if (terminalRunStatus == AgentRunStatus.COMPLETED
+        if (requestedRunStatus == AgentRunStatus.COMPLETED
                 && ((answer == null || answer.isBlank()) || suspensionMessage != null)) {
             throw new IllegalArgumentException("completed action result requires only a non-blank answer");
         }
-        if (terminalRunStatus == AgentRunStatus.SUSPENDED
+        if (requestedRunStatus == AgentRunStatus.SUSPENDED
                 && (answer != null || suspensionMessage == null || suspensionMessage.isBlank())) {
             throw new IllegalArgumentException("suspended action result requires only a non-blank suspensionMessage");
         }
@@ -72,7 +73,7 @@ public record AgentActionResult(
     }
 
     public boolean madeProgress() {
-        return terminalRunStatus != null
+        return requestedRunStatus != null
                 || observations.stream().anyMatch(AgentObservation::progress);
     }
 }

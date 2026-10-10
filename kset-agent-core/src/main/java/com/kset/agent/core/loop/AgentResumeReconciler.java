@@ -2,12 +2,19 @@ package com.kset.agent.core.loop;
 
 import com.kset.agent.core.AgentCoreException;
 import com.kset.agent.core.AgentErrorCode;
+import com.kset.agent.core.action.AgentAction;
 import com.kset.agent.core.action.AgentActionResult;
 import com.kset.agent.core.action.AgentObservation;
+import com.kset.agent.core.action.ConfirmationAction;
 import com.kset.agent.core.action.StandardActionHandlers;
 import com.kset.agent.core.action.StandardActionTypes;
+import com.kset.agent.core.action.ToolBatchAction;
+import com.kset.agent.core.action.ToolCallAction;
+import com.kset.agent.core.api.AgentRequest;
 import com.kset.agent.core.api.AgentResumeInput;
 import com.kset.agent.core.api.AgentRunStatus;
+import com.kset.agent.core.protocol.AgentDecision;
+import com.kset.agent.core.protocol.AgentProtocolException;
 import com.kset.agent.core.stop.AgentStopReason;
 
 import java.time.Instant;
@@ -24,7 +31,7 @@ final class AgentResumeReconciler {
     }
 
     static AgentRunState apply(
-            AgentRunSnapshot snapshot, AgentRunState state,
+            AgentRequest request, AgentRunSnapshot snapshot, AgentRunState state,
             AgentResumeInput input, Instant now) {
         if (!input.hasReconciledObservations()) {
             if (snapshot.stopDecision() != null
@@ -32,6 +39,7 @@ final class AgentResumeReconciler {
                     == AgentStopReason.RECONCILIATION_REQUIRED) {
                 throw invalid("RECONCILIATION_REQUIRED snapshot requires reconciled observations");
             }
+            requirePendingConfirmation(request, snapshot);
             return state;
         }
         requireReconciliationSnapshot(snapshot);
@@ -48,6 +56,90 @@ final class AgentResumeReconciler {
                 input.reconciledObservations(), null, null, null, Map.of(),
                 Set.of(StandardActionHandlers.PENDING_ACTION));
         return state.apply(reconciled, now);
+    }
+
+    static void validatePendingDecision(AgentRunState state, AgentDecision decision) {
+        Object value = state.attributes().get(StandardActionHandlers.PENDING_ACTION);
+        if (value == null) {
+            return;
+        }
+        if (!(value instanceof Map<?, ?> pending)) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT,
+                    "pending action state must be a map");
+        }
+        String type = text(pending.get("type"));
+        if (type == null) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT,
+                    "pending action type must not be blank");
+        }
+        AgentAction firstAction = decision.actions().getFirst();
+        boolean matches = switch (type) {
+            case StandardActionTypes.CONFIRMATION ->
+                    firstAction instanceof ConfirmationAction confirmation
+                            && confirmationState(confirmation).equals(pending);
+            case StandardActionTypes.TOOL_CALL -> matchesPendingToolCall(firstAction, pending);
+            default -> true;
+        };
+        if (!matches) {
+            throw new AgentProtocolException(
+                    AgentErrorCode.PENDING_ACTION_MISMATCH.name(),
+                    "decision must continue the pending action before other actions");
+        }
+    }
+
+    private static void requirePendingConfirmation(
+            AgentRequest request, AgentRunSnapshot snapshot) {
+        Object value = snapshot.attributes().get(StandardActionHandlers.PENDING_ACTION);
+        if (value == null) {
+            return;
+        }
+        if (!(value instanceof Map<?, ?> pending)) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT,
+                    "pending action state must be a map");
+        }
+        String type = text(pending.get("type"));
+        if (type == null) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT,
+                    "pending action type must not be blank");
+        }
+        if (StandardActionTypes.CONFIRMATION.equals(type)) {
+            String confirmationId = requiredText(pending.get("confirmationId"),
+                    "pending confirmationId");
+            if (!request.isConfirmationApproved(confirmationId)) {
+                throw invalid("pending confirmation requires approval: " + confirmationId);
+            }
+        } else if (StandardActionTypes.TOOL_CALL.equals(type)) {
+            String callId = requiredText(pending.get("callId"), "pending callId");
+            if (!request.isToolCallApproved(callId)) {
+                throw invalid("pending tool call requires approval: " + callId);
+            }
+        }
+    }
+
+    private static Map<String, Object> confirmationState(ConfirmationAction confirmation) {
+        return Map.of(
+                "type", confirmation.actionType(),
+                "confirmationId", confirmation.confirmationId(),
+                "message", confirmation.message(),
+                "options", confirmation.options());
+    }
+
+    private static Map<String, Object> toolCallState(ToolCallAction call) {
+        Map<String, Object> state = new LinkedHashMap<>(call.operationDefinition());
+        state.put("type", call.actionType());
+        return state;
+    }
+
+    private static boolean matchesPendingToolCall(
+            AgentAction action, Map<?, ?> pending) {
+        if (action instanceof ToolCallAction call) {
+            return toolCallState(call).equals(pending);
+        }
+        if (action instanceof ToolBatchAction batch) {
+            return batch.toolCalls().stream()
+                    .anyMatch(call -> toolCallState(call).equals(pending));
+        }
+        return false;
     }
 
     private static void requireReconciliationSnapshot(AgentRunSnapshot snapshot) {

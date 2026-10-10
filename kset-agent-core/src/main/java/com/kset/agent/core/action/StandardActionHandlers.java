@@ -30,7 +30,7 @@ public final class StandardActionHandlers {
     public static final String PLAN_TASKS = "react.planTasks";
     public static final String ANSWER_CHUNKS = "agent.answerChunks";
     public static final String PENDING_ACTION = "agent.pendingAction";
-    public static final String CONFIRMED_TOOL_OPERATIONS = "agent.confirmedToolOperations";
+    public static final String APPROVED_TOOL_OPERATIONS = "agent.approvedToolOperations";
 
     private StandardActionHandlers() {
     }
@@ -89,8 +89,8 @@ public final class StandardActionHandlers {
                         call, AgentErrorCode.TOOL_NOT_FOUND,
                         "tool not found: " + call.toolName()));
             }
-            boolean confirmed = isToolConfirmed(tool, call, context);
-            if (requiresConfirmation(tool) && !confirmed) {
+            boolean approved = isToolApproved(tool, call, context);
+            if (requiresConfirmation(tool) && !approved) {
                 return AgentActionResult.suspended("tool confirmation required",
                         Map.of(PENDING_ACTION, toolCallState(call)));
             }
@@ -121,8 +121,8 @@ public final class StandardActionHandlers {
                 result = observedAndClearPending(toolFailure(
                         call, AgentErrorCode.TOOL_EXECUTION_FAILED, errorMessage(error)));
             }
-            return rememberConfirmedOperations(
-                    confirmed ? List.of(call) : List.of(), context, result);
+            return rememberApprovedOperations(
+                    approved ? List.of(call) : List.of(), context, result);
         }
     }
 
@@ -143,18 +143,18 @@ public final class StandardActionHandlers {
         @Override
         public AgentActionResult handle(AgentAction action, AgentActionContext context) {
             ToolBatchAction batch = require(action, ToolBatchAction.class);
-            List<ToolCallAction> confirmedCalls = new ArrayList<>();
+            List<ToolCallAction> approvedCalls = new ArrayList<>();
             for (ToolCallAction call : batch.toolCalls()) {
                 AgentTool tool = toolRegistry.find(call.toolName()).orElse(null);
                 if (tool != null && requiresConfirmation(tool)) {
-                    if (!isToolConfirmed(tool, call, context)) {
+                    if (!isToolApproved(tool, call, context)) {
                         AgentActionResult suspended = AgentActionResult.suspended(
                                 "tool confirmation required",
                                 Map.of(PENDING_ACTION, toolCallState(call)));
-                        return rememberConfirmedOperations(
-                                confirmedCalls, context, suspended);
+                        return rememberApprovedOperations(
+                                approvedCalls, context, suspended);
                     }
-                    confirmedCalls.add(call);
+                    approvedCalls.add(call);
                 }
             }
 
@@ -163,13 +163,13 @@ public final class StandardActionHandlers {
                     context.executionContext().remainingFrom(batchStartedAt));
             Duration callTimeout = shorter(context.request().options().toolCallTimeout(), timeout);
             if (context.executionContext().isCancellationRequested()) {
-                return rememberConfirmedOperations(confirmedCalls, context,
+                return rememberApprovedOperations(approvedCalls, context,
                         observedAndClearPending(AgentObservation.failure(
                                 action.actionType(), AgentErrorCode.TOOL_CANCELLED,
                                 "tool batch execution cancelled")));
             }
             if (timeout.isZero()) {
-                return rememberConfirmedOperations(confirmedCalls, context,
+                return rememberApprovedOperations(approvedCalls, context,
                         observedAndClearPending(AgentObservation.failure(
                                 action.actionType(), AgentErrorCode.TOOL_TIMEOUT,
                                 "tool batch deadline reached")));
@@ -189,12 +189,12 @@ public final class StandardActionHandlers {
                         .map(CompletableFuture::join)
                         .toList();
                 if (observations.stream().anyMatch(StandardActionHandlers::isResultUnknown)) {
-                    return rememberConfirmedOperations(confirmedCalls, context,
+                    return rememberApprovedOperations(approvedCalls, context,
                             suspendForReconciliation(
                                     observations, toolBatchState(batch),
                                     "tool batch outcome requires reconciliation"));
                 }
-                return rememberConfirmedOperations(confirmedCalls, context,
+                return rememberApprovedOperations(approvedCalls, context,
                         new AgentActionResult(
                                 observations, null, null, null, Map.of(), Set.of(PENDING_ACTION)));
             } catch (Exception error) {
@@ -203,10 +203,10 @@ public final class StandardActionHandlers {
                     Thread.currentThread().interrupt();
                 }
                 if (!futures.isEmpty()) {
-                    return rememberConfirmedOperations(confirmedCalls, context,
+                    return rememberApprovedOperations(approvedCalls, context,
                             suspendUnknownBatch(batch, batchFailureCode(error), error));
                 }
-                return rememberConfirmedOperations(confirmedCalls, context,
+                return rememberApprovedOperations(approvedCalls, context,
                         observedAndClearPending(AgentObservation.failure(
                                 action.actionType(), AgentErrorCode.TOOL_BATCH_FAILED,
                                 errorMessage(error))));
@@ -287,7 +287,7 @@ public final class StandardActionHandlers {
         @Override
         public AgentActionResult handle(AgentAction action, AgentActionContext context) {
             ConfirmationAction confirmation = require(action, ConfirmationAction.class);
-            if (context.request().isActionConfirmed(confirmation.confirmationId())) {
+            if (context.request().isConfirmationApproved(confirmation.confirmationId())) {
                 requirePendingAction(
                         context, confirmationState(confirmation), confirmation.confirmationId());
                 return observedAndClearPending(AgentObservation.success(
@@ -347,50 +347,50 @@ public final class StandardActionHandlers {
         return tool.descriptor().requiresConfirmation() || !tool.descriptor().readOnly();
     }
 
-    private static boolean isToolConfirmed(
+    private static boolean isToolApproved(
             AgentTool tool, ToolCallAction call, AgentActionContext context) {
         if (!requiresConfirmation(tool)) {
             return false;
         }
-        Map<String, Object> confirmed = confirmedToolOperations(context);
-        if (call.operationIdentity().equals(confirmed.get(call.callId()))) {
+        Map<String, Object> approved = approvedToolOperations(context);
+        if (call.operationDefinition().equals(approved.get(call.callId()))) {
             return true;
         }
-        if (!context.request().isActionConfirmed(call.callId())) {
+        if (!context.request().isToolCallApproved(call.callId())) {
             return false;
         }
         requirePendingAction(context, toolCallState(call), call.callId());
         return true;
     }
 
-    private static AgentActionResult rememberConfirmedOperations(
+    private static AgentActionResult rememberApprovedOperations(
             List<ToolCallAction> toolCalls, AgentActionContext context,
             AgentActionResult result) {
         if (toolCalls.isEmpty()) {
             return result;
         }
-        Map<String, Object> confirmed = confirmedToolOperations(context);
+        Map<String, Object> approved = approvedToolOperations(context);
         toolCalls.forEach(toolCall ->
-                confirmed.put(toolCall.callId(), toolCall.operationIdentity()));
+                approved.put(toolCall.callId(), toolCall.operationDefinition()));
         Map<String, Object> attributes = new LinkedHashMap<>(result.stateAttributes());
-        attributes.put(CONFIRMED_TOOL_OPERATIONS, Map.copyOf(confirmed));
+        attributes.put(APPROVED_TOOL_OPERATIONS, Map.copyOf(approved));
         return new AgentActionResult(
-                result.observations(), result.terminalRunStatus(), result.answer(),
+                result.observations(), result.requestedRunStatus(), result.answer(),
                 result.suspensionMessage(), attributes, result.removedStateAttributes());
     }
 
-    private static Map<String, Object> confirmedToolOperations(AgentActionContext context) {
-        Object value = context.state().attributes().get(CONFIRMED_TOOL_OPERATIONS);
-        Map<String, Object> confirmed = new LinkedHashMap<>();
+    private static Map<String, Object> approvedToolOperations(AgentActionContext context) {
+        Object value = context.state().attributes().get(APPROVED_TOOL_OPERATIONS);
+        Map<String, Object> approved = new LinkedHashMap<>();
         if (value == null) {
-            return confirmed;
+            return approved;
         }
         if (!(value instanceof Map<?, ?> values)) {
             throw new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT,
-                    "confirmed tool operation state must be a map");
+                    "approved tool operation state must be a map");
         }
-        values.forEach((key, identity) -> confirmed.put(String.valueOf(key), identity));
-        return confirmed;
+        values.forEach((key, identity) -> approved.put(String.valueOf(key), identity));
+        return approved;
     }
 
     private static void requirePendingAction(
@@ -398,7 +398,7 @@ public final class StandardActionHandlers {
         Object pending = context.state().attributes().get(PENDING_ACTION);
         if (!expected.equals(pending)) {
             throw new AgentCoreException(AgentErrorCode.PENDING_ACTION_MISMATCH,
-                    "confirmed action does not match pending action: " + actionId);
+                    "approved action does not match pending action: " + actionId);
         }
     }
 
@@ -454,7 +454,7 @@ public final class StandardActionHandlers {
     }
 
     private static Map<String, Object> toolCallState(ToolCallAction call) {
-        Map<String, Object> state = new LinkedHashMap<>(call.operationIdentity());
+        Map<String, Object> state = new LinkedHashMap<>(call.operationDefinition());
         state.put("type", call.actionType());
         return Map.copyOf(state);
     }

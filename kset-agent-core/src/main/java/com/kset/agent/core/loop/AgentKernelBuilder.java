@@ -8,7 +8,7 @@ import com.kset.agent.core.action.AgentActionRegistry;
 import com.kset.agent.core.action.StandardActionHandlers;
 import com.kset.agent.core.checkpoint.AgentCheckpointPort;
 import com.kset.agent.core.event.AgentLifecycleListener;
-import com.kset.agent.core.id.AgentIdGenerator;
+import com.kset.agent.core.id.AgentRunIdGenerator;
 import com.kset.agent.core.model.AgentModel;
 import com.kset.agent.core.model.AgentModelRetryOptions;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
@@ -37,7 +37,7 @@ public final class AgentKernelBuilder {
     private AgentReasoningStrategy reasoningStrategy;
     private AgentCheckpointPort checkpointPort = AgentCheckpointPort.noop();
     private Clock clock = Clock.systemUTC();
-    private AgentIdGenerator runIdGenerator;
+    private AgentRunIdGenerator agentRunIdGenerator;
     private ObjectMapper objectMapper = new ObjectMapper();
     private final List<AgentProtocolCodec> protocolCodecs = new ArrayList<>();
     private final List<AgentActionHandler> actionHandlers = new ArrayList<>();
@@ -79,9 +79,9 @@ public final class AgentKernelBuilder {
         return this;
     }
 
-    /** Configures the generator used only when a new run request has no explicit runId. */
-    public AgentKernelBuilder runIdGenerator(AgentIdGenerator runIdGenerator) {
-        this.runIdGenerator = requireConfiguration(runIdGenerator, "runIdGenerator");
+    /** Configures the generator used only when a new run request has no explicit agentRunId. */
+    public AgentKernelBuilder agentRunIdGenerator(AgentRunIdGenerator agentRunIdGenerator) {
+        this.agentRunIdGenerator = requireConfiguration(agentRunIdGenerator, "agentRunIdGenerator");
         return this;
     }
 
@@ -129,7 +129,7 @@ public final class AgentKernelBuilder {
                     new AgentProtocolRegistry(registeredProtocolCodecs),
                     new AgentActionRegistry(registeredActionHandlers),
                     new AgentStopController(stopPolicies), checkpointPort, listeners, clock,
-                    runIdGenerator);
+                    agentRunIdGenerator);
         } catch (AgentCoreException error) {
             throw error;
         } catch (RuntimeException error) {

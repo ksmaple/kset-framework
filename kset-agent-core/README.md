@@ -51,18 +51,20 @@ Java API 使用以下固定术语，宿主适配器和扩展实现不应再引�
 | 运行结果 | `runStatus`、`stopDecision` | 当前运行状态与对应停止决定 |
 | 停止决定 | `shouldStop`、`stopReason`、`runStatus`、`stopMessage` | 是否停止、原因、目标状态和说明 |
 | 技术错误 | `errorCode`、`errorMessage` | 稳定错误分类与可读说明 |
-| 动作 | `actionType` | 协议无关的动作类型 |
+| 动作 | `actionType`、`requestedRunStatus` | 协议无关的动作类型与 Handler 请求的运行状态；空状态表示继续 |
 | 计划任务 | `taskId`、`dependsOn` | 任务身份与依赖任务 ID |
 | 工具 | `toolName`、`callId`、`taskId`、`toolCalls` | 工具身份、单次操作身份、关联计划任务和批次调用集合 |
+| 工具幂等 | `idempotencyKey`、`operationDefinition` | 前者是结构化 `(agentRunId, callId)` 持久化键，后者是可核对的操作内容 |
 | 执行上下文 | `executionContext` | Model、Action、Tool、StopPolicy 共享的调用上下文 |
+| 执行时限 | `invocationTimeout` | 单次 `run/resume` 活动调用的时限 |
 | 扩展身份 | `protocolId`、`strategyId` | Codec 与推理策略的稳定身份 |
-| 生命周期 | `runId`、`invocationId`、`stepId`、`parentStepId`、`eventId`、`eventSequence` | 任务、单次调用、逻辑步骤、父步骤、事件及 invocation 内序号 |
+| 生命周期 | `agentRunId`、`invocationId`、`stepId`、`parentStepId`、`eventId`、`eventSequence`、`eventStatus` | 任务、单次调用、逻辑步骤、父步骤、事件、序号及事件状态 |
 
 这些名称是 Java 内核对象契约。`agent-json:v1` 的 `type/taskId/dependsOn/toolName/callId/toolCalls` 等 wire 字段保持固定，由 Codec 显式映射，不因 Java 访问器整理而改变。
 
 所有公开对象与字段的含义、所有者、空值、作用域和持久化边界统一见[对象与字段契约](docs/core-object-contract.md)；同名 `attributes`/`metadata` 不得跨层混用。
 
-跨宿主系统使用明确的 `agentRunId` 作为日志和持久化字段名，其值就是内核 API 的 `runId`，不是额外生成的 ID。`sessionId` 标识会话，一个会话可以包含多个 Agent 任务；计划 `taskId` 标识计划内任务；`invocationId` 只标识一次 `run/resume` 调用。上述 ID 不可互换，尤其不能以 `sessionId` 或计划 `taskId` 代替工具幂等键中的 `runId`。
+`agentRunId` 是 Java API、快照、宿主日志和持久化字段的唯一名称，不再使用 `runId` 别名。`sessionId` 标识会话，一个会话可以包含多个 Agent 任务；计划 `taskId` 标识计划内任务；`invocationId` 只标识一次 `run/resume` 调用。上述 ID 不可互换，尤其不能以 `sessionId` 或计划 `taskId` 代替工具幂等键中的 `agentRunId`。
 
 ### 核心专用对象
 
@@ -79,9 +81,9 @@ Java API 使用以下固定术语，宿主适配器和扩展实现不应再引�
 | `AgentStopDecision` | 是否停止、停止原因、目标运行状态和说明 | 技术故障详情对象；技术失败使用 `AgentFailure` |
 | `AgentLifecycleContext` | 单条观测事件的身份、步骤、状态投影和时间信息 | 恢复权威状态或业务数据载荷 |
 
-`AgentRunStatus` 表示运行状态；`AgentLifecycleContext.status()` 返回的是由事件类型推导的 `AgentLifecycleStatus`，仅用于步骤日志，二者不能混用。`AgentErrorCode`、`AgentStopReason`、`AgentLifecycleEventType`、`AgentLifecycleStatus` 和 `AgentLifecycleStepType` 均为稳定枚举，外部逻辑应按枚举分支，不应解析说明文本。
+`AgentRunStatus` 表示运行状态；`AgentLifecycleContext.eventStatus()` 返回的是由事件类型推导的 `AgentLifecycleStatus`，仅用于步骤日志，二者不能混用。`AgentErrorCode`、`AgentStopReason`、`AgentLifecycleEventType`、`AgentLifecycleStatus` 和 `AgentLifecycleStepType` 均为稳定枚举，外部逻辑应按枚举分支，不应解析说明文本。
 
-`AgentResult.answer` 只在 `COMPLETED` 时返回最终回答。`SUSPENDED` 时它为 `null`，等待提示由 `AgentResult.stopDecision().stopMessage()` 返回；快照 v2 独立保存 `suspensionMessage`。旧 v1 快照不能直接按 v2 恢复，已有持久化数据需由宿主显式迁移。
+`AgentResult.answer` 只在 `COMPLETED` 时返回最终回答。`SUSPENDED` 时它为 `null`，等待提示由 `AgentResult.stopDecision().stopMessage()` 返回；快照 v3 独立保存 `suspensionMessage`。旧 v1/v2 快照不能直接按 v3 恢复，已有持久化数据需由宿主显式迁移。
 
 ## 最小接入
 
@@ -95,7 +97,7 @@ tools.register(yourTool);
 AgentLoopKernel kernel = AgentLoopKernel.builder(model)
         .tools(tools)
         .toolExecutor(yourExecutor)
-        .runIdGenerator(new SnowflakeAgentIdGenerator(datacenterId, workerId))
+        .agentRunIdGenerator(new SnowflakeAgentRunIdGenerator(datacenterId, workerId))
         .build();
 
 AgentRequest request = AgentRequest.of(
@@ -104,7 +106,7 @@ AgentRequest request = AgentRequest.of(
 AgentResult result = kernel.run(request);
 ```
 
-`runId` 是一次可恢复 Agent 任务跨 `run/resume` 不变的 ID，宿主对外称 `agentRunId`。上例在 Kernel 收到新请求后、发出第一条生命周期事件前生成雪花 ID；`datacenterId` 和 `workerId` 范围均为 0–31，宿主必须保证每个并发进程使用唯一组合，禁止所有实例沿用相同默认值。业务已有专用于该 Agent 任务的唯一 ID 时也可直接传入 `AgentRequest`，此时 Kernel 不调用生成器；不能直接复用会话 ID 或计划任务 ID。恢复请求必须显式传入原快照 `runId`，绝不生成新 ID。生成器异常或空结果分别以稳定的 `ID_GENERATION_FAILED` 返回。
+`agentRunId` 是一次可恢复 Agent 任务跨 `run/resume` 不变的 ID，上例在 Kernel 收到新请求后、发出第一条生命周期事件前生成雪花 ID；`datacenterId` 和 `workerId` 范围均为 0–31，宿主必须保证每个并发进程使用唯一组合，禁止所有实例沿用相同默认值。业务已有专用于该 Agent 任务的唯一 ID 时也可直接传入 `AgentRequest`，此时 Kernel 不调用生成器；不能直接复用会话 ID 或计划任务 ID。恢复请求必须显式传入原快照 `agentRunId`，绝不生成新 ID。生成器异常或空结果分别以稳定的 `ID_GENERATION_FAILED` 返回。
 
 构建器默认使用同步 `Executor`，不会创建或持有线程。需要工具并行执行时，宿主必须通过 `toolExecutor` 提供有界线程池并负责其生命周期。构建器仅用于启动期组装；`build()` 会冻结工具集合，之后修改原工具注册表不会影响已创建的 Kernel。
 
@@ -133,17 +135,17 @@ AgentResult result = kernel.run(request);
 
 ## 外部观测
 
-核心不依赖日志、指标或链路框架，通过 `AgentLifecycleListener` 提供固定观测端点。每条事件都先进入统一 `onEvent`，并携带版本、事件类型、状态、`runId`、`invocationId`、`stepId`、`parentStepId`、`eventId`、`stepType`、`operation`、严格递增序号、turn、零基 actionIndex、事件时间、deadline 和阶段耗时。`runId` 关联整个任务，`invocationId` 关联一次 `run/resume`，同一模型、决策、动作或检查点的 started/completed/failed 事件共享 `stepId`，单条消息使用 `eventId()` 幂等上报。模型、决策或动作异常与提前停止分别发出对应的 `MODEL_FAILED`、`DECISION_FAILED`、`ACTION_FAILED`，未完成的轮次发出 `TURN_FAILED`；`RUN_FAILED/RUN_STOPPED/RUN_RETURNED` 始终归属 run step。`AgentExecutionContext` 固定携带同一组 invocation/step 身份：Model Adapter 获得 model step，Action Handler 及其 Tool Adapter 获得 action step，StopPolicy 获得检查发生时的当前 step；适配器内部日志可直接与 Listener 最终步骤日志关联。模型完成事件的耗时覆盖该步骤的全部尝试与退避等待；动作与检查点完成事件只覆盖对应扩展调用，轮次完成事件覆盖整轮处理，最终返回事件覆盖本次调用。检查点失败会额外发出 `CHECKPOINT_FAILED` 并调用 best-effort `onCheckpointError`。
+核心不依赖日志、指标或链路框架，通过 `AgentLifecycleListener` 提供固定观测端点。每条事件都先进入统一 `onEvent`，并携带版本、事件类型、状态、`agentRunId`、`invocationId`、`stepId`、`parentStepId`、`eventId`、`stepType`、`operation`、严格递增序号、turn、零基 actionIndex、事件时间、deadline 和阶段耗时。`agentRunId` 关联整个任务，`invocationId` 关联一次 `run/resume`，同一模型、决策、动作或检查点的 started/completed/failed 事件共享 `stepId`，单条消息使用 `eventId()` 幂等上报。模型、决策或动作异常与提前停止分别发出对应的 `MODEL_FAILED`、`DECISION_FAILED`、`ACTION_FAILED`，未完成的轮次发出 `TURN_FAILED`；`RUN_FAILED/RUN_STOPPED/RUN_RETURNED` 始终归属 run step。`AgentExecutionContext` 固定携带同一组 invocation/step 身份：Model Adapter 获得 model step，Action Handler 及其 Tool Adapter 获得 action step，StopPolicy 获得检查发生时的当前 step；适配器内部日志可直接与 Listener 最终步骤日志关联。模型完成事件的耗时覆盖该步骤的全部尝试与退避等待；动作与检查点完成事件只覆盖对应扩展调用，轮次完成事件覆盖整轮处理，最终返回事件覆盖本次调用。检查点失败会额外发出 `CHECKPOINT_FAILED` 并调用 best-effort `onCheckpointError`。
 
-完整步骤日志优先实现一个非关键 Listener 的 `onEvent`。宿主日志字段使用 `agentRunId`，取值来自 `event.runId()`：
+完整步骤日志优先实现一个非关键 Listener 的 `onEvent`。宿主日志字段使用 `agentRunId`，取值来自 `event.agentRunId()`：
 
 ```java
 AgentLifecycleListener stepLogger = new AgentLifecycleListener() {
     @Override
     public void onEvent(AgentLifecycleContext event) {
-        String agentRunId = event.runId();
+        String agentRunId = event.agentRunId();
         writeStepLog(agentRunId, event.invocationId(), event.stepId(),
-                event.parentStepId(), event.eventId(), event.eventType(), event.status(),
+                event.parentStepId(), event.eventId(), event.eventType(), event.eventStatus(),
                 event.stepType(), event.operation(), event.turn(), event.actionIndex(),
                 event.elapsed());
     }
@@ -180,11 +182,11 @@ Listener 在循环线程同步执行，耗时计入本次活动 deadline。普�
 
 每次 `run` 或 `resume` 都有独立的执行起点和 deadline，暂停等待外部输入的时间不计入下一次恢复调用的活动执行超时。`AgentRunState.startedAt` 仍记录整个任务最初创建时间；任务总生命周期由宿主控制。
 
-Model 和 Tool 是同步边界，内核不会为它们创建线程。适配器必须把 `AgentExecutionContext` 或 `AgentToolContext` 的 deadline 转换成底层 SDK/HTTP 超时，并主动响应 cancellation；记录底层请求日志时必须沿用其中的 `runId/invocationId/stepId`，工具再追加 `callId/taskId/toolName`。内核会在模型和动作调用前后执行停止检查。该 deadline 是协作式约束：同步调用未返回时，核心不会强制中断线程，也不承诺立即返回。
+Model 和 Tool 是同步边界，内核不会为它们创建线程。适配器必须把 `AgentExecutionContext` 或 `AgentToolContext` 的 deadline 转换成底层 SDK/HTTP 超时，并主动响应 cancellation；记录底层请求日志时必须沿用其中的 `agentRunId/invocationId/stepId`，工具再追加 `callId/taskId/toolName`。内核会在模型和动作调用前后执行停止检查。该 deadline 是协作式约束：同步调用未返回时，核心不会强制中断线程，也不承诺立即返回。
 
-`AgentLoopOptions` 同时限制每轮动作数量、工具批次大小、单工具时限和批次时限。容量超限以 `CAPACITY_LIMIT` 结束，不进入后续动作。工具 `callId` 在同一决策内由 Kernel 判重，并且在整个 run 内只能标识一个工具操作；Kernel 会把 `callId/taskId/toolName/arguments` 身份写入快照账本，跨轮复用同 ID 但更换身份时以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。后续轮次的新操作必须使用新 ID，只有确认、重试、核验或恢复同一操作时才复用原 ID。工具持久化幂等身份固定为结构化 `AgentToolOperationId(runId, callId)`，禁止单独使用 `callId` 或用无边界字符串拼接替代结构化字段。适配器仍必须保存 `toolName + 规范化 arguments` 参数指纹，作为跨进程和外部副作用的最终防线：同身份同指纹返回原结果，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。每条标准工具 Observation 固定携带 `callId`、可选 `taskId` 和 `toolName`，工具自定义 attributes 不能覆盖这些身份字段。
+`AgentLoopOptions` 同时限制每轮动作数量、工具批次大小、单工具时限和批次时限。容量超限以 `CAPACITY_LIMIT` 结束，不进入后续动作。工具 `callId` 在同一决策内由 Kernel 判重，并且在整个 run 内只能标识一个工具操作；Kernel 会把 `callId/taskId/toolName/arguments` 身份写入快照账本，跨轮复用同 ID 但更换身份时以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。后续轮次的新操作必须使用新 ID，只有确认、重试、核验或恢复同一操作时才复用原 ID。工具持久化幂等身份固定为结构化 `AgentToolIdempotencyKey(agentRunId, callId)`，禁止单独使用 `callId` 或用无边界字符串拼接替代结构化字段。适配器仍必须保存 `toolName + 规范化 arguments` 参数指纹，作为跨进程和外部副作用的最终防线：同身份同指纹返回原结果，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。每条标准工具 Observation 固定携带 `callId`、可选 `taskId` 和 `toolName`，工具自定义 attributes 不能覆盖这些身份字段。
 
-标准 `tool_batch` 使用宿主提供的 Executor 并发执行。只要已有任务提交后发生超时、线程中断或提交/汇总异常，Kernel 就将结果标记为 `TOOL_RESULT_UNKNOWN`、保留完整 `agent.pendingAction`，并以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止本次调用。工具适配器主动返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)` 时采用相同出口：单工具保存原调用，批次任一调用未知则保存完整批次及全部 Observation。该停止优先于同一批次等待期间发生的通用超时或线程中断，避免未知副作用被覆盖为不可恢复终态；线程中断标志仍会保留。宿主恢复前必须按每个 `AgentToolOperationId` 查询权威结果；带依赖关系的批次仍应使用自定义 Action/Handler。
+标准 `tool_batch` 使用宿主提供的 Executor 并发执行。只要已有任务提交后发生超时、线程中断或提交/汇总异常，Kernel 就将结果标记为 `TOOL_RESULT_UNKNOWN`、保留完整 `agent.pendingAction`，并以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止本次调用。工具适配器主动返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)` 时采用相同出口：单工具保存原调用，批次任一调用未知则保存完整批次及全部 Observation。该停止优先于同一批次等待期间发生的通用超时或线程中断，避免未知副作用被覆盖为不可恢复终态；线程中断标志仍会保留。宿主恢复前必须按每个 `AgentToolIdempotencyKey` 查询权威结果；带依赖关系的批次仍应使用自定义 Action/Handler。
 
 `RECONCILIATION_REQUIRED` 快照禁止空输入恢复。宿主必须为 pending 中每个调用提供一条权威 `tool_call` Observation，并通过 `AgentResumeInput` 调用三参数 `resume`；Kernel 会校验 `callId/taskId/toolName` 完整匹配，拒绝缺项、重复项、非 pending 调用和仍为 `TOOL_RESULT_UNKNOWN` 的结果。结构无效返回 `INVALID_RESUME_INPUT`，身份不匹配返回 `PENDING_ACTION_MISMATCH`，校验成功后 Kernel 清理 pending、保存新快照并进入下一模型轮次。
 
@@ -202,7 +204,7 @@ Model 和 Tool 是同步边界，内核不会为它们创建线程。适配器�
 ```java
 AgentLoopKernel kernel = AgentLoopKernel.builder(model)
         .protocol(new NativeFunctionCallingCodec())
-        .runIdGenerator(new SnowflakeAgentIdGenerator(datacenterId, workerId))
+        .agentRunIdGenerator(new SnowflakeAgentRunIdGenerator(datacenterId, workerId))
         .build();
 ```
 
@@ -221,7 +223,7 @@ AgentResult result = kernel.run(request);
 
 内置 `agent-json:v1` 使用 `<<<AGENT_JSON>>>` / `<<<END_AGENT_JSON>>>` 严格包裹控制 JSON；无标记普通文本按最终回答处理。协议支持 `task_plan`、`tool_call`、`tool_batch`、`answer_chunk`、`final_answer` 和 `confirmation`，完整字段与错误码见[协议规范](docs/protocols/agent-json-v1.md)。
 
-等待确认时，Kernel 将动作写入 `agent.pendingAction` 并以 `SUSPENDED` 返回。宿主恢复时通过唯一公开请求属性 `agent.confirmedActionIds` 传入确认 ID；确认必须与快照中的 pending 动作完整匹配，危险工具还会校验 `callId/taskId/toolName/arguments`，新 run 预置确认 ID 不能绕过暂停。内置 ReAct 只把公开确认 ID 注入模型上下文，不暴露其他宿主请求属性和内部操作账本。相同且已确认的操作可安全重试；确认消费、工具完成或失败以及最终回答都会清理 `agent.pendingAction`。
+等待批准时，Kernel 将动作写入 `agent.pendingAction` 并以 `SUSPENDED` 返回。宿主恢复确认动作时通过 `agent.approvedConfirmationIds` 传入 `confirmationId`，恢复危险工具时通过 `agent.approvedToolCallIds` 传入 `callId`；缺少对应批准 ID 会在模型调用前以 `INVALID_RESUME_INPUT` 拒绝。批准后，模型本轮的首个动作必须重述同一待处理动作，危险工具须完整匹配 `callId/taskId/toolName/arguments`；批次可包含待批准的原工具调用并继续逐项批准。不匹配计入可纠正的 `PENDING_ACTION_MISMATCH` 协议错误，不允许其他动作清理 pending。新 run 预置批准 ID 不能绕过暂停。内置 ReAct 只把这两类公开批准 ID 注入模型上下文，不暴露其他宿主请求属性和内部操作账本。相同且已批准的操作可安全重试；批准消费、工具完成或失败以及最终回答都会清理 `agent.pendingAction`。
 
 自定义协议可以映射到标准动作，也可以返回 `ExtensionAction`。自定义动作必须同时注册对应 `AgentActionHandler`；未注册动作会显式失败。只有标准 `ToolCallAction` 和 `ToolBatchAction` 的 `TOOL_RESULT_UNKNOWN` 会触发内置 `RECONCILIATION_REQUIRED`；扩展动作应使用自己的 pending 状态和恢复协议，其未知结果不会被误解释为标准工具核验。
 
@@ -233,10 +235,10 @@ AgentResult result = kernel.run(request);
 
 ## 中断与恢复
 
-`AgentRunSnapshot` v2 不保存模型原始思维链，只保存轮次、标准观察、扩展属性、错误计数、最终回答或暂停提示以及停止结果。宿主负责读取快照，再显式恢复：
+`AgentRunSnapshot` v3 不保存模型原始思维链，只保存轮次、标准观察、扩展属性、错误计数、最终回答或暂停提示以及停止结果。宿主负责读取快照，再显式恢复：
 
 ```java
-String agentRunId = request.runId();
+String agentRunId = request.agentRunId();
 AgentRunSnapshot snapshot = loadSnapshot(agentRunId);
 AgentResult result = kernel.resume(request, snapshot);
 ```
@@ -254,7 +256,7 @@ AgentResult result = kernel.resume(request, snapshot, input);
 
 `resume` 只保证从已保存快照继续内核状态转换，不保证崩溃时未完成的外部副作用自动恢复，也不自动重放“已执行但尚未写入快照”的动作。对于 Kernel 已经以 `RECONCILIATION_REQUIRED` 暂停的标准工具动作，宿主必须依靠稳定 `callId` 和权威数据源核验，并通过 `AgentResumeInput` 注入确定结果；其他崩溃恢复、重试和补偿仍由宿主处理。
 
-`AgentCheckpointPort` 是只写快照端口。内核会在启动、协议错误、每个动作结果和停止时同时传入不可变请求与快照，并在写入前后发出固定观测事件；宿主可从请求属性取得 owner、fencing 等执行凭据，并负责快照查询、revision 及持久化条件写。外部工具副作用无法与快照存储形成通用原子事务，工具适配器必须使用 `AgentToolContext.operationId()` 及参数指纹保证幂等；检查点写入失败会发出 `CHECKPOINT_FAILED/onCheckpointError`，并使活动运行以 `FAILED` 返回，不能继续推进后续动作。即使取消、线程中断或超时已触发，若保存对应终态快照再次失败，`run/resume` 仍返回 `FATAL_ERROR + CHECKPOINT_FAILED`，不会把持久化失败作为未捕获异常抛出。处理其他技术故障时若失败快照也无法保存，返回的 `AgentFailure` 优先报告 `CHECKPOINT_FAILED`，原始异常保留为 suppressed cause；宿主不得将返回快照视为已持久化。
+`AgentCheckpointPort` 是只写快照端口。内核会在启动、协议错误、每个动作结果和停止时同时传入不可变请求与快照，并在写入前后发出固定观测事件；宿主可从请求属性取得 owner、fencing 等执行凭据，并负责快照查询、revision 及持久化条件写。外部工具副作用无法与快照存储形成通用原子事务，工具适配器必须使用 `AgentToolContext.idempotencyKey()` 及参数指纹保证幂等；检查点写入失败会发出 `CHECKPOINT_FAILED/onCheckpointError`，并使活动运行以 `FAILED` 返回，不能继续推进后续动作。即使取消、线程中断或超时已触发，若保存对应终态快照再次失败，`run/resume` 仍返回 `FATAL_ERROR + CHECKPOINT_FAILED`，不会把持久化失败作为未捕获异常抛出。处理其他技术故障时若失败快照也无法保存，返回的 `AgentFailure` 优先报告 `CHECKPOINT_FAILED`，原始异常保留为 suppressed cause；宿主不得将返回快照视为已持久化。
 
 会话单飞、任务排队、跨节点租约和“同一会话只能运行一个实例”属于宿主工作流职责，不进入单次任务循环内核。不同会话的资源上限由宿主提供的模型连接池和有界 Executor 负责。
 

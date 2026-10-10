@@ -5,10 +5,10 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Thread-safe 64-bit Snowflake generator. Hosts must assign a unique datacenter/worker pair to
+ * Thread-safe 64-bit Agent run ID generator. Hosts must assign a unique datacenter/worker pair to
  * every concurrently active process.
  */
-public final class SnowflakeAgentIdGenerator implements AgentIdGenerator {
+public final class SnowflakeAgentRunIdGenerator implements AgentRunIdGenerator {
 
     public static final long DEFAULT_EPOCH_MILLIS =
             Instant.parse("2024-01-01T00:00:00Z").toEpochMilli();
@@ -28,11 +28,11 @@ public final class SnowflakeAgentIdGenerator implements AgentIdGenerator {
     private long lastTimestamp = -1L;
     private long sequence;
 
-    public SnowflakeAgentIdGenerator(long datacenterId, long workerId) {
+    public SnowflakeAgentRunIdGenerator(long datacenterId, long workerId) {
         this(datacenterId, workerId, DEFAULT_EPOCH_MILLIS, Clock.systemUTC());
     }
 
-    public SnowflakeAgentIdGenerator(
+    public SnowflakeAgentRunIdGenerator(
             long datacenterId, long workerId, long epochMillis, Clock clock) {
         if (datacenterId < 0L || datacenterId > MAX_DATACENTER_ID) {
             throw new IllegalArgumentException("datacenterId must be between 0 and 31");
@@ -50,7 +50,7 @@ public final class SnowflakeAgentIdGenerator implements AgentIdGenerator {
     }
 
     @Override
-    public synchronized String nextId() {
+    public synchronized String nextAgentRunId() {
         long timestamp = clock.millis();
         if (timestamp < lastTimestamp) {
             throw new IllegalStateException(

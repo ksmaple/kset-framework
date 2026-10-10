@@ -49,7 +49,10 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         attributes.put("tools", toolRegistry.list());
         attributes.put("observations", state.observations());
         attributes.put("state", visibleState);
-        attributes.put("confirmedActionIds", confirmedActionIds(request));
+        attributes.put("approvedConfirmationIds", approvedIds(request,
+                AgentRequest.APPROVED_CONFIRMATION_IDS));
+        attributes.put("approvedToolCallIds", approvedIds(request,
+                AgentRequest.APPROVED_TOOL_CALL_IDS));
         return new AgentTurn(request.protocolId(), new ModelRequest(
                 systemPrompt(phase),
                 userPrompt(request, state, toolRegistry.list(), visibleState),
@@ -173,9 +176,16 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         if (!visibleState.isEmpty()) {
             prompt.append("\n\nRuntime state:\n").append(visibleState);
         }
-        List<String> confirmedActionIds = confirmedActionIds(request);
-        if (!confirmedActionIds.isEmpty()) {
-            prompt.append("\n\nConfirmed action IDs:\n").append(confirmedActionIds);
+        List<String> approvedConfirmationIds = approvedIds(request,
+                AgentRequest.APPROVED_CONFIRMATION_IDS);
+        if (!approvedConfirmationIds.isEmpty()) {
+            prompt.append("\n\nApproved confirmation IDs:\n")
+                    .append(approvedConfirmationIds);
+        }
+        List<String> approvedToolCallIds = approvedIds(request,
+                AgentRequest.APPROVED_TOOL_CALL_IDS);
+        if (!approvedToolCallIds.isEmpty()) {
+            prompt.append("\n\nApproved tool call IDs:\n").append(approvedToolCallIds);
         }
         Object protocolError = state.attributes().get("agent.lastProtocolError");
         if (protocolError != null) {
@@ -187,7 +197,7 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
     private Map<String, Object> modelVisibleState(AgentRunState state) {
         Map<String, Object> visible = new LinkedHashMap<>(state.attributes());
         visible.remove(AgentRunState.TOOL_OPERATIONS_ATTRIBUTE);
-        visible.remove(StandardActionHandlers.CONFIRMED_TOOL_OPERATIONS);
+        visible.remove(StandardActionHandlers.APPROVED_TOOL_OPERATIONS);
         return Map.copyOf(visible);
     }
 
@@ -198,8 +208,8 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         return values.stream().map(String::valueOf).toList();
     }
 
-    private List<String> confirmedActionIds(AgentRequest request) {
-        Object value = request.attributes().get(AgentRequest.CONFIRMED_ACTION_IDS);
+    private List<String> approvedIds(AgentRequest request, String attributeKey) {
+        Object value = request.attributes().get(attributeKey);
         if (value instanceof Collection<?> values) {
             return values.stream()
                     .filter(java.util.Objects::nonNull)

@@ -26,7 +26,7 @@ public final class AgentRunState {
     public static final String PROTOCOL_METADATA_ATTRIBUTE = "agent.protocolMetadata";
     public static final String TOOL_OPERATIONS_ATTRIBUTE = "agent.toolOperations";
 
-    private final String runId;
+    private final String agentRunId;
     private final String task;
     private final AgentProtocolId protocolId;
     private final AgentRunStatus runStatus;
@@ -42,13 +42,13 @@ public final class AgentRunState {
     private final AgentStopDecision stopDecision;
 
     private AgentRunState(
-            String runId, String task, AgentProtocolId protocolId,
+            String agentRunId, String task, AgentProtocolId protocolId,
             AgentRunStatus runStatus,
             int turn, Instant startedAt, Instant updatedAt,
             List<AgentObservation> observations, Map<String, Object> attributes,
             int consecutiveProtocolErrors, int consecutiveNoProgress,
             String answer, String suspensionMessage, AgentStopDecision stopDecision) {
-        this.runId = runId;
+        this.agentRunId = agentRunId;
         this.task = task;
         this.protocolId = protocolId;
         this.runStatus = runStatus;
@@ -66,7 +66,7 @@ public final class AgentRunState {
 
     static AgentRunState start(AgentRequest request, Instant now) {
         return new AgentRunState(
-                request.runId(), request.task(), request.protocolId(), AgentRunStatus.RUNNING,
+                request.agentRunId(), request.task(), request.protocolId(), AgentRunStatus.RUNNING,
                 0, now, now, List.of(), Map.of(), 0, 0, null, null, null);
     }
 
@@ -76,7 +76,7 @@ public final class AgentRunState {
                     "unsupported agent snapshot version: " + snapshot.version());
         }
         return new AgentRunState(
-                snapshot.runId(), snapshot.task(), snapshot.protocolId(), AgentRunStatus.RUNNING,
+                snapshot.agentRunId(), snapshot.task(), snapshot.protocolId(), AgentRunStatus.RUNNING,
                 snapshot.turn(), snapshot.startedAt(), now,
                 snapshot.observations(), snapshot.attributes(),
                 snapshot.consecutiveProtocolErrors(), snapshot.consecutiveNoProgress(),
@@ -91,7 +91,7 @@ public final class AgentRunState {
                     "unsupported agent snapshot version: " + snapshot.version());
         }
         return new AgentRunState(
-                snapshot.runId(), snapshot.task(), snapshot.protocolId(), AgentRunStatus.RUNNING,
+                snapshot.agentRunId(), snapshot.task(), snapshot.protocolId(), AgentRunStatus.RUNNING,
                 snapshot.turn(), snapshot.startedAt(), now,
                 snapshot.observations(), snapshot.attributes(),
                 snapshot.consecutiveProtocolErrors(), snapshot.consecutiveNoProgress(),
@@ -136,10 +136,10 @@ public final class AgentRunState {
         }
         for (AgentAction action : decision.actions()) {
             if (action instanceof ToolCallAction call) {
-                operations.put(call.callId(), call.operationIdentity());
+                operations.put(call.callId(), call.operationDefinition());
             } else if (action instanceof ToolBatchAction batch) {
                 batch.toolCalls().forEach(call ->
-                        operations.put(call.callId(), call.operationIdentity()));
+                        operations.put(call.callId(), call.operationDefinition()));
             }
         }
         if (!operations.isEmpty()) {
@@ -164,8 +164,8 @@ public final class AgentRunState {
         result.removedStateAttributes().forEach(nextAttributes::remove);
         nextAttributes.putAll(result.stateAttributes());
         int noProgress = result.madeProgress() ? 0 : consecutiveNoProgress + 1;
-        AgentRunStatus nextRunStatus = result.terminalRunStatus() == null
-                ? runStatus : result.terminalRunStatus();
+        AgentRunStatus nextRunStatus = result.requestedRunStatus() == null
+                ? runStatus : result.requestedRunStatus();
         String nextAnswer = nextRunStatus == AgentRunStatus.COMPLETED ? result.answer() : null;
         String nextSuspensionMessage = nextRunStatus == AgentRunStatus.SUSPENDED
                 ? result.suspensionMessage() : null;
@@ -183,9 +183,9 @@ public final class AgentRunState {
         result.removedStateAttributes().forEach(nextAttributes::remove);
         nextAttributes.putAll(result.stateAttributes());
         int noProgress = result.madeProgress() ? 0 : consecutiveNoProgress + 1;
-        AgentRunStatus nextRunStatus = result.terminalRunStatus() == null
-                ? runStatus : result.terminalRunStatus();
-        String terminalText = result.terminalRunStatus() == AgentRunStatus.SUSPENDED
+        AgentRunStatus nextRunStatus = result.requestedRunStatus() == null
+                ? runStatus : result.requestedRunStatus();
+        String terminalText = result.requestedRunStatus() == AgentRunStatus.SUSPENDED
                 ? result.suspensionMessage() : result.answer();
         String nextAnswer = terminalText == null ? answer : terminalText;
         return copy(nextRunStatus, turn, now, nextObservations, nextAttributes,
@@ -209,7 +209,7 @@ public final class AgentRunState {
 
     public AgentRunSnapshot snapshot() {
         return new AgentRunSnapshot(
-                AgentRunSnapshot.CURRENT_VERSION, runId, task, protocolId, runStatus,
+                AgentRunSnapshot.CURRENT_VERSION, agentRunId, task, protocolId, runStatus,
                 turn, startedAt, updatedAt, observations, attributes,
                 consecutiveProtocolErrors, consecutiveNoProgress, answer, suspensionMessage,
                 stopDecision);
@@ -223,12 +223,12 @@ public final class AgentRunState {
                                String nextAnswer, String nextSuspensionMessage,
                                AgentStopDecision nextStopDecision) {
         return new AgentRunState(
-                runId, task, protocolId, nextRunStatus, nextTurn, startedAt, nextUpdatedAt,
+                agentRunId, task, protocolId, nextRunStatus, nextTurn, startedAt, nextUpdatedAt,
                 nextObservations, nextAttributes, nextConsecutiveProtocolErrors,
                 nextConsecutiveNoProgress, nextAnswer, nextSuspensionMessage, nextStopDecision);
     }
 
-    public String runId() { return runId; }
+    public String agentRunId() { return agentRunId; }
     public String task() { return task; }
     public AgentProtocolId protocolId() { return protocolId; }
     public AgentRunStatus runStatus() { return runStatus; }

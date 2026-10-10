@@ -229,7 +229,8 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
             throw error(AgentJsonV1ErrorCode.INVALID_TOOL_ARGUMENTS,
                     path + ".arguments must be an object");
         }
-        return new ToolCallAction(requiredText(value, "callId"), value.path("taskId").asText(null),
+        String taskId = value.has("taskId") ? requiredText(value, "taskId") : null;
+        return new ToolCallAction(requiredText(value, "callId"), taskId,
                 toolName, objectMapper.convertValue(arguments, MAP_TYPE));
     }
 

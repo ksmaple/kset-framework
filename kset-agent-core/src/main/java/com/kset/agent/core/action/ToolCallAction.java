@@ -29,8 +29,8 @@ public record ToolCallAction(
         return StandardActionTypes.TOOL_CALL;
     }
 
-    /** Stable operation identity used for run-wide idempotency and confirmation checks. */
-    public Map<String, Object> operationIdentity() {
+    /** Operation details checked against the run ledger; not the tool idempotency key. */
+    public Map<String, Object> operationDefinition() {
         Map<String, Object> identity = new LinkedHashMap<>();
         identity.put("callId", callId);
         if (taskId != null) {

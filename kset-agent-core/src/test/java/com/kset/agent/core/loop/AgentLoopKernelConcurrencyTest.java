@@ -42,7 +42,7 @@ class AgentLoopKernelConcurrencyTest {
         AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
         AgentLoopKernel kernel = AgentLoopKernel.builder((modelRequest, context) -> {
             int call = callsByRun.computeIfAbsent(
-                    context.runId(), ignored -> new AtomicInteger()).incrementAndGet();
+                    context.agentRunId(), ignored -> new AtomicInteger()).incrementAndGet();
             if (call == 1) {
                 bothModelsStarted.countDown();
                 await(bothModelsStarted);
@@ -50,9 +50,9 @@ class AgentLoopKernelConcurrencyTest {
                         {"type":"task_plan","plan":"plan-%s","tasks":[
                           {"taskId":"task-%s","title":"Task %s","dependsOn":[]}
                         ]}
-                        """.formatted(context.runId(), context.runId(), context.runId())));
+                        """.formatted(context.agentRunId(), context.agentRunId(), context.agentRunId())));
             }
-            return ModelResponse.text("answer-" + context.runId());
+            return ModelResponse.text("answer-" + context.agentRunId());
         }).listener(listener).build();
         ExecutorService callers = Executors.newFixedThreadPool(2);
 
@@ -71,8 +71,8 @@ class AgentLoopKernelConcurrencyTest {
         assertThat(second.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
         assertThat(first.answer()).isEqualTo("answer-run-a");
         assertThat(second.answer()).isEqualTo("answer-run-b");
-        assertThat(first.snapshot().runId()).isEqualTo("run-a");
-        assertThat(second.snapshot().runId()).isEqualTo("run-b");
+        assertThat(first.snapshot().agentRunId()).isEqualTo("run-a");
+        assertThat(second.snapshot().agentRunId()).isEqualTo("run-b");
         assertThat(planTaskIds(first)).containsExactly("task-run-a");
         assertThat(planTaskIds(second)).containsExactly("task-run-b");
         assertThat(first.snapshot().observations())
@@ -85,12 +85,12 @@ class AgentLoopKernelConcurrencyTest {
         assertThat(byInvocation).hasSize(2);
         assertThat(byInvocation.values())
                 .allSatisfy(events -> {
-                    assertThat(events).extracting(event -> event.runId()).containsOnly(
-                            events.getFirst().runId());
-                    assertLifecycleTrace(events, events.getFirst().runId());
+                    assertThat(events).extracting(event -> event.agentRunId()).containsOnly(
+                            events.getFirst().agentRunId());
+                    assertLifecycleTrace(events, events.getFirst().agentRunId());
                 });
         assertThat(byInvocation.values().stream()
-                .map(events -> events.getFirst().runId()).collect(java.util.stream.Collectors.toSet()))
+                .map(events -> events.getFirst().agentRunId()).collect(java.util.stream.Collectors.toSet()))
                 .containsExactlyInAnyOrder("run-a", "run-b");
     }
 
@@ -99,7 +99,7 @@ class AgentLoopKernelConcurrencyTest {
         AtomicBoolean cancelFirst = new AtomicBoolean(true);
         AgentCancellation firstCancellation = cancelFirst::get;
         AgentLoopKernel kernel = AgentLoopKernel.builder((modelRequest, context) ->
-                ModelResponse.text("answer-" + context.runId())).build();
+                ModelResponse.text("answer-" + context.agentRunId())).build();
         ExecutorService callers = Executors.newFixedThreadPool(2);
 
         AgentResult cancelled;
@@ -139,8 +139,8 @@ class AgentLoopKernelConcurrencyTest {
                     Map<String, Object> arguments, AgentToolContext context) {
                 int current = active.incrementAndGet();
                 maximumActive.accumulateAndGet(current, Math::max);
-                operationIds.add(context.operationId().runId() + ":"
-                        + context.operationId().callId());
+                operationIds.add(context.idempotencyKey().agentRunId() + ":"
+                        + context.idempotencyKey().callId());
                 bothToolsStarted.countDown();
                 try {
                     await(bothToolsStarted);

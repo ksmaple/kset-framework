@@ -6,7 +6,7 @@ import java.util.Map;
  * Executable tool boundary.
  *
  * <p>Implementations may be invoked concurrently and must use
- * {@link AgentToolContext#operationId()} as the structural idempotency identity for side effects.
+ * {@link AgentToolContext#idempotencyKey()} as the structural idempotency identity for side effects.
  * A call id identifies one operation within a run and must not be reused for a distinct operation.
  * They must persist a canonical fingerprint of the tool name and arguments, return the original
  * result for the same identity and fingerprint, and reject the same identity with a different

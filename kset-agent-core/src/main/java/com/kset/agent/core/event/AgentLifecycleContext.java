@@ -11,7 +11,7 @@ public record AgentLifecycleContext(
         AgentInvocationType invocationType,
         String invocationId,
         long eventSequence,
-        String runId,
+        String agentRunId,
         String stepId,
         String parentStepId,
         AgentLifecycleStepType stepType,
@@ -23,7 +23,7 @@ public record AgentLifecycleContext(
         Instant deadline,
         Duration elapsed) {
 
-    public static final int CURRENT_VERSION = 2;
+    public static final int CURRENT_VERSION = 3;
     public static final int NO_ACTION = -1;
 
     public AgentLifecycleContext {
@@ -38,8 +38,8 @@ public record AgentLifecycleContext(
         if (eventSequence < 1L) {
             throw new IllegalArgumentException("eventSequence must be positive");
         }
-        if (runId == null || runId.isBlank()) {
-            throw new IllegalArgumentException("runId must not be blank");
+        if (agentRunId == null || agentRunId.isBlank()) {
+            throw new IllegalArgumentException("agentRunId must not be blank");
         }
         if (stepId == null || stepId.isBlank()) {
             throw new IllegalArgumentException("stepId must not be blank");
@@ -74,7 +74,7 @@ public record AgentLifecycleContext(
     }
 
     /** Derives the per-event logging status; callers must not treat it as an AgentRunStatus. */
-    public AgentLifecycleStatus status() {
+    public AgentLifecycleStatus eventStatus() {
         return switch (eventType) {
             case RUN_STARTED, TURN_STARTED, MODEL_STARTED, DECISION_STARTED,
                     ACTION_STARTED, CHECKPOINT_SAVING ->
