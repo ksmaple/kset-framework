@@ -6,11 +6,13 @@ import com.kset.agent.core.action.AgentAction;
 import com.kset.agent.core.action.AgentActionContext;
 import com.kset.agent.core.action.AgentActionRegistry;
 import com.kset.agent.core.action.AgentActionResult;
+import com.kset.agent.core.action.StandardActionHandlers;
 import com.kset.agent.core.action.StandardActionTypes;
 import com.kset.agent.core.action.ToolBatchAction;
 import com.kset.agent.core.action.ToolCallAction;
 import com.kset.agent.core.api.AgentFailure;
 import com.kset.agent.core.api.AgentRequest;
+import com.kset.agent.core.api.AgentResumeInput;
 import com.kset.agent.core.api.AgentResult;
 import com.kset.agent.core.api.AgentRunStatus;
 import com.kset.agent.core.checkpoint.AgentCheckpointPort;
@@ -18,7 +20,9 @@ import com.kset.agent.core.event.AgentInvocationType;
 import com.kset.agent.core.event.AgentLifecycleContext;
 import com.kset.agent.core.event.AgentLifecycleEventType;
 import com.kset.agent.core.event.AgentLifecycleListener;
+import com.kset.agent.core.event.AgentLifecycleStepType;
 import com.kset.agent.core.execution.AgentExecutionContext;
+import com.kset.agent.core.id.AgentIdGenerator;
 import com.kset.agent.core.model.AgentModel;
 import com.kset.agent.core.model.ModelRequest;
 import com.kset.agent.core.model.ModelResponse;
@@ -64,47 +68,53 @@ public final class AgentLoopKernel {
             StandardActionTypes.CONFIRMATION);
 
     private final AgentModel model;
-    private final AgentReasoningStrategy strategy;
+    private final AgentReasoningStrategy reasoningStrategy;
     private final String strategyAttributePrefix;
-    private final AgentProtocolRegistry protocols;
-    private final AgentActionRegistry actions;
-    private final AgentStopController stops;
-    private final AgentCheckpointPort checkpoints;
-    private final List<AgentLifecycleListener> listeners;
+    private final AgentProtocolRegistry protocolRegistry;
+    private final AgentActionRegistry actionRegistry;
+    private final AgentStopController stopController;
+    private final AgentCheckpointPort checkpointPort;
+    private final List<AgentLifecycleListener> lifecycleListeners;
     private final Clock clock;
+    private final AgentIdGenerator runIdGenerator;
 
     public static AgentKernelBuilder builder(AgentModel model) {
         return new AgentKernelBuilder(model);
     }
 
     /** Returns the immutable protocol identities available to new runs. */
-    public List<AgentProtocolId> supportedProtocols() {
-        return protocols.supportedProtocols();
+    public List<AgentProtocolId> supportedProtocolIds() {
+        return protocolRegistry.supportedProtocolIds();
     }
 
     AgentLoopKernel(AgentModel model,
-                    AgentReasoningStrategy strategy,
+                    AgentReasoningStrategy reasoningStrategy,
                     String strategyId,
-                    AgentProtocolRegistry protocols,
-                    AgentActionRegistry actions,
-                    AgentStopController stops,
-                    AgentCheckpointPort checkpoints,
-                    List<AgentLifecycleListener> listeners,
-                    Clock clock) {
+                    AgentProtocolRegistry protocolRegistry,
+                    AgentActionRegistry actionRegistry,
+                    AgentStopController stopController,
+                    AgentCheckpointPort checkpointPort,
+                    List<AgentLifecycleListener> lifecycleListeners,
+                    Clock clock,
+                    AgentIdGenerator runIdGenerator) {
         this.model = requireConfiguration(model, "model");
-        this.strategy = requireConfiguration(strategy, "strategy");
+        this.reasoningStrategy = requireConfiguration(
+                reasoningStrategy, "reasoningStrategy");
         this.strategyAttributePrefix = requireConfiguration(strategyId, "strategyId") + ".";
-        this.protocols = requireConfiguration(protocols, "protocols");
-        this.actions = requireConfiguration(actions, "actions");
-        this.stops = requireConfiguration(stops, "stops");
-        this.checkpoints = checkpoints == null ? AgentCheckpointPort.noop() : checkpoints;
+        this.protocolRegistry = requireConfiguration(protocolRegistry, "protocolRegistry");
+        this.actionRegistry = requireConfiguration(actionRegistry, "actionRegistry");
+        this.stopController = requireConfiguration(stopController, "stopController");
+        this.checkpointPort = checkpointPort == null
+                ? AgentCheckpointPort.noop() : checkpointPort;
         try {
-            this.listeners = listeners == null ? List.of() : List.copyOf(listeners);
+            this.lifecycleListeners = lifecycleListeners == null
+                    ? List.of() : List.copyOf(lifecycleListeners);
         } catch (RuntimeException error) {
             throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
-                    "listeners must not contain null", error);
+                    "lifecycleListeners must not contain null", error);
         }
         this.clock = clock == null ? Clock.systemUTC() : clock;
+        this.runIdGenerator = runIdGenerator;
     }
 
     public AgentResult run(AgentRequest request) {
@@ -112,11 +122,18 @@ public final class AgentLoopKernel {
             throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
                     "request must not be null");
         }
-        protocols.require(request.protocol());
-        return execute(request, AgentRunState.start(request, clock.instant()), AgentInvocationType.RUN);
+        AgentRequest boundRequest = bindRunId(request);
+        protocolRegistry.require(boundRequest.protocolId());
+        return execute(boundRequest, AgentRunState.start(boundRequest, clock.instant()),
+                AgentInvocationType.RUN);
     }
 
     public AgentResult resume(AgentRequest request, AgentRunSnapshot snapshot) {
+        return resume(request, snapshot, AgentResumeInput.none());
+    }
+
+    public AgentResult resume(
+            AgentRequest request, AgentRunSnapshot snapshot, AgentResumeInput resumeInput) {
         if (request == null) {
             throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
                     "request must not be null");
@@ -124,22 +141,54 @@ public final class AgentLoopKernel {
         if (snapshot == null) {
             throw invalidSnapshot("snapshot must not be null");
         }
+        if (resumeInput == null) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_RESUME_INPUT,
+                    "resumeInput must not be null");
+        }
+        if (!request.hasRunId()) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
+                    "resume request must provide the snapshot runId");
+        }
         if (!request.runId().equals(snapshot.runId())) {
             throw invalidSnapshot("request and snapshot runId do not match");
         }
-        if (!request.protocol().equals(snapshot.protocol())) {
+        if (!request.protocolId().equals(snapshot.protocolId())) {
             throw invalidSnapshot("protocol cannot change while resuming a run");
         }
         if (!request.task().equals(snapshot.task())) {
             throw invalidSnapshot("task cannot change while resuming a run");
         }
-        if (snapshot.status() == AgentRunStatus.COMPLETED
-                || snapshot.status() == AgentRunStatus.CANCELLED) {
+        if (snapshot.runStatus() == AgentRunStatus.COMPLETED
+                || snapshot.runStatus() == AgentRunStatus.CANCELLED) {
             throw invalidSnapshot("completed or cancelled run cannot be resumed");
         }
-        protocols.require(request.protocol());
-        return execute(request, AgentRunState.restore(snapshot, clock.instant()),
-                AgentInvocationType.RESUME);
+        protocolRegistry.require(request.protocolId());
+        AgentRunState restored = AgentRunState.restore(snapshot, clock.instant());
+        AgentRunState reconciled = AgentResumeReconciler.apply(
+                snapshot, restored, resumeInput, clock.instant());
+        return execute(request, reconciled, AgentInvocationType.RESUME);
+    }
+
+    private AgentRequest bindRunId(AgentRequest request) {
+        if (request.hasRunId()) {
+            return request;
+        }
+        if (runIdGenerator == null) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
+                    "new run requires an explicit runId or a configured runIdGenerator");
+        }
+        String runId;
+        try {
+            runId = runIdGenerator.nextId();
+        } catch (RuntimeException error) {
+            throw new AgentCoreException(AgentErrorCode.ID_GENERATION_FAILED,
+                    "runId generation failed: " + errorMessage(error), error);
+        }
+        if (runId == null || runId.isBlank()) {
+            throw new AgentCoreException(AgentErrorCode.ID_GENERATION_FAILED,
+                    "runId generator returned a blank value");
+        }
+        return request.withRunId(runId);
     }
 
     private AgentResult execute(AgentRequest request, AgentRunState initialState,
@@ -164,13 +213,15 @@ public final class AgentLoopKernel {
                     listener -> listener.beforeRun(runStarted, request, initialState));
             saveCheckpoint(request, state, events);
             while (true) {
-                AgentStopDecision beforeTurn = stops.evaluate(
-                        stopContext(request, state, executionStartedAt, deadline));
-                if (beforeTurn.stop()) {
+                AgentStopDecision beforeTurn = stopController.evaluate(
+                        stopContext(request, state, executionStartedAt, deadline, events));
+                if (beforeTurn.shouldStop()) {
                     return finish(request, state, beforeTurn, events);
                 }
 
                 state = state.nextTurn(clock.instant());
+                LifecycleEvents.LifecycleStep turnStep = events.beginStep(
+                        AgentLifecycleStepType.TURN, "turn");
                 AgentRunState turnState = state;
                 Instant turnStartedAt = clock.instant();
                 AgentLifecycleContext turnStarted = events.next(
@@ -180,33 +231,35 @@ public final class AgentLoopKernel {
                         listener -> listener.beforeTurn(turnStarted, request, turnState));
 
                 AgentTurn turn = nextTurn(request, state);
-                if (!turn.protocol().equals(state.protocol())) {
+                if (!turn.protocolId().equals(state.protocolId())) {
                     throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
                             "reasoning strategy changed the run protocol");
                 }
-                AgentProtocolCodec codec = protocols.require(turn.protocol());
+                AgentProtocolCodec codec = protocolRegistry.require(turn.protocolId());
                 AgentProtocolContext protocolContext = new AgentProtocolContext(request, state);
                 ModelRequest modelRequest = prepareModelRequest(
                         codec, turn.modelRequest(), protocolContext);
-                AgentStopDecision beforeModel = stops.evaluateImmediate(
-                        stopContext(request, state, executionStartedAt, deadline));
-                if (beforeModel.stop()) {
+                AgentStopDecision beforeModel = stopController.evaluateImmediate(
+                        stopContext(request, state, executionStartedAt, deadline, events));
+                if (beforeModel.shouldStop()) {
                     return finish(request, state, beforeModel, events);
                 }
+                LifecycleEvents.LifecycleStep modelStep = events.beginStep(
+                        AgentLifecycleStepType.MODEL, "model");
                 Instant modelStartedAt = clock.instant();
                 AgentLifecycleContext modelStarted = events.next(
                         AgentLifecycleEventType.MODEL_STARTED, state,
                         AgentLifecycleContext.NO_ACTION, modelStartedAt, Duration.ZERO);
                 notifyListeners(modelStarted, listener -> listener.beforeModel(
                         modelStarted, request, turnState, modelRequest));
-                AgentStopDecision afterBeforeModel = stops.evaluateImmediate(
-                        stopContext(request, state, executionStartedAt, deadline));
-                if (afterBeforeModel.stop()) {
+                AgentStopDecision afterBeforeModel = stopController.evaluateImmediate(
+                        stopContext(request, state, executionStartedAt, deadline, events));
+                if (afterBeforeModel.shouldStop()) {
                     return finish(request, state, afterBeforeModel, events);
                 }
                 Instant modelExecutionStartedAt = clock.instant();
                 ModelResponse response = generateModel(modelRequest,
-                        executionContext(request, state, executionStartedAt, deadline));
+                        executionContext(request, state, executionStartedAt, deadline, events));
 
                 Instant modelCompletedAt = clock.instant();
                 AgentRunState modelState = state;
@@ -216,43 +269,62 @@ public final class AgentLoopKernel {
                         elapsed(modelExecutionStartedAt, modelCompletedAt));
                 notifyListeners(modelCompleted, listener -> listener.afterModel(
                         modelCompleted, request, modelState, response));
+                events.completeStep(modelStep);
 
-                AgentStopDecision afterModelExecution = stops.evaluateImmediate(
-                        stopContext(request, state, executionStartedAt, deadline));
-                if (afterModelExecution.stop()) {
+                AgentStopDecision afterModelExecution = stopController.evaluateImmediate(
+                        stopContext(request, state, executionStartedAt, deadline, events));
+                if (afterModelExecution.shouldStop()) {
                     return finish(request, state, afterModelExecution, events);
                 }
 
                 AgentDecision decision;
+                LifecycleEvents.LifecycleStep decisionStep = events.beginStep(
+                        AgentLifecycleStepType.DECISION, "decision");
+                AgentRunState beforeDecisionState = state;
+                AgentLifecycleContext decisionStarted = events.next(
+                        AgentLifecycleEventType.DECISION_STARTED, state,
+                        AgentLifecycleContext.NO_ACTION, clock.instant(), Duration.ZERO);
+                notifyListeners(decisionStarted, listener -> listener.beforeDecision(
+                        decisionStarted, request, beforeDecisionState, response));
                 try {
                     decision = decode(codec, response, protocolContext);
-                    validateToolCallIds(decision);
+                    validateToolCallIds(state, decision);
                     AgentStopDecision capacityStop = capacityStop(request, decision);
-                    if (capacityStop.stop()) {
+                    if (capacityStop.shouldStop()) {
                         return finish(request, state, capacityStop, events);
                     }
                     validateDecision(request, state, decision);
                 } catch (AgentProtocolException protocolError) {
                     state = state.protocolFailed(
-                            protocolError.protocolCode(), protocolError.getMessage(), clock.instant());
+                            protocolError.protocolErrorCode(), protocolError.getMessage(),
+                            clock.instant());
                     AgentRunState failedState = state;
                     AgentLifecycleContext protocolFailed = events.next(
                             AgentLifecycleEventType.PROTOCOL_ERROR, state,
                             AgentLifecycleContext.NO_ACTION, clock.instant(), Duration.ZERO);
                     notifyListeners(protocolFailed, listener -> listener.onProtocolError(
                             protocolFailed, request, failedState, protocolError));
-                    AgentStopDecision protocolStop = stops.evaluate(
-                            stopContext(request, state, executionStartedAt, deadline));
-                    if (protocolStop.stop()) {
+                    events.completeStep(decisionStep);
+                    Instant turnFailedAt = clock.instant();
+                    AgentLifecycleContext turnFailed = events.next(
+                            AgentLifecycleEventType.TURN_FAILED, state,
+                            AgentLifecycleContext.NO_ACTION, turnFailedAt,
+                            elapsed(turnStartedAt, turnFailedAt));
+                    notifyListeners(turnFailed, listener -> listener.onTurnError(
+                            turnFailed, request, failedState, protocolError));
+                    events.completeStep(turnStep);
+                    AgentStopDecision protocolStop = stopController.evaluate(
+                            stopContext(request, state, executionStartedAt, deadline, events));
+                    if (protocolStop.shouldStop()) {
                         return finish(request, state, protocolStop, events);
                     }
                     saveCheckpoint(request, state, events);
                     continue;
                 }
 
-                AgentStopDecision afterDecision = stops.evaluateImmediate(
-                        stopContext(request, state, executionStartedAt, deadline));
-                if (afterDecision.stop()) {
+                AgentStopDecision afterDecision = stopController.evaluateImmediate(
+                        stopContext(request, state, executionStartedAt, deadline, events));
+                if (afterDecision.shouldStop()) {
                     return finish(request, state, afterDecision, events);
                 }
 
@@ -263,15 +335,18 @@ public final class AgentLoopKernel {
                         AgentLifecycleContext.NO_ACTION, clock.instant(), Duration.ZERO);
                 notifyListeners(decisionAccepted, listener -> listener.afterDecision(
                         decisionAccepted, request, decisionState, decision));
+                events.completeStep(decisionStep);
 
                 List<AgentActionResult> results = new ArrayList<>();
                 for (int actionIndex = 0; actionIndex < decision.actions().size(); actionIndex++) {
                     AgentAction action = decision.actions().get(actionIndex);
-                    AgentStopDecision beforeAction = stops.evaluateImmediate(
-                            stopContext(request, state, executionStartedAt, deadline));
-                    if (beforeAction.stop()) {
+                    AgentStopDecision beforeAction = stopController.evaluateImmediate(
+                            stopContext(request, state, executionStartedAt, deadline, events));
+                    if (beforeAction.shouldStop()) {
                         return finish(request, state, beforeAction, events);
                     }
+                    LifecycleEvents.LifecycleStep actionStep = events.beginStep(
+                            AgentLifecycleStepType.ACTION, action.actionType());
                     Instant actionStartedAt = clock.instant();
                     AgentRunState beforeActionState = state;
                     int currentActionIndex = actionIndex;
@@ -280,15 +355,16 @@ public final class AgentLoopKernel {
                             actionStartedAt, Duration.ZERO);
                     notifyListeners(actionStarted, listener -> listener.beforeAction(
                             actionStarted, request, beforeActionState, action));
-                    AgentStopDecision afterBeforeAction = stops.evaluateImmediate(
-                            stopContext(request, state, executionStartedAt, deadline));
-                    if (afterBeforeAction.stop()) {
+                    AgentStopDecision afterBeforeAction = stopController.evaluateImmediate(
+                            stopContext(request, state, executionStartedAt, deadline, events));
+                    if (afterBeforeAction.shouldStop()) {
                         return finish(request, state, afterBeforeAction, events);
                     }
                     Instant actionExecutionStartedAt = clock.instant();
                     AgentActionResult result = dispatchAction(action, new AgentActionContext(
                             request, state,
-                            executionContext(request, state, executionStartedAt, deadline), clock));
+                            executionContext(request, state, executionStartedAt, deadline, events),
+                            clock));
 
                     results.add(result);
                     state = state.apply(result, clock.instant());
@@ -299,16 +375,21 @@ public final class AgentLoopKernel {
                             actionCompletedAt, elapsed(actionExecutionStartedAt, actionCompletedAt));
                     notifyListeners(actionCompleted, listener -> listener.afterAction(
                             actionCompleted, request, actionState, action, result));
+                    events.completeStep(actionStep);
 
-                    AgentStopDecision afterActionExecution = stops.evaluateImmediate(
-                            stopContext(request, state, executionStartedAt, deadline));
-                    if (afterActionExecution.stop()) {
+                    AgentStopDecision reconciliationStop = reconciliationStop(action, result);
+                    if (reconciliationStop.shouldStop()) {
+                        return finish(request, state, reconciliationStop, events);
+                    }
+                    AgentStopDecision afterActionExecution = stopController.evaluateImmediate(
+                            stopContext(request, state, executionStartedAt, deadline, events));
+                    if (afterActionExecution.shouldStop()) {
                         return finish(request, state, afterActionExecution, events);
                     }
-                    if (result.terminalStatus() != null) {
-                        AgentStopDecision terminalStop = stops.evaluate(
-                                stopContext(request, state, executionStartedAt, deadline));
-                        if (!terminalStop.stop()) {
+                    if (result.terminalRunStatus() != null) {
+                        AgentStopDecision terminalStop = stopController.evaluate(
+                                stopContext(request, state, executionStartedAt, deadline, events));
+                        if (!terminalStop.shouldStop()) {
                             throw new AgentCoreException(
                                     AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
                                     "terminal action result did not produce a stop decision");
@@ -317,9 +398,9 @@ public final class AgentLoopKernel {
                     }
 
                     saveCheckpoint(request, state, events);
-                    AgentStopDecision afterAction = stops.evaluateAfterAction(
-                            stopContext(request, state, executionStartedAt, deadline));
-                    if (afterAction.stop()) {
+                    AgentStopDecision afterAction = stopController.evaluateAfterAction(
+                            stopContext(request, state, executionStartedAt, deadline, events));
+                    if (afterAction.shouldStop()) {
                         return finish(request, state, afterAction, events);
                     }
                 }
@@ -337,9 +418,10 @@ public final class AgentLoopKernel {
                         elapsed(turnStartedAt, turnCompletedAt));
                 notifyListeners(turnCompleted, listener -> listener.afterTurn(
                         turnCompleted, request, completedTurnState, decision, completedResults));
-                AgentStopDecision afterTurn = stops.evaluate(
-                        stopContext(request, state, executionStartedAt, deadline));
-                if (afterTurn.stop()) {
+                events.completeStep(turnStep);
+                AgentStopDecision afterTurn = stopController.evaluate(
+                        stopContext(request, state, executionStartedAt, deadline, events));
+                if (afterTurn.shouldStop()) {
                     return finish(request, state, afterTurn, events);
                 }
                 saveCheckpoint(request, state, events);
@@ -353,14 +435,20 @@ public final class AgentLoopKernel {
             AgentRequest request, AgentRunState state,
             Instant executionStartedAt, Instant deadline, RuntimeException error,
             LifecycleEvents events) {
+        AgentStopDecision immediate;
         try {
-            AgentStopDecision immediate = stops.evaluateImmediate(
-                    stopContext(request, state, executionStartedAt, deadline));
-            return immediate.stop()
-                    ? finish(request, state, immediate, events)
-                    : fail(request, state, error, events);
+            immediate = stopController.evaluateImmediate(
+                    stopContext(request, state, executionStartedAt, deadline, events));
         } catch (RuntimeException stopError) {
             return fail(request, state, stopError, events);
+        }
+        if (!immediate.shouldStop()) {
+            return fail(request, state, error, events);
+        }
+        try {
+            return finish(request, state, immediate, events);
+        } catch (RuntimeException finishError) {
+            return fail(request, state, finishError, events);
         }
     }
 
@@ -376,7 +464,7 @@ public final class AgentLoopKernel {
 
     private AgentResult fail(AgentRequest request, AgentRunState state,
                              RuntimeException error, LifecycleEvents events) {
-        AgentStopDecision decision = stops.fatal(error);
+        AgentStopDecision decision = stopController.fatal(error);
         AgentRunState failed = state.stopped(decision, clock.instant());
         notifyErrors(request, failed, error, events);
         saveFailureCheckpoint(request, failed, events);
@@ -387,15 +475,18 @@ public final class AgentLoopKernel {
     }
 
     private AgentResult result(AgentRunState state, AgentFailure failure) {
-        return new AgentResult(state.runId(), state.status(), state.answer(), state.stop(),
+        return new AgentResult(
+                state.runId(), state.runStatus(), state.answer(), state.stopDecision(),
                 state.snapshot(), failure);
     }
 
-    private AgentCoreException invalidSnapshot(String message) {
-        return new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT, message);
+    private AgentCoreException invalidSnapshot(String errorMessage) {
+        return new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT, errorMessage);
     }
 
     private void saveCheckpoint(AgentRequest request, AgentRunState state, LifecycleEvents events) {
+        LifecycleEvents.LifecycleStep checkpointStep = events.beginStep(
+                AgentLifecycleStepType.CHECKPOINT, "checkpoint");
         AgentRunSnapshot snapshot = state.snapshot();
         Instant checkpointRequestedAt = clock.instant();
         AgentLifecycleContext saving = events.next(
@@ -404,12 +495,13 @@ public final class AgentLoopKernel {
         notifyListeners(saving, listener -> listener.beforeCheckpoint(saving, request, snapshot));
         Instant checkpointExecutionStartedAt = clock.instant();
         try {
-            checkpoints.save(request, snapshot);
-        } catch (AgentCoreException error) {
-            throw error;
+            checkpointPort.save(request, snapshot);
         } catch (RuntimeException error) {
-            throw new AgentCoreException(AgentErrorCode.CHECKPOINT_FAILED,
-                    "checkpoint save failed: " + errorMessage(error), error);
+            AgentCoreException failure = checkpointFailure(error);
+            notifyCheckpointError(request, state, snapshot, failure,
+                    checkpointExecutionStartedAt, events);
+            events.completeStep(checkpointStep);
+            throw failure;
         }
         Instant checkpointCompletedAt = clock.instant();
         AgentLifecycleContext saved = events.next(
@@ -417,10 +509,13 @@ public final class AgentLoopKernel {
                 AgentLifecycleContext.NO_ACTION, checkpointCompletedAt,
                 elapsed(checkpointExecutionStartedAt, checkpointCompletedAt));
         notifyListeners(saved, listener -> listener.afterCheckpoint(saved, request, snapshot));
+        events.completeStep(checkpointStep);
     }
 
     private void saveFailureCheckpoint(
             AgentRequest request, AgentRunState state, LifecycleEvents events) {
+        LifecycleEvents.LifecycleStep checkpointStep = events.beginStep(
+                AgentLifecycleStepType.CHECKPOINT, "checkpoint");
         AgentRunSnapshot snapshot = state.snapshot();
         Instant checkpointRequestedAt = clock.instant();
         AgentLifecycleContext saving = events.next(
@@ -430,7 +525,7 @@ public final class AgentLoopKernel {
                 listener -> listener.beforeCheckpoint(saving, request, snapshot));
         Instant checkpointExecutionStartedAt = clock.instant();
         try {
-            checkpoints.save(request, snapshot);
+            checkpointPort.save(request, snapshot);
             Instant checkpointCompletedAt = clock.instant();
             AgentLifecycleContext saved = events.next(
                     AgentLifecycleEventType.CHECKPOINT_SAVED, state,
@@ -438,14 +533,39 @@ public final class AgentLoopKernel {
                     elapsed(checkpointExecutionStartedAt, checkpointCompletedAt));
             notifyTerminalListeners(saved,
                     listener -> listener.afterCheckpoint(saved, request, snapshot));
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException error) {
+            notifyCheckpointError(request, state, snapshot, checkpointFailure(error),
+                    checkpointExecutionStartedAt, events);
             // The returned failed snapshot remains authoritative for the caller.
         }
+        events.completeStep(checkpointStep);
+    }
+
+    private AgentCoreException checkpointFailure(RuntimeException error) {
+        if (error instanceof AgentCoreException coreError
+                && coreError.errorCode() == AgentErrorCode.CHECKPOINT_FAILED) {
+            return coreError;
+        }
+        return new AgentCoreException(AgentErrorCode.CHECKPOINT_FAILED,
+                "checkpoint save failed: " + errorMessage(error), error);
+    }
+
+    private void notifyCheckpointError(
+            AgentRequest request, AgentRunState state, AgentRunSnapshot snapshot,
+            RuntimeException error, Instant checkpointExecutionStartedAt,
+            LifecycleEvents events) {
+        Instant checkpointFailedAt = clock.instant();
+        AgentLifecycleContext failed = events.next(
+                AgentLifecycleEventType.CHECKPOINT_FAILED, state,
+                AgentLifecycleContext.NO_ACTION, checkpointFailedAt,
+                elapsed(checkpointExecutionStartedAt, checkpointFailedAt));
+        notifyTerminalListeners(failed,
+                listener -> listener.onCheckpointError(failed, request, snapshot, error));
     }
 
     private AgentTurn nextTurn(AgentRequest request, AgentRunState state) {
         try {
-            AgentTurn turn = strategy.nextTurn(request, state);
+            AgentTurn turn = reasoningStrategy.nextTurn(request, state);
             if (turn == null) {
                 throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
                         "reasoning strategy returned null turn");
@@ -515,7 +635,7 @@ public final class AgentLoopKernel {
     private void validateDecision(
             AgentRequest request, AgentRunState state, AgentDecision decision) {
         try {
-            strategy.validate(request, state, decision);
+            reasoningStrategy.validate(request, state, decision);
         } catch (AgentProtocolException error) {
             throw error;
         } catch (AgentCoreException error) {
@@ -529,18 +649,18 @@ public final class AgentLoopKernel {
     private AgentActionResult dispatchAction(
             AgentAction action, AgentActionContext context) {
         try {
-            AgentActionResult result = actions.dispatch(action, context);
+            AgentActionResult result = actionRegistry.dispatch(action, context);
             if (result == null) {
                 throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
                         "action handler returned null result");
             }
-            if (result.terminalStatus() != null
-                    && result.terminalStatus() != AgentRunStatus.COMPLETED
-                    && result.terminalStatus() != AgentRunStatus.SUSPENDED) {
+            if (result.terminalRunStatus() != null
+                    && result.terminalRunStatus() != AgentRunStatus.COMPLETED
+                    && result.terminalRunStatus() != AgentRunStatus.SUSPENDED) {
                 throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
                         "action handler terminal status must be COMPLETED or SUSPENDED");
             }
-            if (result.terminalStatus() == AgentRunStatus.COMPLETED
+            if (result.terminalRunStatus() == AgentRunStatus.COMPLETED
                     && (result.answer() == null || result.answer().isBlank())) {
                 throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
                         "completed action result must provide a non-blank answer");
@@ -559,7 +679,8 @@ public final class AgentLoopKernel {
             AgentRequest request, AgentRunState state, AgentDecision decision,
             List<AgentActionResult> results, Instant now) {
         try {
-            AgentRunState next = strategy.afterTurn(request, state, decision, results, now);
+            AgentRunState next = reasoningStrategy.afterTurn(
+                    request, state, decision, results, now);
             if (next == null) {
                 throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
                         "reasoning strategy returned null run state");
@@ -574,16 +695,22 @@ public final class AgentLoopKernel {
     }
 
     private AgentExecutionContext executionContext(
-            AgentRequest request, AgentRunState state, Instant executionStartedAt, Instant deadline) {
-        return new AgentExecutionContext(request.runId(), state.turn(), executionStartedAt,
+            AgentRequest request, AgentRunState state, Instant executionStartedAt,
+            Instant deadline, LifecycleEvents events) {
+        LifecycleEvents.LifecycleStep step = events.activeStep();
+        return new AgentExecutionContext(
+                request.runId(), events.invocationId(), step.stepId(), step.parentStepId(),
+                step.stepType(), step.operation(), state.turn(), executionStartedAt,
                 clock.instant(), deadline, request.cancellation(), request.attributes());
     }
 
     private AgentStopContext stopContext(
-            AgentRequest request, AgentRunState state, Instant executionStartedAt, Instant deadline) {
-        AgentExecutionContext execution = executionContext(
-                request, state, executionStartedAt, deadline);
-        return new AgentStopContext(request, state, execution, execution.issuedAt());
+            AgentRequest request, AgentRunState state, Instant executionStartedAt,
+            Instant deadline, LifecycleEvents events) {
+        AgentExecutionContext executionContext = executionContext(
+                request, state, executionStartedAt, deadline, events);
+        return new AgentStopContext(
+                request, state, executionContext, executionContext.issuedAt());
     }
 
     private AgentStopDecision capacityStop(AgentRequest request, AgentDecision decision) {
@@ -594,7 +721,8 @@ public final class AgentLoopKernel {
         boolean oversizedBatch = decision.actions().stream()
                 .filter(ToolBatchAction.class::isInstance)
                 .map(ToolBatchAction.class::cast)
-                .anyMatch(batch -> batch.calls().size() > request.options().maxToolCallsPerBatch());
+                .anyMatch(batch ->
+                        batch.toolCalls().size() > request.options().maxToolCallsPerBatch());
         if (oversizedBatch) {
             return AgentStopDecision.stop(AgentStopReason.CAPACITY_LIMIT, AgentRunStatus.FAILED,
                     "tool batch size limit exceeded");
@@ -602,31 +730,68 @@ public final class AgentLoopKernel {
         return AgentStopDecision.continueRun();
     }
 
-    private void validateToolCallIds(AgentDecision decision) {
+    private static AgentStopDecision reconciliationStop(
+            AgentAction action, AgentActionResult result) {
+        boolean toolAction = action instanceof ToolCallAction || action instanceof ToolBatchAction;
+        boolean required = toolAction
+                && result.terminalRunStatus() == AgentRunStatus.SUSPENDED
+                && result.observations().stream().anyMatch(observation ->
+                        AgentErrorCode.TOOL_RESULT_UNKNOWN.name().equals(
+                                observation.errorCode()));
+        if (required && !(result.stateAttributes().get(
+                StandardActionHandlers.PENDING_ACTION) instanceof java.util.Map<?, ?>)) {
+            throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
+                    "tool reconciliation result must contain a pending action");
+        }
+        return required
+                ? AgentStopDecision.stop(AgentStopReason.RECONCILIATION_REQUIRED,
+                        AgentRunStatus.SUSPENDED, "tool result reconciliation required")
+                : AgentStopDecision.continueRun();
+    }
+
+    private void validateToolCallIds(AgentRunState state, AgentDecision decision) {
         Set<String> callIds = new HashSet<>();
+        Object stored = state.attributes().get(AgentRunState.TOOL_OPERATIONS_ATTRIBUTE);
+        java.util.Map<?, ?> operations;
+        if (stored == null) {
+            operations = java.util.Map.of();
+        } else if (stored instanceof java.util.Map<?, ?> values) {
+            operations = values;
+        } else {
+            throw new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT,
+                    "tool operation state must be a map");
+        }
         for (AgentAction action : decision.actions()) {
-            if (action instanceof ToolCallAction call
-                    && !callIds.add(call.callId())) {
-                throw new AgentProtocolException(
-                        "DUPLICATE_TOOL_CALL_ID", "tool call ids must be unique within a decision");
+            if (action instanceof ToolCallAction call) {
+                validateToolCallId(call, callIds, operations);
             }
             if (action instanceof ToolBatchAction batch) {
-                for (ToolCallAction call : batch.calls()) {
-                    if (!callIds.add(call.callId())) {
-                        throw new AgentProtocolException(
-                                "DUPLICATE_TOOL_CALL_ID",
-                                "tool call ids must be unique within a decision");
-                    }
+                for (ToolCallAction call : batch.toolCalls()) {
+                    validateToolCallId(call, callIds, operations);
                 }
             }
+        }
+    }
+
+    private void validateToolCallId(
+            ToolCallAction call, Set<String> callIds, java.util.Map<?, ?> operations) {
+        if (!callIds.add(call.callId())) {
+            throw new AgentProtocolException(
+                    "DUPLICATE_TOOL_CALL_ID", "tool call ids must be unique within a decision");
+        }
+        if (operations.containsKey(call.callId())
+                && !call.operationIdentity().equals(operations.get(call.callId()))) {
+            throw new AgentProtocolException(
+                    AgentErrorCode.TOOL_IDEMPOTENCY_CONFLICT.name(),
+                    "tool call id is already bound to a different operation: " + call.callId());
         }
     }
 
     private void validateStrategyState(AgentRunState current, AgentRunState next) {
         boolean coreStateChanged = !current.runId().equals(next.runId())
                 || !current.task().equals(next.task())
-                || !current.protocol().equals(next.protocol())
-                || current.status() != next.status()
+                || !current.protocolId().equals(next.protocolId())
+                || current.runStatus() != next.runStatus()
                 || current.turn() != next.turn()
                 || !current.startedAt().equals(next.startedAt())
                 || next.updatedAt().isBefore(current.updatedAt())
@@ -634,7 +799,7 @@ public final class AgentLoopKernel {
                 || current.consecutiveProtocolErrors() != next.consecutiveProtocolErrors()
                 || current.consecutiveNoProgress() != next.consecutiveNoProgress()
                 || !Objects.equals(current.answer(), next.answer())
-                || !Objects.equals(current.stop(), next.stop());
+                || !Objects.equals(current.stopDecision(), next.stopDecision());
         if (coreStateChanged) {
             throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
                     "reasoning strategy changed kernel-owned run state");
@@ -658,7 +823,7 @@ public final class AgentLoopKernel {
                         "action result cannot write and remove the same state attribute: " + key);
             }
         }
-        boolean standardAction = STANDARD_ACTION_TYPES.contains(action.type());
+        boolean standardAction = STANDARD_ACTION_TYPES.contains(action.actionType());
         for (String key : changedKeys) {
             if (key == null || key.isBlank()) {
                 throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
@@ -677,12 +842,24 @@ public final class AgentLoopKernel {
 
     private void notifyListeners(AgentLifecycleContext context,
                                  Consumer<AgentLifecycleListener> notification) {
-        for (AgentLifecycleListener listener : listeners) {
+        for (AgentLifecycleListener listener : lifecycleListeners) {
+            boolean critical = listenerCritical(context, listener);
+            try {
+                listener.onEvent(context);
+            } catch (RuntimeException error) {
+                notifyListenerFailure(context, listener, critical, error);
+                if (critical) {
+                    throw new AgentCoreException(AgentErrorCode.LISTENER_FAILED,
+                            "critical lifecycle event listener failed: "
+                                    + listener.getClass().getName() + ": "
+                                    + errorMessage(error), error);
+                }
+            }
             try {
                 notification.accept(listener);
             } catch (RuntimeException error) {
-                notifyListenerFailure(context, listener, error);
-                if (listener.critical()) {
+                notifyListenerFailure(context, listener, critical, error);
+                if (critical) {
                     throw new AgentCoreException(AgentErrorCode.LISTENER_FAILED,
                             "critical lifecycle listener failed: "
                                     + listener.getClass().getName() + ": "
@@ -713,7 +890,7 @@ public final class AgentLoopKernel {
     private void notifyResult(AgentRequest request, AgentRunState state,
                               AgentResult result, LifecycleEvents events) {
         Instant returnedAt = clock.instant();
-        AgentLifecycleContext returned = events.next(
+        AgentLifecycleContext returned = events.nextRun(
                 AgentLifecycleEventType.RUN_RETURNED, state,
                 AgentLifecycleContext.NO_ACTION, returnedAt,
                 elapsed(events.executionStartedAt(), returnedAt));
@@ -723,25 +900,51 @@ public final class AgentLoopKernel {
 
     private void notifyTerminalListeners(AgentLifecycleContext context,
                                          Consumer<AgentLifecycleListener> notification) {
-        listeners.forEach(listener -> {
+        lifecycleListeners.forEach(listener -> {
+            boolean critical;
+            try {
+                critical = listener.critical();
+            } catch (RuntimeException error) {
+                notifyListenerFailure(context, listener, true, error);
+                return;
+            }
+            try {
+                listener.onEvent(context);
+            } catch (RuntimeException error) {
+                notifyListenerFailure(context, listener, critical, error);
+            }
             try {
                 notification.accept(listener);
             } catch (RuntimeException error) {
-                notifyListenerFailure(context, listener, error);
+                notifyListenerFailure(context, listener, critical, error);
             }
         });
     }
 
+    private boolean listenerCritical(
+            AgentLifecycleContext context, AgentLifecycleListener listener) {
+        try {
+            return listener.critical();
+        } catch (RuntimeException error) {
+            notifyListenerFailure(context, listener, true, error);
+            throw new AgentCoreException(AgentErrorCode.LISTENER_FAILED,
+                    "lifecycle listener critical flag failed: "
+                            + listener.getClass().getName() + ": "
+                            + errorMessage(error), error);
+        }
+    }
+
     private void notifyListenerFailure(AgentLifecycleContext context,
                                        AgentLifecycleListener failedListener,
+                                       boolean failedCritical,
                                        RuntimeException error) {
-        for (AgentLifecycleListener listener : listeners) {
+        for (AgentLifecycleListener listener : lifecycleListeners) {
             if (listener == failedListener) {
                 continue;
             }
             try {
                 listener.onListenerError(context, failedListener.getClass().getName(),
-                        failedListener.critical(), error);
+                        failedCritical, error);
             } catch (RuntimeException ignored) {
             }
         }
@@ -750,7 +953,7 @@ public final class AgentLoopKernel {
     private AgentFailure failure(RuntimeException error) {
         if (error instanceof AgentCoreException coreError) {
             return new AgentFailure(
-                    coreError.code(), errorMessage(coreError), coreError.retryable());
+                    coreError.errorCode(), errorMessage(coreError), coreError.retryable());
         }
         return new AgentFailure(AgentErrorCode.INTERNAL_ERROR, errorMessage(error), false);
     }
@@ -771,7 +974,10 @@ public final class AgentLoopKernel {
         private final String runId;
         private final Instant executionStartedAt;
         private final Instant deadline;
-        private long sequence;
+        private final LifecycleStep runStep;
+        private LifecycleStep activeStep;
+        private long eventSequence;
+        private long stepSequence;
 
         private LifecycleEvents(AgentInvocationType invocationType, String runId,
                                 Instant executionStartedAt, Instant deadline) {
@@ -779,28 +985,83 @@ public final class AgentLoopKernel {
             this.runId = runId;
             this.executionStartedAt = executionStartedAt;
             this.deadline = deadline;
+            this.runStep = createStep(null, AgentLifecycleStepType.RUN,
+                    invocationType.name().toLowerCase(java.util.Locale.ROOT));
+            this.activeStep = runStep;
         }
 
         private AgentLifecycleContext next(
                 AgentLifecycleEventType eventType, AgentRunState state, int actionIndex,
                 Instant occurredAt, Duration elapsed) {
-            sequence++;
+            eventSequence++;
+            LifecycleStep step = activeStep;
             return new AgentLifecycleContext(
                     AgentLifecycleContext.CURRENT_VERSION, eventType, invocationType,
-                    invocationId, sequence, runId, state.turn(), actionIndex,
+                    invocationId, eventSequence, runId, step.stepId(), step.parentStepId(),
+                    step.stepType(), step.operation(), state.turn(), actionIndex,
                     occurredAt, executionStartedAt, deadline, elapsed);
+        }
+
+        private AgentLifecycleContext nextRun(
+                AgentLifecycleEventType eventType, AgentRunState state, int actionIndex,
+                Instant occurredAt, Duration elapsed) {
+            LifecycleStep current = activeStep;
+            activeStep = runStep;
+            try {
+                return next(eventType, state, actionIndex, occurredAt, elapsed);
+            } finally {
+                activeStep = current;
+            }
+        }
+
+        private LifecycleStep beginStep(AgentLifecycleStepType stepType, String operation) {
+            LifecycleStep step = createStep(activeStep, stepType, operation);
+            activeStep = step;
+            return step;
+        }
+
+        private void completeStep(LifecycleStep step) {
+            if (activeStep != step) {
+                throw new AgentCoreException(AgentErrorCode.INTERNAL_ERROR,
+                        "lifecycle step completion order is invalid");
+            }
+            activeStep = step.parent() == null ? runStep : step.parent();
+        }
+
+        private LifecycleStep createStep(
+                LifecycleStep parent, AgentLifecycleStepType stepType, String operation) {
+            stepSequence++;
+            return new LifecycleStep(invocationId + ":step:" + stepSequence,
+                    parent, stepType, operation);
         }
 
         private Instant executionStartedAt() {
             return executionStartedAt;
         }
+
+        private String invocationId() {
+            return invocationId;
+        }
+
+        private LifecycleStep activeStep() {
+            return activeStep;
+        }
+
+        private record LifecycleStep(
+                String stepId, LifecycleStep parent,
+                AgentLifecycleStepType stepType, String operation) {
+
+            private String parentStepId() {
+                return parent == null ? null : parent.stepId();
+            }
+        }
     }
 
-    private static <T> T requireConfiguration(T value, String name) {
-        if (value == null) {
+    private static <T> T requireConfiguration(T configuration, String configurationName) {
+        if (configuration == null) {
             throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
-                    name + " must not be null");
+                    configurationName + " must not be null");
         }
-        return value;
+        return configuration;
     }
 }

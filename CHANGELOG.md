@@ -6,7 +6,12 @@
 
 ### 新增
 
-- **kset-agent-core**：重建为框架无关的稳定 Agent 循环内核，固定 `RunState → ModelResponse → Decision → Action → Observation → StopDecision` 语义；提供集中式取消、活动执行超时、轮次、协议错误、无进展与容量停止控制，模型和工具调用贯穿 deadline/cancellation/callId 上下文。快照端口收敛为同时接收不可变请求与快照的宿主只写边界，恢复快照由宿主显式传入；构建时冻结工具集合并明确所有共享扩展的线程安全契约。新增统一 `AgentErrorCode`、带错误码异常、`AgentFailure` 技术失败结果和工具 Observation 错误码，隔离协议 metadata，并在每个动作后执行停止判断。内置 ReAct 策略和严格且不可覆盖的 `agent-json:v1` 协议，新增固定协议错误枚举、协议扩展指南和 kset-rag 字段映射；请求属性隔离内核保留命名空间，补齐确认消费与 pending 状态清理，修复工具执行前 deadline 检查。协议注册改用结构化 ID，Handler/Strategy 状态写入受命名空间保护。新增固定生命周期事件枚举、run/resume 调用身份、事件序号、阶段耗时、模型调用指标及模型/动作/检查点前后与最终结果观测端点，终态 Listener 固定为 best-effort；已返回动作先应用状态和发出观测再执行停止判断。支持注册自定义推理策略、协议 Codec、动作处理器、停止策略及生命周期监听器。移除 Spring 自动装配、持久化工作流引擎及项目、文档、代码仓库、权限、指标等业务耦合 API
+- **kset-agent-core**：重建为框架无关的稳定 Agent 循环内核，固定 `RunState → ModelResponse → Decision → Action → Observation → StopDecision` 语义；提供集中式取消、活动执行超时、轮次、协议错误、无进展与容量停止控制，模型和工具调用贯穿 deadline/cancellation/callId 上下文。快照端口收敛为同时接收不可变请求与快照的宿主只写边界，恢复快照由宿主显式传入；构建时冻结工具集合并明确所有共享扩展的线程安全契约。新增统一 `AgentErrorCode`、带错误码异常、`AgentFailure` 技术失败结果和工具 Observation 错误码，隔离协议 metadata，并在每个动作后执行停止判断。内置 ReAct 策略和严格且不可覆盖的 `agent-json:v1` 协议，新增固定协议错误枚举、协议扩展指南和 kset-rag 字段映射；请求属性隔离内核保留命名空间，补齐确认消费与 pending 状态清理，修复工具执行前 deadline 检查。协议注册改用结构化 ID，Handler/Strategy 状态写入受命名空间保护。新增固定生命周期事件枚举、run/resume 调用身份、事件序号、阶段耗时、模型调用指标及模型/动作/检查点前后与最终结果观测端点，终态 Listener 固定为 best-effort；已返回动作先应用状态和发出观测再执行停止判断。工具幂等身份固定为结构化 `(runId, callId)` 并要求参数指纹冲突检测；批次执行异常或工具主动报告未知结果时均以 `RECONCILIATION_REQUIRED` 暂停，标准工具 Observation 固定携带调用身份，检查点失败提供独立观测端点，重复工具注册和无效扩展结果 fail-fast。支持注册自定义推理策略、协议 Codec、动作处理器、停止策略及生命周期监听器。移除 Spring 自动装配、持久化工作流引擎及项目、文档、代码仓库、权限、指标等业务耦合 API
+- **kset-agent-core 恢复与隔离**：新增 `AgentResumeInput` 确定性注入权威工具结果，禁止 `RECONCILIATION_REQUIRED` 快照空输入续跑，并通过固定错误码校验 pending 调用身份；公开数据载体对 Map、List、Set 和数组执行递归只读快照。
+- **kset-agent-core 契约加固**：新增 run 级工具操作账本，拒绝跨轮 `callId` 身份冲突；危险工具确认完整绑定 pending 操作并禁止预确认绕过；复合停止与检查点故障固定返回结构化失败；限制 StopPolicy 伪造完成状态，并隔离标准工具与扩展动作的未知结果恢复语义。
+- **kset-agent-core 步骤追踪**：新增可配置雪花全局 runId、逻辑 stepId/parentStepId、固定步骤类型与状态；统一 `onEvent` 覆盖 run、turn、model、decision、action、checkpoint 全部步骤，同一步骤开始、完成和失败可直接配对。固定追踪身份同步下沉至 `AgentExecutionContext`，Model、Action、Tool 和 StopPolicy 的内部日志可与最终步骤日志精确关联，宿主可附加工具 callId/taskId/toolName 与结构化错误码定位问题。
+- **kset-agent-core 命名契约**：统一公开对象和扩展点的 actionType、toolName、callId、taskId、toolCalls、executionContext、runStatus、stopDecision、errorCode、protocolId、strategyId 与 eventSequence 等业务限定名称；补齐 Agent 专用对象职责与稳定枚举说明，`agent-json:v1` wire 字段保持不变。
+- **kset-agent-core 内核边界**：将 `AgentRunState` 的启动、恢复、推进、动作应用与停止转换收窄为 Kernel 包内能力，并将默认 `ReactPhase` 收敛为策略内部类型；公开 Action、Registry、Listener 扩展方法保持不变。
 
 ## [v1.0.16] - 2026-08-30
 

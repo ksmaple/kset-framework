@@ -1,5 +1,7 @@
 package com.kset.agent.core.action;
 
+import com.kset.agent.core.value.AgentValueSnapshot;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -16,11 +18,26 @@ public record ToolCallAction(
         if (toolName == null || toolName.isBlank()) {
             throw new IllegalArgumentException("toolName must not be blank");
         }
-        arguments = arguments == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(arguments));
+        callId = callId.trim();
+        taskId = taskId == null || taskId.isBlank() ? null : taskId.trim();
+        toolName = toolName.trim();
+        arguments = AgentValueSnapshot.map(arguments);
     }
 
     @Override
-    public String type() {
+    public String actionType() {
         return StandardActionTypes.TOOL_CALL;
+    }
+
+    /** Stable operation identity used for run-wide idempotency and confirmation checks. */
+    public Map<String, Object> operationIdentity() {
+        Map<String, Object> identity = new LinkedHashMap<>();
+        identity.put("callId", callId);
+        if (taskId != null) {
+            identity.put("taskId", taskId);
+        }
+        identity.put("toolName", toolName);
+        identity.put("arguments", arguments);
+        return Map.copyOf(identity);
     }
 }

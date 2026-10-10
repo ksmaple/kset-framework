@@ -5,6 +5,7 @@ public enum AgentStopReason {
     NONE,
     COMPLETED,
     WAITING_INPUT,
+    RECONCILIATION_REQUIRED,
     USER_CANCELLED,
     THREAD_INTERRUPTED,
     TIMEOUT,

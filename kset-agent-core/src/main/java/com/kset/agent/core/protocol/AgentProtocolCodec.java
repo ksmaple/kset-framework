@@ -6,7 +6,7 @@ import com.kset.agent.core.model.ModelResponse;
 /** Converts one model protocol into the stable decision model. Implementations must be thread-safe. */
 public interface AgentProtocolCodec {
 
-    AgentProtocolId id();
+    AgentProtocolId protocolId();
 
     default ModelRequest prepare(ModelRequest request, AgentProtocolContext context) {
         return request;

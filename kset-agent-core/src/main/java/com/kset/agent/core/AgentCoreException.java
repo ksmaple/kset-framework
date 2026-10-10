@@ -5,26 +5,28 @@ import java.util.Objects;
 /** Base exception for failures raised by the agent kernel. */
 public class AgentCoreException extends RuntimeException {
 
-    private final AgentErrorCode code;
+    private final AgentErrorCode errorCode;
     private final boolean retryable;
 
-    public AgentCoreException(AgentErrorCode code, String message) {
-        this(code, message, false, null);
-    }
-
-    public AgentCoreException(AgentErrorCode code, String message, Throwable cause) {
-        this(code, message, false, cause);
+    public AgentCoreException(AgentErrorCode errorCode, String errorMessage) {
+        this(errorCode, errorMessage, false, null);
     }
 
     public AgentCoreException(
-            AgentErrorCode code, String message, boolean retryable, Throwable cause) {
-        super(message, cause);
-        this.code = Objects.requireNonNull(code, "code");
+            AgentErrorCode errorCode, String errorMessage, Throwable cause) {
+        this(errorCode, errorMessage, false, cause);
+    }
+
+    public AgentCoreException(
+            AgentErrorCode errorCode, String errorMessage,
+            boolean retryable, Throwable cause) {
+        super(errorMessage, cause);
+        this.errorCode = Objects.requireNonNull(errorCode, "errorCode");
         this.retryable = retryable;
     }
 
-    public AgentErrorCode code() {
-        return code;
+    public AgentErrorCode errorCode() {
+        return errorCode;
     }
 
     public boolean retryable() {

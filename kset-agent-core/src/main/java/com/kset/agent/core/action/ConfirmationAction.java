@@ -1,6 +1,7 @@
 package com.kset.agent.core.action;
 
-import java.util.LinkedHashMap;
+import com.kset.agent.core.value.AgentValueSnapshot;
+
 import java.util.Map;
 
 public record ConfirmationAction(
@@ -15,11 +16,11 @@ public record ConfirmationAction(
         if (message == null || message.isBlank()) {
             throw new IllegalArgumentException("confirmation message must not be blank");
         }
-        options = options == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(options));
+        options = AgentValueSnapshot.map(options);
     }
 
     @Override
-    public String type() {
+    public String actionType() {
         return StandardActionTypes.CONFIRMATION;
     }
 }

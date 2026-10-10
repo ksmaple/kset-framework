@@ -55,8 +55,9 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
             {"type":"answer_chunk","answer":"..."}
             {"type":"final_answer","answer":"..."}
             {"type":"confirmation","confirmation":{"confirmationId":"...","message":"...","options":{}}}
-            callId is required, unique within one decision, and must be reused for the same operation
-            after confirmation, retry, or resume.
+            callId is required and must identify one operation within the run. Use a new callId for
+            each distinct operation, including later turns, and reuse it only for confirmation,
+            retry, reconciliation, or resume of that same operation.
             An optional root metadata object may carry protocol-neutral extension data.
             """;
 
@@ -79,7 +80,7 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
     }
 
     @Override
-    public AgentProtocolId id() {
+    public AgentProtocolId protocolId() {
         return ID;
     }
 
@@ -210,11 +211,11 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
                     "tool_batch requires at least two tool calls");
         }
         String summary = requiredText(root, "plan");
-        List<ToolCallAction> calls = new ArrayList<>();
+        List<ToolCallAction> toolCalls = new ArrayList<>();
         for (int index = 0; index < values.size(); index++) {
-            calls.add(toolCall(values.get(index), "toolCalls[" + index + "]"));
+            toolCalls.add(toolCall(values.get(index), "toolCalls[" + index + "]"));
         }
-        return new ToolBatchAction(summary, calls);
+        return new ToolBatchAction(summary, toolCalls);
     }
 
     private ToolCallAction toolCall(JsonNode value, String path) {
@@ -222,14 +223,14 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
             throw error(AgentJsonV1ErrorCode.INVALID_TOOL_CALL, path + " must be an object");
         }
         requireOnlyFields(value, path, Set.of("callId", "taskId", "toolName", "arguments"));
-        String name = requiredText(value, "toolName");
+        String toolName = requiredText(value, "toolName");
         JsonNode arguments = value.path("arguments");
         if (!arguments.isObject()) {
             throw error(AgentJsonV1ErrorCode.INVALID_TOOL_ARGUMENTS,
                     path + ".arguments must be an object");
         }
         return new ToolCallAction(requiredText(value, "callId"), value.path("taskId").asText(null),
-                name, objectMapper.convertValue(arguments, MAP_TYPE));
+                toolName, objectMapper.convertValue(arguments, MAP_TYPE));
     }
 
     private ConfirmationAction confirmation(JsonNode value) {
@@ -319,7 +320,8 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
         }
     }
 
-    private AgentProtocolException error(AgentJsonV1ErrorCode code, String message) {
-        return new AgentProtocolException(code.name(), message);
+    private AgentProtocolException error(
+            AgentJsonV1ErrorCode errorCode, String errorMessage) {
+        return new AgentProtocolException(errorCode.name(), errorMessage);
     }
 }

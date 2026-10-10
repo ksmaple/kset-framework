@@ -1,6 +1,7 @@
 package com.kset.agent.core.model;
 
-import java.util.LinkedHashMap;
+import com.kset.agent.core.value.AgentValueSnapshot;
+
 import java.util.Map;
 
 /** Provider-neutral model request. */
@@ -16,10 +17,10 @@ public record ModelRequest(
         if (maxOutputTokens < 0) {
             throw new IllegalArgumentException("maxOutputTokens must not be negative");
         }
-        attributes = attributes == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(attributes));
+        attributes = AgentValueSnapshot.map(attributes);
     }
 
-    public ModelRequest withSystemPrompt(String prompt) {
-        return new ModelRequest(prompt, userPrompt, maxOutputTokens, attributes);
+    public ModelRequest withSystemPrompt(String systemPrompt) {
+        return new ModelRequest(systemPrompt, userPrompt, maxOutputTokens, attributes);
     }
 }

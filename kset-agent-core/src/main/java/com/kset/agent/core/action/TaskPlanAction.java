@@ -13,13 +13,14 @@ public record TaskPlanAction(String summary, List<PlanTask> tasks) implements Ag
         tasks = List.copyOf(tasks);
         Set<String> ids = new HashSet<>();
         for (PlanTask task : tasks) {
-            if (!ids.add(task.id())) {
+            if (!ids.add(task.taskId())) {
                 throw new IllegalArgumentException("plan task ids must be unique");
             }
         }
         for (PlanTask task : tasks) {
-            if (task.dependencies().contains(task.id())
-                    || task.dependencies().stream().anyMatch(dependency -> !ids.contains(dependency))) {
+            if (task.dependsOn().contains(task.taskId())
+                    || task.dependsOn().stream()
+                    .anyMatch(dependencyTaskId -> !ids.contains(dependencyTaskId))) {
                 throw new IllegalArgumentException("plan task dependencies are invalid");
             }
         }
@@ -29,37 +30,38 @@ public record TaskPlanAction(String summary, List<PlanTask> tasks) implements Ag
     }
 
     @Override
-    public String type() {
+    public String actionType() {
         return StandardActionTypes.TASK_PLAN;
     }
 
     private static boolean hasCycle(List<PlanTask> tasks, Set<String> ids) {
         Set<String> visited = new HashSet<>();
         Set<String> visiting = new HashSet<>();
-        for (String id : ids) {
-            if (visit(id, tasks, visited, visiting)) {
+        for (String taskId : ids) {
+            if (visit(taskId, tasks, visited, visiting)) {
                 return true;
             }
         }
         return false;
     }
 
-    private static boolean visit(String id, List<PlanTask> tasks,
+    private static boolean visit(String taskId, List<PlanTask> tasks,
                                  Set<String> visited, Set<String> visiting) {
-        if (visited.contains(id)) {
+        if (visited.contains(taskId)) {
             return false;
         }
-        if (!visiting.add(id)) {
+        if (!visiting.add(taskId)) {
             return true;
         }
-        PlanTask task = tasks.stream().filter(item -> item.id().equals(id)).findFirst().orElseThrow();
-        for (String dependency : task.dependencies()) {
-            if (visit(dependency, tasks, visited, visiting)) {
+        PlanTask task = tasks.stream()
+                .filter(item -> item.taskId().equals(taskId)).findFirst().orElseThrow();
+        for (String dependencyTaskId : task.dependsOn()) {
+            if (visit(dependencyTaskId, tasks, visited, visiting)) {
                 return true;
             }
         }
-        visiting.remove(id);
-        visited.add(id);
+        visiting.remove(taskId);
+        visited.add(taskId);
         return false;
     }
 }

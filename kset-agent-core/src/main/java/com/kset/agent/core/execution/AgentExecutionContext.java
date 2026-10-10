@@ -1,16 +1,22 @@
 package com.kset.agent.core.execution;
 
+import com.kset.agent.core.event.AgentLifecycleStepType;
 import com.kset.agent.core.stop.AgentCancellation;
+import com.kset.agent.core.value.AgentValueSnapshot;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Immutable context for one active invocation of an agent run. */
+/** Immutable trace, cancellation and timing context for one active kernel operation. */
 public record AgentExecutionContext(
         String runId,
+        String invocationId,
+        String stepId,
+        String parentStepId,
+        AgentLifecycleStepType stepType,
+        String operation,
         int turn,
         Instant executionStartedAt,
         Instant issuedAt,
@@ -22,6 +28,22 @@ public record AgentExecutionContext(
         if (runId == null || runId.isBlank()) {
             throw new IllegalArgumentException("runId must not be blank");
         }
+        if (invocationId == null || invocationId.isBlank()) {
+            throw new IllegalArgumentException("invocationId must not be blank");
+        }
+        if (stepId == null || stepId.isBlank()) {
+            throw new IllegalArgumentException("stepId must not be blank");
+        }
+        parentStepId = parentStepId == null || parentStepId.isBlank()
+                ? null : parentStepId.trim();
+        stepType = Objects.requireNonNull(stepType, "stepType");
+        if (operation == null || operation.isBlank()) {
+            throw new IllegalArgumentException("operation must not be blank");
+        }
+        runId = runId.trim();
+        invocationId = invocationId.trim();
+        stepId = stepId.trim();
+        operation = operation.trim();
         if (turn < 0) {
             throw new IllegalArgumentException("turn must not be negative");
         }
@@ -35,7 +57,7 @@ public record AgentExecutionContext(
             throw new IllegalArgumentException("deadline must not be before executionStartedAt");
         }
         cancellation = cancellation == null ? AgentCancellation.none() : cancellation;
-        attributes = attributes == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(attributes));
+        attributes = AgentValueSnapshot.map(attributes);
     }
 
     public boolean isCancellationRequested() {

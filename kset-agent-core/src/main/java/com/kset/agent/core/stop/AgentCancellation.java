@@ -1,6 +1,9 @@
 package com.kset.agent.core.stop;
 
-/** External cancellation probe checked before every model call and after every action. */
+/**
+ * Thread-safe external cancellation probe checked around model and action calls. Sharing one
+ * mutable probe across requests deliberately couples their cancellation and must be avoided.
+ */
 @FunctionalInterface
 public interface AgentCancellation {
 

@@ -1,6 +1,7 @@
 package com.kset.agent.core.strategy;
 
 import com.kset.agent.core.action.AgentAction;
+import com.kset.agent.core.action.AgentObservation;
 import com.kset.agent.core.action.ExtensionAction;
 import com.kset.agent.core.action.PlanTask;
 import com.kset.agent.core.action.StandardActionHandlers;
@@ -27,29 +28,31 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
 
     public static final String PHASE_ATTRIBUTE = "react.phase";
 
-    private final AgentToolRegistry tools;
+    private final AgentToolRegistry toolRegistry;
 
-    public ReactReasoningStrategy(AgentToolRegistry tools) {
-        this.tools = java.util.Objects.requireNonNull(tools, "tools");
+    public ReactReasoningStrategy(AgentToolRegistry toolRegistry) {
+        this.toolRegistry = java.util.Objects.requireNonNull(toolRegistry, "toolRegistry");
     }
 
     @Override
-    public String id() {
+    public String strategyId() {
         return "react";
     }
 
     @Override
     public AgentTurn nextTurn(AgentRequest request, AgentRunState state) {
         ReactPhase phase = resolvePhase(state);
+        Map<String, Object> visibleState = modelVisibleState(state);
         Map<String, Object> attributes = new LinkedHashMap<>();
-        attributes.put("strategy", id());
+        attributes.put("strategy", strategyId());
         attributes.put("phase", phase.name().toLowerCase(java.util.Locale.ROOT));
-        attributes.put("tools", tools.list());
+        attributes.put("tools", toolRegistry.list());
         attributes.put("observations", state.observations());
-        attributes.put("state", state.attributes());
+        attributes.put("state", visibleState);
         attributes.put("confirmedActionIds", confirmedActionIds(request));
-        return new AgentTurn(request.protocol(), new ModelRequest(
-                systemPrompt(phase), userPrompt(request, state, tools.list()),
+        return new AgentTurn(request.protocolId(), new ModelRequest(
+                systemPrompt(phase),
+                userPrompt(request, state, toolRegistry.list(), visibleState),
                 request.options().maxOutputTokens(), attributes));
     }
 
@@ -60,9 +63,9 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         for (AgentAction action : decision.actions()) {
             boolean extensionAllowed = action instanceof ExtensionAction
                     && (phase == ReactPhase.ACTING || phase == ReactPhase.EVALUATING);
-            if (!allowed.contains(action.type()) && !extensionAllowed) {
+            if (!allowed.contains(action.actionType()) && !extensionAllowed) {
                 throw new AgentProtocolException("ACTION_NOT_ALLOWED",
-                        "action " + action.type() + " is not allowed during " + phase);
+                        "action " + action.actionType() + " is not allowed during " + phase);
             }
             validatePlannedTaskReference(state, action);
         }
@@ -112,7 +115,8 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
                     "tool call must reference an existing plan task");
         }
         if (action instanceof ToolBatchAction batch
-                && batch.calls().stream().anyMatch(call -> !taskIds.contains(call.taskId()))) {
+                && batch.toolCalls().stream()
+                .anyMatch(toolCall -> !taskIds.contains(toolCall.taskId()))) {
             throw new AgentProtocolException("UNKNOWN_PLAN_TASK",
                     "every tool batch call must reference an existing plan task");
         }
@@ -125,7 +129,7 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         Set<String> taskIds = new HashSet<>();
         for (Object task : tasks) {
             if (task instanceof PlanTask planTask) {
-                taskIds.add(planTask.id());
+                taskIds.add(planTask.taskId());
             } else if (task instanceof Map<?, ?> taskState) {
                 Object taskId = taskState.get("taskId");
                 if (taskId != null && !String.valueOf(taskId).isBlank()) {
@@ -145,21 +149,29 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         };
     }
 
-    private String userPrompt(AgentRequest request, AgentRunState state, List<AgentToolDescriptor> tools) {
+    private String userPrompt(
+            AgentRequest request, AgentRunState state,
+            List<AgentToolDescriptor> toolDescriptors, Map<String, Object> visibleState) {
         StringBuilder prompt = new StringBuilder("Task:\n").append(request.task());
-        if (!tools.isEmpty()) {
+        if (!toolDescriptors.isEmpty()) {
             prompt.append("\n\nAvailable tools:");
-            tools.forEach(tool -> prompt.append("\n- ").append(tool.name()).append(": ")
+            toolDescriptors.forEach(tool ->
+                    prompt.append("\n- ").append(tool.toolName()).append(": ")
                     .append(tool.description()).append(" schema=").append(tool.inputSchema()));
         }
         if (!state.observations().isEmpty()) {
             prompt.append("\n\nObservations:");
             state.observations().forEach(observation -> prompt.append("\n- ")
                     .append(observation.actionType()).append(" success=")
-                    .append(observation.success()).append(" output=").append(observation.output()));
+                    .append(observation.success()).append(" callId=")
+                    .append(observation.attributes().get(AgentObservation.TOOL_CALL_ID))
+                    .append(" errorCode=")
+                    .append(observation.errorCode()).append(" errorMessage=")
+                    .append(observation.errorMessage()).append(" output=")
+                    .append(observation.output()));
         }
-        if (!state.attributes().isEmpty()) {
-            prompt.append("\n\nRuntime state:\n").append(state.attributes());
+        if (!visibleState.isEmpty()) {
+            prompt.append("\n\nRuntime state:\n").append(visibleState);
         }
         List<String> confirmedActionIds = confirmedActionIds(request);
         if (!confirmedActionIds.isEmpty()) {
@@ -170,6 +182,13 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
             prompt.append("\n\nCorrect the previous protocol error: ").append(protocolError);
         }
         return prompt.toString();
+    }
+
+    private Map<String, Object> modelVisibleState(AgentRunState state) {
+        Map<String, Object> visible = new LinkedHashMap<>(state.attributes());
+        visible.remove(AgentRunState.TOOL_OPERATIONS_ATTRIBUTE);
+        visible.remove(StandardActionHandlers.CONFIRMED_TOOL_OPERATIONS);
+        return Map.copyOf(visible);
     }
 
     private List<String> strings(Object value) {

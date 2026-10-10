@@ -4,21 +4,25 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public record ToolBatchAction(String summary, List<ToolCallAction> calls) implements AgentAction {
+/** A protocol-neutral batch of independent tool calls. */
+public record ToolBatchAction(
+        String summary,
+        List<ToolCallAction> toolCalls) implements AgentAction {
 
     public ToolBatchAction {
-        if (summary == null || summary.isBlank() || calls == null || calls.size() < 2) {
-            throw new IllegalArgumentException("tool batch requires a summary and at least two calls");
+        if (summary == null || summary.isBlank() || toolCalls == null || toolCalls.size() < 2) {
+            throw new IllegalArgumentException(
+                    "tool batch requires a summary and at least two toolCalls");
         }
-        calls = List.copyOf(calls);
+        toolCalls = List.copyOf(toolCalls);
         Set<String> callIds = new HashSet<>();
-        if (calls.stream().anyMatch(call -> !callIds.add(call.callId()))) {
-            throw new IllegalArgumentException("tool batch call ids must be unique");
+        if (toolCalls.stream().anyMatch(toolCall -> !callIds.add(toolCall.callId()))) {
+            throw new IllegalArgumentException("tool batch callIds must be unique");
         }
     }
 
     @Override
-    public String type() {
+    public String actionType() {
         return StandardActionTypes.TOOL_BATCH;
     }
 }

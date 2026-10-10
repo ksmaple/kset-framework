@@ -3,7 +3,10 @@ package com.kset.agent.core;
 /** Stable built-in error codes exposed by the agent core. */
 public enum AgentErrorCode {
     INVALID_REQUEST,
+    ID_GENERATION_FAILED,
     INVALID_SNAPSHOT,
+    INVALID_RESUME_INPUT,
+    PENDING_ACTION_MISMATCH,
     UNSUPPORTED_SNAPSHOT_VERSION,
     INVALID_CONFIGURATION,
     PROTOCOL_NOT_REGISTERED,
@@ -18,6 +21,8 @@ public enum AgentErrorCode {
     TOOL_TIMEOUT,
     TOOL_EXECUTION_FAILED,
     TOOL_BATCH_FAILED,
+    TOOL_RESULT_UNKNOWN,
+    TOOL_IDEMPOTENCY_CONFLICT,
     TOOL_RESULT_MISSING,
     CHECKPOINT_FAILED,
     LISTENER_FAILED,

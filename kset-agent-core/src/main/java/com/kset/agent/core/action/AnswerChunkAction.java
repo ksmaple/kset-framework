@@ -9,7 +9,7 @@ public record AnswerChunkAction(String text) implements AgentAction {
     }
 
     @Override
-    public String type() {
+    public String actionType() {
         return StandardActionTypes.ANSWER_CHUNK;
     }
 }

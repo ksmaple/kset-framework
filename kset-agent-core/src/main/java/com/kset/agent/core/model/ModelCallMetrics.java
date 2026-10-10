@@ -1,6 +1,7 @@
 package com.kset.agent.core.model;
 
-import java.util.LinkedHashMap;
+import com.kset.agent.core.value.AgentValueSnapshot;
+
 import java.util.Map;
 
 /** Provider-neutral model identity and usage values intended for external telemetry. */
@@ -20,8 +21,7 @@ public record ModelCallMetrics(
         requireNonNegative(inputTokens, "inputTokens");
         requireNonNegative(outputTokens, "outputTokens");
         requireNonNegative(totalTokens, "totalTokens");
-        attributes = attributes == null
-                ? Map.of() : Map.copyOf(new LinkedHashMap<>(attributes));
+        attributes = AgentValueSnapshot.map(attributes);
     }
 
     public static ModelCallMetrics empty() {
@@ -38,9 +38,9 @@ public record ModelCallMetrics(
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private static void requireNonNegative(Long value, String name) {
-        if (value != null && value < 0L) {
-            throw new IllegalArgumentException(name + " must not be negative");
+    private static void requireNonNegative(Long tokenCount, String fieldName) {
+        if (tokenCount != null && tokenCount < 0L) {
+            throw new IllegalArgumentException(fieldName + " must not be negative");
         }
     }
 }

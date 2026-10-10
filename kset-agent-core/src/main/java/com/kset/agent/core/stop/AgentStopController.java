@@ -18,18 +18,18 @@ public final class AgentStopController {
 
     public AgentStopDecision evaluate(AgentStopContext context) {
         AgentStopDecision immediate = evaluateImmediate(context);
-        if (immediate.stop()) {
+        if (immediate.shouldStop()) {
             return immediate;
         }
-        if (context.state().status() == AgentRunStatus.COMPLETED) {
+        if (context.state().runStatus() == AgentRunStatus.COMPLETED) {
             return AgentStopDecision.stop(AgentStopReason.COMPLETED,
                     AgentRunStatus.COMPLETED, "final answer completed");
         }
-        if (context.state().status() == AgentRunStatus.SUSPENDED) {
+        if (context.state().runStatus() == AgentRunStatus.SUSPENDED) {
             return AgentStopDecision.stop(AgentStopReason.WAITING_INPUT,
                     AgentRunStatus.SUSPENDED, "external input required");
         }
-        if (context.state().status() == AgentRunStatus.FAILED) {
+        if (context.state().runStatus() == AgentRunStatus.FAILED) {
             return AgentStopDecision.stop(AgentStopReason.FATAL_ERROR,
                     AgentRunStatus.FAILED, "run failed");
         }
@@ -53,7 +53,7 @@ public final class AgentStopController {
     /** Checks action-sensitive limits and host policies between actions in the same turn. */
     public AgentStopDecision evaluateAfterAction(AgentStopContext context) {
         AgentStopDecision immediate = evaluateImmediate(context);
-        if (immediate.stop()) {
+        if (immediate.shouldStop()) {
             return immediate;
         }
         if (context.state().consecutiveNoProgress()
@@ -71,11 +71,11 @@ public final class AgentStopController {
             return AgentStopDecision.stop(AgentStopReason.THREAD_INTERRUPTED,
                     AgentRunStatus.CANCELLED, "thread interrupted");
         }
-        if (context.execution().cancellation().isCancellationRequested()) {
+        if (context.executionContext().cancellation().isCancellationRequested()) {
             return AgentStopDecision.stop(AgentStopReason.USER_CANCELLED,
                     AgentRunStatus.CANCELLED, "cancellation requested");
         }
-        if (!context.now().isBefore(context.execution().deadline())) {
+        if (!context.now().isBefore(context.executionContext().deadline())) {
             return AgentStopDecision.stop(AgentStopReason.TIMEOUT,
                     AgentRunStatus.FAILED, "active execution timeout exceeded");
         }
@@ -84,9 +84,10 @@ public final class AgentStopController {
 
     /** Converts an unexpected kernel failure into the canonical fatal stop decision. */
     public AgentStopDecision fatal(RuntimeException error) {
-        String detail = error.getMessage() == null
+        String stopMessage = error.getMessage() == null
                 ? error.getClass().getSimpleName() : error.getMessage();
-        return AgentStopDecision.stop(AgentStopReason.FATAL_ERROR, AgentRunStatus.FAILED, detail);
+        return AgentStopDecision.stop(
+                AgentStopReason.FATAL_ERROR, AgentRunStatus.FAILED, stopMessage);
     }
 
     private AgentStopDecision evaluatePolicies(AgentStopContext context) {
@@ -103,9 +104,14 @@ public final class AgentStopController {
                         "stop policy returned null: " + policy.getClass().getName());
             }
             AgentStopDecision decision = evaluated.orElse(null);
-            if (decision != null && decision.stop()) {
+            if (decision != null && decision.shouldStop()) {
+                if (decision.runStatus() == AgentRunStatus.COMPLETED) {
+                    throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
+                            "stop policy cannot complete a run without a final answer");
+                }
                 return AgentStopDecision.stop(
-                        AgentStopReason.POLICY, decision.status(), decision.detail());
+                        AgentStopReason.POLICY, decision.runStatus(),
+                        decision.stopMessage());
             }
         }
         return AgentStopDecision.continueRun();

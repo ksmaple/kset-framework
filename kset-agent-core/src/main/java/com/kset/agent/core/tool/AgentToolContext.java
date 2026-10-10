@@ -6,30 +6,38 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 
-/** Identity, cancellation and deadline context for one tool call. */
+/** Tool identity plus the immutable invocation and action-step execution context. */
 public record AgentToolContext(
-        AgentExecutionContext execution,
+        AgentExecutionContext executionContext,
         String callId,
         String taskId,
         String toolName,
         Instant deadline) {
 
     public AgentToolContext {
-        execution = Objects.requireNonNull(execution, "execution");
+        executionContext = Objects.requireNonNull(executionContext, "executionContext");
         if (callId == null || callId.isBlank()) {
             throw new IllegalArgumentException("callId must not be blank");
         }
         if (toolName == null || toolName.isBlank()) {
             throw new IllegalArgumentException("toolName must not be blank");
         }
+        callId = callId.trim();
+        taskId = taskId == null || taskId.isBlank() ? null : taskId.trim();
+        toolName = toolName.trim();
         deadline = Objects.requireNonNull(deadline, "deadline");
-        if (deadline.isAfter(execution.deadline())) {
+        if (deadline.isAfter(executionContext.deadline())) {
             throw new IllegalArgumentException("tool deadline must not exceed execution deadline");
         }
     }
 
     public boolean isCancellationRequested() {
-        return execution.isCancellationRequested();
+        return executionContext.isCancellationRequested();
+    }
+
+    /** Stable structural idempotency identity; never persist {@code callId} by itself. */
+    public AgentToolOperationId operationId() {
+        return new AgentToolOperationId(executionContext.runId(), callId);
     }
 
     public boolean isDeadlineExceeded(Instant now) {

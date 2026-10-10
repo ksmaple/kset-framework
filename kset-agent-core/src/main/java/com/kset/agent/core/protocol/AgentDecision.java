@@ -1,8 +1,8 @@
 package com.kset.agent.core.protocol;
 
 import com.kset.agent.core.action.AgentAction;
+import com.kset.agent.core.value.AgentValueSnapshot;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -14,7 +14,7 @@ public record AgentDecision(List<AgentAction> actions, Map<String, Object> metad
             throw new IllegalArgumentException("decision must contain at least one action");
         }
         actions = List.copyOf(actions);
-        metadata = metadata == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(metadata));
+        metadata = AgentValueSnapshot.map(metadata);
     }
 
     public static AgentDecision of(AgentAction action) {

@@ -1,8 +1,8 @@
 package com.kset.agent.core.action;
 
 import com.kset.agent.core.api.AgentRunStatus;
+import com.kset.agent.core.value.AgentValueSnapshot;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -14,15 +14,26 @@ import java.util.Set;
  */
 public record AgentActionResult(
         List<AgentObservation> observations,
-        AgentRunStatus terminalStatus,
+        AgentRunStatus terminalRunStatus,
         String answer,
         Map<String, Object> stateAttributes,
         Set<String> removedStateAttributes) {
 
     public AgentActionResult {
+        if (terminalRunStatus != null
+                && terminalRunStatus != AgentRunStatus.COMPLETED
+                && terminalRunStatus != AgentRunStatus.SUSPENDED) {
+            throw new IllegalArgumentException(
+                    "terminalRunStatus must be COMPLETED or SUSPENDED");
+        }
+        if (terminalRunStatus == null && answer != null) {
+            throw new IllegalArgumentException("non-terminal action result must not provide an answer");
+        }
+        if (terminalRunStatus != null && (answer == null || answer.isBlank())) {
+            throw new IllegalArgumentException("terminal action result requires a non-blank answer");
+        }
         observations = observations == null ? List.of() : List.copyOf(observations);
-        stateAttributes = stateAttributes == null
-                ? Map.of() : Map.copyOf(new LinkedHashMap<>(stateAttributes));
+        stateAttributes = AgentValueSnapshot.map(stateAttributes);
         removedStateAttributes = removedStateAttributes == null
                 ? Set.of() : Set.copyOf(removedStateAttributes);
     }
@@ -46,12 +57,15 @@ public record AgentActionResult(
                 List.of(), AgentRunStatus.COMPLETED, answer, Map.of(), removedStateAttributes);
     }
 
-    public static AgentActionResult suspended(String message, Map<String, Object> attributes) {
+    public static AgentActionResult suspended(
+            String suspensionMessage, Map<String, Object> stateAttributes) {
         return new AgentActionResult(
-                List.of(), AgentRunStatus.SUSPENDED, message, attributes, Set.of());
+                List.of(), AgentRunStatus.SUSPENDED,
+                suspensionMessage, stateAttributes, Set.of());
     }
 
     public boolean madeProgress() {
-        return terminalStatus != null || observations.stream().anyMatch(AgentObservation::progress);
+        return terminalRunStatus != null
+                || observations.stream().anyMatch(AgentObservation::progress);
     }
 }

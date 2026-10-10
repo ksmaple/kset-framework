@@ -8,6 +8,7 @@ import com.kset.agent.core.action.AgentActionRegistry;
 import com.kset.agent.core.action.StandardActionHandlers;
 import com.kset.agent.core.checkpoint.AgentCheckpointPort;
 import com.kset.agent.core.event.AgentLifecycleListener;
+import com.kset.agent.core.id.AgentIdGenerator;
 import com.kset.agent.core.model.AgentModel;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
 import com.kset.agent.core.protocol.AgentProtocolRegistry;
@@ -29,13 +30,14 @@ import java.util.concurrent.Executor;
 public final class AgentKernelBuilder {
 
     private final AgentModel model;
-    private AgentToolRegistry tools = new InMemoryAgentToolRegistry();
+    private AgentToolRegistry toolRegistry = new InMemoryAgentToolRegistry();
     private Executor toolExecutor = Runnable::run;
-    private AgentReasoningStrategy strategy;
-    private AgentCheckpointPort checkpoints = AgentCheckpointPort.noop();
+    private AgentReasoningStrategy reasoningStrategy;
+    private AgentCheckpointPort checkpointPort = AgentCheckpointPort.noop();
     private Clock clock = Clock.systemUTC();
+    private AgentIdGenerator runIdGenerator;
     private ObjectMapper objectMapper = new ObjectMapper();
-    private final List<AgentProtocolCodec> protocols = new ArrayList<>();
+    private final List<AgentProtocolCodec> protocolCodecs = new ArrayList<>();
     private final List<AgentActionHandler> actionHandlers = new ArrayList<>();
     private final List<AgentStopPolicy> stopPolicies = new ArrayList<>();
     private final List<AgentLifecycleListener> listeners = new ArrayList<>();
@@ -44,74 +46,81 @@ public final class AgentKernelBuilder {
         this.model = requireConfiguration(model, "model");
     }
 
-    public AgentKernelBuilder tools(AgentToolRegistry value) {
-        this.tools = requireConfiguration(value, "tools");
+    public AgentKernelBuilder tools(AgentToolRegistry toolRegistry) {
+        this.toolRegistry = requireConfiguration(toolRegistry, "toolRegistry");
         return this;
     }
 
-    public AgentKernelBuilder toolExecutor(Executor value) {
-        this.toolExecutor = requireConfiguration(value, "toolExecutor");
+    public AgentKernelBuilder toolExecutor(Executor toolExecutor) {
+        this.toolExecutor = requireConfiguration(toolExecutor, "toolExecutor");
         return this;
     }
 
-    public AgentKernelBuilder strategy(AgentReasoningStrategy value) {
-        this.strategy = requireConfiguration(value, "strategy");
+    public AgentKernelBuilder strategy(AgentReasoningStrategy reasoningStrategy) {
+        this.reasoningStrategy = requireConfiguration(reasoningStrategy, "reasoningStrategy");
         return this;
     }
 
-    public AgentKernelBuilder checkpoints(AgentCheckpointPort value) {
-        this.checkpoints = requireConfiguration(value, "checkpoints");
+    public AgentKernelBuilder checkpoints(AgentCheckpointPort checkpointPort) {
+        this.checkpointPort = requireConfiguration(checkpointPort, "checkpointPort");
         return this;
     }
 
-    public AgentKernelBuilder clock(Clock value) {
-        this.clock = requireConfiguration(value, "clock");
+    public AgentKernelBuilder clock(Clock clock) {
+        this.clock = requireConfiguration(clock, "clock");
         return this;
     }
 
-    public AgentKernelBuilder objectMapper(ObjectMapper value) {
-        this.objectMapper = requireConfiguration(value, "objectMapper");
+    /** Configures the generator used only when a new run request has no explicit runId. */
+    public AgentKernelBuilder runIdGenerator(AgentIdGenerator runIdGenerator) {
+        this.runIdGenerator = requireConfiguration(runIdGenerator, "runIdGenerator");
         return this;
     }
 
-    public AgentKernelBuilder protocol(AgentProtocolCodec value) {
-        this.protocols.add(requireConfiguration(value, "protocol"));
+    public AgentKernelBuilder objectMapper(ObjectMapper objectMapper) {
+        this.objectMapper = requireConfiguration(objectMapper, "objectMapper");
         return this;
     }
 
-    public AgentKernelBuilder actionHandler(AgentActionHandler value) {
-        this.actionHandlers.add(requireConfiguration(value, "actionHandler"));
+    public AgentKernelBuilder protocol(AgentProtocolCodec protocolCodec) {
+        this.protocolCodecs.add(requireConfiguration(protocolCodec, "protocolCodec"));
         return this;
     }
 
-    public AgentKernelBuilder stopPolicy(AgentStopPolicy value) {
-        this.stopPolicies.add(requireConfiguration(value, "stopPolicy"));
+    public AgentKernelBuilder actionHandler(AgentActionHandler actionHandler) {
+        this.actionHandlers.add(requireConfiguration(actionHandler, "actionHandler"));
         return this;
     }
 
-    public AgentKernelBuilder listener(AgentLifecycleListener value) {
-        this.listeners.add(requireConfiguration(value, "listener"));
+    public AgentKernelBuilder stopPolicy(AgentStopPolicy stopPolicy) {
+        this.stopPolicies.add(requireConfiguration(stopPolicy, "stopPolicy"));
+        return this;
+    }
+
+    public AgentKernelBuilder listener(AgentLifecycleListener lifecycleListener) {
+        this.listeners.add(requireConfiguration(lifecycleListener, "lifecycleListener"));
         return this;
     }
 
     public AgentLoopKernel build() {
         try {
-            AgentToolRegistry fixedTools = FixedAgentToolRegistry.copyOf(tools);
-            List<AgentProtocolCodec> protocolValues = new ArrayList<>();
-            protocolValues.add(new AgentJsonV1Codec(objectMapper));
-            protocolValues.addAll(protocols);
+            AgentToolRegistry fixedToolRegistry = FixedAgentToolRegistry.copyOf(toolRegistry);
+            List<AgentProtocolCodec> registeredProtocolCodecs = new ArrayList<>();
+            registeredProtocolCodecs.add(new AgentJsonV1Codec(objectMapper));
+            registeredProtocolCodecs.addAll(protocolCodecs);
 
-            List<AgentActionHandler> handlerValues = new ArrayList<>(
-                    StandardActionHandlers.create(fixedTools, toolExecutor));
-            handlerValues.addAll(actionHandlers);
+            List<AgentActionHandler> registeredActionHandlers = new ArrayList<>(
+                    StandardActionHandlers.create(fixedToolRegistry, toolExecutor));
+            registeredActionHandlers.addAll(actionHandlers);
 
-            AgentReasoningStrategy strategyValue = strategy == null
-                    ? new ReactReasoningStrategy(fixedTools) : strategy;
-            String strategyId = requireStrategyId(strategyValue);
-            return new AgentLoopKernel(model, strategyValue, strategyId,
-                    new AgentProtocolRegistry(protocolValues),
-                    new AgentActionRegistry(handlerValues),
-                    new AgentStopController(stopPolicies), checkpoints, listeners, clock);
+            AgentReasoningStrategy selectedReasoningStrategy = reasoningStrategy == null
+                    ? new ReactReasoningStrategy(fixedToolRegistry) : reasoningStrategy;
+            String strategyId = requireStrategyId(selectedReasoningStrategy);
+            return new AgentLoopKernel(model, selectedReasoningStrategy, strategyId,
+                    new AgentProtocolRegistry(registeredProtocolCodecs),
+                    new AgentActionRegistry(registeredActionHandlers),
+                    new AgentStopController(stopPolicies), checkpointPort, listeners, clock,
+                    runIdGenerator);
         } catch (AgentCoreException error) {
             throw error;
         } catch (RuntimeException error) {
@@ -120,21 +129,21 @@ public final class AgentKernelBuilder {
         }
     }
 
-    private static <T> T requireConfiguration(T value, String name) {
-        if (value == null) {
+    private static <T> T requireConfiguration(T configuration, String configurationName) {
+        if (configuration == null) {
             throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
-                    name + " must not be null");
+                    configurationName + " must not be null");
         }
-        return value;
+        return configuration;
     }
 
-    private static String requireStrategyId(AgentReasoningStrategy strategy) {
-        String id = strategy.id();
-        if (id == null || id.isBlank()) {
+    private static String requireStrategyId(AgentReasoningStrategy reasoningStrategy) {
+        String strategyId = reasoningStrategy.strategyId();
+        if (strategyId == null || strategyId.isBlank()) {
             throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
                     "strategy id must not be blank");
         }
-        String normalized = id.trim();
+        String normalized = strategyId.trim();
         if ("agent".equals(normalized) || normalized.startsWith("agent.")) {
             throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
                     "strategy id must not use the agent namespace");

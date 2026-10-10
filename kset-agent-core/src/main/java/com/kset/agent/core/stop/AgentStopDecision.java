@@ -4,21 +4,25 @@ import com.kset.agent.core.api.AgentRunStatus;
 
 import java.util.Objects;
 
-/** Authoritative decision describing whether and why a loop must stop. */
+/** Authoritative decision describing whether, why and in which run status a loop stops. */
 public record AgentStopDecision(
-        boolean stop,
-        AgentStopReason reason,
-        AgentRunStatus status,
-        String detail) {
+        boolean shouldStop,
+        AgentStopReason stopReason,
+        AgentRunStatus runStatus,
+        String stopMessage) {
 
     public AgentStopDecision {
-        reason = Objects.requireNonNull(reason, "reason");
-        status = Objects.requireNonNull(status, "status");
-        detail = detail == null ? "" : detail;
-        if (!stop && (reason != AgentStopReason.NONE || status != AgentRunStatus.RUNNING)) {
+        stopReason = Objects.requireNonNull(stopReason, "stopReason");
+        runStatus = Objects.requireNonNull(runStatus, "runStatus");
+        stopMessage = stopMessage == null ? "" : stopMessage;
+        if (!shouldStop
+                && (stopReason != AgentStopReason.NONE
+                || runStatus != AgentRunStatus.RUNNING)) {
             throw new IllegalArgumentException("continuation decision must use NONE and RUNNING");
         }
-        if (stop && (reason == AgentStopReason.NONE || status == AgentRunStatus.RUNNING)) {
+        if (shouldStop
+                && (stopReason == AgentStopReason.NONE
+                || runStatus == AgentRunStatus.RUNNING)) {
             throw new IllegalArgumentException("stop decision requires a reason and terminal status");
         }
     }
@@ -28,7 +32,7 @@ public record AgentStopDecision(
     }
 
     public static AgentStopDecision stop(
-            AgentStopReason reason, AgentRunStatus status, String detail) {
-        return new AgentStopDecision(true, reason, status, detail);
+            AgentStopReason stopReason, AgentRunStatus runStatus, String stopMessage) {
+        return new AgentStopDecision(true, stopReason, runStatus, stopMessage);
     }
 }

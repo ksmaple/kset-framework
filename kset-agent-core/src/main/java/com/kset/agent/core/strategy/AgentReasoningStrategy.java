@@ -11,12 +11,12 @@ import java.util.List;
 /**
  * Decides how a loop turn is prompted and which semantic decisions are valid.
  * Implementations shared by a kernel must be thread-safe. {@link #afterTurn} may update only
- * attributes under the namespace returned by {@link #id()} and must preserve all kernel-owned
+ * attributes under the namespace returned by {@link #strategyId()} and must preserve all kernel-owned
  * state fields.
  */
 public interface AgentReasoningStrategy {
 
-    String id();
+    String strategyId();
 
     AgentTurn nextTurn(AgentRequest request, AgentRunState state);
 

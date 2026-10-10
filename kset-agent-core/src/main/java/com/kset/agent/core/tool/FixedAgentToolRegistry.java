@@ -17,7 +17,7 @@ public final class FixedAgentToolRegistry implements AgentToolRegistry {
         this.tools = Map.copyOf(tools);
         this.descriptors = tools.values().stream()
                 .map(AgentTool::descriptor)
-                .sorted(Comparator.comparing(AgentToolDescriptor::name))
+                .sorted(Comparator.comparing(AgentToolDescriptor::toolName))
                 .toList();
     }
 
@@ -30,25 +30,26 @@ public final class FixedAgentToolRegistry implements AgentToolRegistry {
             if (descriptor == null) {
                 throw new IllegalArgumentException("listed tool descriptor must not be null");
             }
-            AgentTool tool = source.find(descriptor.name())
+            AgentTool tool = source.find(descriptor.toolName())
                     .orElseThrow(() -> new IllegalArgumentException(
-                            "tool registry listed a missing tool: " + descriptor.name()));
+                            "tool registry listed a missing tool: " + descriptor.toolName()));
             AgentToolDescriptor fixedDescriptor = tool.descriptor();
             if (fixedDescriptor == null) {
                 throw new IllegalArgumentException("tool descriptor must not be null");
             }
-            String name = normalize(fixedDescriptor.name());
-            if (name.isEmpty()
-                    || values.putIfAbsent(name, new FixedTool(fixedDescriptor, tool)) != null) {
-                throw new IllegalArgumentException("duplicate or blank tool name: " + name);
+            String toolName = normalize(fixedDescriptor.toolName());
+            if (toolName.isEmpty()
+                    || values.putIfAbsent(
+                    toolName, new FixedTool(fixedDescriptor, tool)) != null) {
+                throw new IllegalArgumentException("duplicate or blank tool name: " + toolName);
             }
         }
         return new FixedAgentToolRegistry(values);
     }
 
     @Override
-    public Optional<AgentTool> find(String name) {
-        return Optional.ofNullable(tools.get(normalize(name)));
+    public Optional<AgentTool> find(String toolName) {
+        return Optional.ofNullable(tools.get(normalize(toolName)));
     }
 
     @Override

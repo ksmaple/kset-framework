@@ -2,13 +2,15 @@ package com.kset.agent.core.action;
 
 import java.util.List;
 
-/** One task in a model-created execution plan. */
-public record PlanTask(String id, String title, List<String> dependencies) {
+/** One model-created plan task identified by taskId and linked by dependsOn task IDs. */
+public record PlanTask(String taskId, String title, List<String> dependsOn) {
 
     public PlanTask {
-        if (id == null || id.isBlank() || title == null || title.isBlank()) {
-            throw new IllegalArgumentException("plan task id and title must not be blank");
+        if (taskId == null || taskId.isBlank() || title == null || title.isBlank()) {
+            throw new IllegalArgumentException("taskId and title must not be blank");
         }
-        dependencies = dependencies == null ? List.of() : List.copyOf(dependencies);
+        taskId = taskId.trim();
+        title = title.trim();
+        dependsOn = dependsOn == null ? List.of() : List.copyOf(dependsOn);
     }
 }

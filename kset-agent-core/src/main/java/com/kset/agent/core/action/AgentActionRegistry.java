@@ -16,28 +16,29 @@ public final class AgentActionRegistry {
     public AgentActionRegistry(List<AgentActionHandler> handlers) {
         Map<String, AgentActionHandler> values = new LinkedHashMap<>();
         for (AgentActionHandler handler : handlers == null ? List.<AgentActionHandler>of() : handlers) {
-            String type = normalize(handler.actionType());
-            if (type.isEmpty() || values.putIfAbsent(type, handler) != null) {
-                throw new IllegalArgumentException("duplicate or blank action handler type: " + type);
+            String actionType = normalize(handler.actionType());
+            if (actionType.isEmpty() || values.putIfAbsent(actionType, handler) != null) {
+                throw new IllegalArgumentException(
+                        "duplicate or blank action handler actionType: " + actionType);
             }
         }
         this.handlers = Map.copyOf(values);
     }
 
     public AgentActionResult dispatch(AgentAction action, AgentActionContext context) {
-        AgentActionHandler handler = handlers.get(normalize(action.type()));
+        AgentActionHandler handler = handlers.get(normalize(action.actionType()));
         if (handler == null) {
             throw new AgentCoreException(AgentErrorCode.ACTION_NOT_REGISTERED,
-                    "no action handler registered for type: " + action.type());
+                    "no action handler registered for actionType: " + action.actionType());
         }
         return handler.handle(action, context);
     }
 
-    public boolean supports(String type) {
-        return handlers.containsKey(normalize(type));
+    public boolean supports(String actionType) {
+        return handlers.containsKey(normalize(actionType));
     }
 
-    private static String normalize(String type) {
-        return type == null ? "" : type.trim().toLowerCase(Locale.ROOT);
+    private static String normalize(String actionType) {
+        return actionType == null ? "" : actionType.trim().toLowerCase(Locale.ROOT);
     }
 }

@@ -2,19 +2,21 @@ package com.kset.agent.core.protocol;
 
 import java.util.Locale;
 
-/** Stable protocol identity used for registry lookup and snapshot compatibility. */
-public record AgentProtocolId(String name, String version) {
+/** Stable protocolName/protocolVersion identity used for lookup and snapshot compatibility. */
+public record AgentProtocolId(String protocolName, String protocolVersion) {
 
     public AgentProtocolId {
-        if (name == null || name.isBlank() || version == null || version.isBlank()) {
-            throw new IllegalArgumentException("protocol name and version must not be blank");
+        if (protocolName == null || protocolName.isBlank()
+                || protocolVersion == null || protocolVersion.isBlank()) {
+            throw new IllegalArgumentException(
+                    "protocolName and protocolVersion must not be blank");
         }
-        name = name.trim().toLowerCase(Locale.ROOT);
-        version = version.trim().toLowerCase(Locale.ROOT);
+        protocolName = protocolName.trim().toLowerCase(Locale.ROOT);
+        protocolVersion = protocolVersion.trim().toLowerCase(Locale.ROOT);
     }
 
-    /** Human-readable label only; structural identity is the record's name/version pair. */
+    /** Human-readable label only; structural identity is the record's two components. */
     public String key() {
-        return name + ":" + version;
+        return protocolName + ":" + protocolVersion;
     }
 }

@@ -1,6 +1,7 @@
 package com.kset.agent.core.model;
 
-import java.util.LinkedHashMap;
+import com.kset.agent.core.value.AgentValueSnapshot;
+
 import java.util.List;
 import java.util.Map;
 
@@ -16,7 +17,7 @@ public record ModelResponse(
         text = text == null ? "" : text;
         toolCalls = toolCalls == null ? List.of() : List.copyOf(toolCalls);
         metrics = metrics == null ? ModelCallMetrics.empty() : metrics;
-        metadata = metadata == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(metadata));
+        metadata = AgentValueSnapshot.map(metadata);
     }
 
     /** Compatibility constructor for callers that do not expose standard call metrics yet. */

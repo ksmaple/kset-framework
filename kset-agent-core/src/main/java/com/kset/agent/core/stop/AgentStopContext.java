@@ -6,9 +6,10 @@ import com.kset.agent.core.loop.AgentRunState;
 
 import java.time.Instant;
 
+/** Read-only Agent state and execution context supplied to one stop-policy evaluation. */
 public record AgentStopContext(
         AgentRequest request,
         AgentRunState state,
-        AgentExecutionContext execution,
+        AgentExecutionContext executionContext,
         Instant now) {
 }

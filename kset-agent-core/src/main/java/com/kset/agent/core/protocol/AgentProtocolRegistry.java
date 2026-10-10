@@ -11,35 +11,35 @@ import java.util.Map;
 public final class AgentProtocolRegistry {
 
     private final Map<AgentProtocolId, AgentProtocolCodec> codecs;
-    private final List<AgentProtocolId> supportedProtocols;
+    private final List<AgentProtocolId> supportedProtocolIds;
 
     public AgentProtocolRegistry(List<AgentProtocolCodec> codecs) {
         Map<AgentProtocolId, AgentProtocolCodec> values = new LinkedHashMap<>();
         for (AgentProtocolCodec codec : codecs == null ? List.<AgentProtocolCodec>of() : codecs) {
-            AgentProtocolId id = codec == null ? null : codec.id();
-            if (id == null || values.putIfAbsent(id, codec) != null) {
+            AgentProtocolId protocolId = codec == null ? null : codec.protocolId();
+            if (protocolId == null || values.putIfAbsent(protocolId, codec) != null) {
                 throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
                         "duplicate or missing protocol codec");
             }
         }
         this.codecs = Map.copyOf(values);
-        this.supportedProtocols = List.copyOf(values.keySet());
+        this.supportedProtocolIds = List.copyOf(values.keySet());
     }
 
-    public AgentProtocolCodec require(AgentProtocolId id) {
-        if (id == null) {
+    public AgentProtocolCodec require(AgentProtocolId protocolId) {
+        if (protocolId == null) {
             throw new AgentCoreException(AgentErrorCode.PROTOCOL_NOT_REGISTERED,
                     "agent protocol is not registered: null");
         }
-        AgentProtocolCodec codec = codecs.get(id);
+        AgentProtocolCodec codec = codecs.get(protocolId);
         if (codec == null) {
             throw new AgentCoreException(AgentErrorCode.PROTOCOL_NOT_REGISTERED,
-                    "agent protocol is not registered: " + id.key());
+                    "agent protocol is not registered: " + protocolId.key());
         }
         return codec;
     }
 
-    public List<AgentProtocolId> supportedProtocols() {
-        return supportedProtocols;
+    public List<AgentProtocolId> supportedProtocolIds() {
+        return supportedProtocolIds;
     }
 }

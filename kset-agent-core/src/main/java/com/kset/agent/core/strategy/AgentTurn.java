@@ -6,10 +6,10 @@ import com.kset.agent.core.protocol.AgentProtocolId;
 import java.util.Objects;
 
 /** Model request and protocol selected for one reasoning turn. */
-public record AgentTurn(AgentProtocolId protocol, ModelRequest modelRequest) {
+public record AgentTurn(AgentProtocolId protocolId, ModelRequest modelRequest) {
 
     public AgentTurn {
-        Objects.requireNonNull(protocol, "protocol");
+        Objects.requireNonNull(protocolId, "protocolId");
         Objects.requireNonNull(modelRequest, "modelRequest");
     }
 }

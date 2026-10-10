@@ -16,14 +16,17 @@ import java.util.List;
 
 /**
  * Thread-safe, read-only lifecycle observer. Every callback with a lifecycle context has a stable
- * event type, invocation identity, sequence and timing envelope. Listeners cannot override loop or
- * stop decisions. A critical listener can fail active-loop callbacks, but terminal callbacks are
- * always best-effort because the returned result has already been decided.
+ * event type, run/invocation/step/event identities, operation and timing envelope. Listeners cannot
+ * override loop or stop decisions. A critical listener can fail active-loop callbacks, but
+ * terminal callbacks are always best-effort because the returned result has already been decided.
  */
 public interface AgentLifecycleListener {
 
     /** Applies only to callbacks invoked while the loop can still advance. */
     default boolean critical() { return false; }
+
+    /** Receives every lifecycle event and is the preferred endpoint for complete step logs. */
+    default void onEvent(AgentLifecycleContext context) { }
 
     default void beforeRun(AgentLifecycleContext context,
                            AgentRequest request, AgentRunState state) {
@@ -43,6 +46,9 @@ public interface AgentLifecycleListener {
         afterModel(request, state, response);
     }
 
+    default void beforeDecision(AgentLifecycleContext context, AgentRequest request,
+                                AgentRunState state, ModelResponse response) { }
+
     default void afterDecision(AgentLifecycleContext context, AgentRequest request,
                                AgentRunState state, AgentDecision decision) {
         afterDecision(request, state, decision);
@@ -60,6 +66,9 @@ public interface AgentLifecycleListener {
                            AgentRunState state, AgentDecision decision,
                            List<AgentActionResult> results) { }
 
+    default void onTurnError(AgentLifecycleContext context, AgentRequest request,
+                             AgentRunState state, RuntimeException error) { }
+
     default void onProtocolError(AgentLifecycleContext context, AgentRequest request,
                                  AgentRunState state, AgentProtocolException error) {
         onProtocolError(request, state, error);
@@ -70,6 +79,10 @@ public interface AgentLifecycleListener {
 
     default void afterCheckpoint(AgentLifecycleContext context, AgentRequest request,
                                  AgentRunSnapshot snapshot) { }
+
+    /** Best-effort notification that cannot replace the checkpoint failure being reported. */
+    default void onCheckpointError(AgentLifecycleContext context, AgentRequest request,
+                                   AgentRunSnapshot snapshot, RuntimeException error) { }
 
     /** Best-effort terminal notification; exceptions are ignored by the kernel. */
     default void onStop(AgentLifecycleContext context, AgentRequest request,

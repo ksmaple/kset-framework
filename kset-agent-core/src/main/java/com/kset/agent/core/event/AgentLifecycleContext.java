@@ -4,14 +4,18 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 
-/** Stable identity and timing envelope attached to every lifecycle callback. */
+/** Stable Agent identity, eventSequence and timing envelope for every lifecycle callback. */
 public record AgentLifecycleContext(
         int version,
         AgentLifecycleEventType eventType,
         AgentInvocationType invocationType,
         String invocationId,
-        long sequence,
+        long eventSequence,
         String runId,
+        String stepId,
+        String parentStepId,
+        AgentLifecycleStepType stepType,
+        String operation,
         int turn,
         int actionIndex,
         Instant occurredAt,
@@ -19,7 +23,7 @@ public record AgentLifecycleContext(
         Instant deadline,
         Duration elapsed) {
 
-    public static final int CURRENT_VERSION = 1;
+    public static final int CURRENT_VERSION = 2;
     public static final int NO_ACTION = -1;
 
     public AgentLifecycleContext {
@@ -31,12 +35,23 @@ public record AgentLifecycleContext(
         if (invocationId == null || invocationId.isBlank()) {
             throw new IllegalArgumentException("invocationId must not be blank");
         }
-        if (sequence < 1L) {
-            throw new IllegalArgumentException("lifecycle sequence must be positive");
+        if (eventSequence < 1L) {
+            throw new IllegalArgumentException("eventSequence must be positive");
         }
         if (runId == null || runId.isBlank()) {
             throw new IllegalArgumentException("runId must not be blank");
         }
+        if (stepId == null || stepId.isBlank()) {
+            throw new IllegalArgumentException("stepId must not be blank");
+        }
+        parentStepId = parentStepId == null || parentStepId.isBlank()
+                ? null : parentStepId.trim();
+        stepType = Objects.requireNonNull(stepType, "stepType");
+        if (operation == null || operation.isBlank()) {
+            throw new IllegalArgumentException("operation must not be blank");
+        }
+        stepId = stepId.trim();
+        operation = operation.trim();
         if (turn < 0 || actionIndex < NO_ACTION) {
             throw new IllegalArgumentException("turn or actionIndex is invalid");
         }
@@ -51,10 +66,24 @@ public record AgentLifecycleContext(
 
     /** Unique within the process lifetime and stable for this emitted event. */
     public String eventId() {
-        return invocationId + ":" + sequence;
+        return invocationId + ":" + eventSequence;
     }
 
     public boolean actionScoped() {
         return actionIndex != NO_ACTION;
+    }
+
+    /** Derives the per-event logging status; callers must not treat it as an AgentRunStatus. */
+    public AgentLifecycleStatus status() {
+        return switch (eventType) {
+            case RUN_STARTED, TURN_STARTED, MODEL_STARTED, DECISION_STARTED,
+                    ACTION_STARTED, CHECKPOINT_SAVING ->
+                    AgentLifecycleStatus.STARTED;
+            case MODEL_COMPLETED, DECISION_ACCEPTED, ACTION_COMPLETED, TURN_COMPLETED,
+                    CHECKPOINT_SAVED, RUN_RETURNED -> AgentLifecycleStatus.COMPLETED;
+            case TURN_FAILED, PROTOCOL_ERROR, CHECKPOINT_FAILED, RUN_FAILED ->
+                    AgentLifecycleStatus.FAILED;
+            case RUN_STOPPED -> AgentLifecycleStatus.STOPPED;
+        };
     }
 }

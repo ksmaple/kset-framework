@@ -38,7 +38,7 @@ public record AgentLoopOptions(
                 Duration.ofMinutes(2), Duration.ofMinutes(2), 8, 8);
     }
 
-    private static AgentCoreException invalid(String message) {
-        return new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION, message);
+    private static AgentCoreException invalid(String errorMessage) {
+        return new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION, errorMessage);
     }
 }

@@ -4,8 +4,9 @@ import com.kset.agent.core.api.AgentRequest;
 import com.kset.agent.core.loop.AgentRunSnapshot;
 
 /**
- * Thread-safe, host-owned snapshot sink. The host remains responsible for loading snapshots before
- * resume and for applying any ownership, revision or fencing checks required by its storage model.
+ * Thread-safe, host-owned snapshot sink. Concurrent invocations must be isolated by run identity.
+ * The host remains responsible for loading snapshots before resume and for applying any ownership,
+ * revision or fencing checks required by its storage model.
  */
 public interface AgentCheckpointPort {
 

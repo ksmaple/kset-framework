@@ -4,14 +4,15 @@ import com.kset.agent.core.AgentErrorCode;
 
 import java.util.Objects;
 
-/** Structured technical failure returned when an active loop execution fails. */
+/** Stable technical error code and safe message returned for an active-loop failure. */
 public record AgentFailure(
-        AgentErrorCode code,
-        String message,
+        AgentErrorCode errorCode,
+        String errorMessage,
         boolean retryable) {
 
     public AgentFailure {
-        code = Objects.requireNonNull(code, "code");
-        message = message == null || message.isBlank() ? code.name() : message;
+        errorCode = Objects.requireNonNull(errorCode, "errorCode");
+        errorMessage = errorMessage == null || errorMessage.isBlank()
+                ? errorCode.name() : errorMessage;
     }
 }

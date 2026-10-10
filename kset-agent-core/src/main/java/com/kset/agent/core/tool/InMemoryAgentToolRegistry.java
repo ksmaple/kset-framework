@@ -17,24 +17,27 @@ public final class InMemoryAgentToolRegistry implements AgentToolRegistry {
         if (tool == null || tool.descriptor() == null) {
             throw new IllegalArgumentException("tool and descriptor must not be null");
         }
-        tools.put(normalize(tool.descriptor().name()), tool);
+        String toolName = normalize(tool.descriptor().toolName());
+        if (tools.putIfAbsent(toolName, tool) != null) {
+            throw new IllegalArgumentException("duplicate tool name: " + toolName);
+        }
         return this;
     }
 
-    public void unregister(String name) {
-        tools.remove(normalize(name));
+    public void unregister(String toolName) {
+        tools.remove(normalize(toolName));
     }
 
     @Override
-    public Optional<AgentTool> find(String name) {
-        return Optional.ofNullable(tools.get(normalize(name)));
+    public Optional<AgentTool> find(String toolName) {
+        return Optional.ofNullable(tools.get(normalize(toolName)));
     }
 
     @Override
     public List<AgentToolDescriptor> list() {
         return tools.values().stream()
                 .map(AgentTool::descriptor)
-                .sorted(java.util.Comparator.comparing(AgentToolDescriptor::name))
+                .sorted(java.util.Comparator.comparing(AgentToolDescriptor::toolName))
                 .toList();
     }
 

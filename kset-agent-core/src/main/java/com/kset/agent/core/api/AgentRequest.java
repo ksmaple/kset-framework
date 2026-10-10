@@ -5,21 +5,21 @@ import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.loop.AgentLoopOptions;
 import com.kset.agent.core.protocol.AgentProtocolId;
 import com.kset.agent.core.stop.AgentCancellation;
+import com.kset.agent.core.value.AgentValueSnapshot;
 
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 
 /**
- * Input to a new or resumed agent run. Attribute values must be serializable and remain immutable
- * for the duration of an active execution.
+ * Input to a new or resumed agent run. A new request may omit runId when the kernel has a run ID
+ * generator; resume requests must provide the snapshot runId. Structured attribute containers
+ * are recursively snapshotted; opaque values must be immutable or scoped to this request.
  */
 public record AgentRequest(
         String runId,
         String task,
-        AgentProtocolId protocol,
+        AgentProtocolId protocolId,
         AgentLoopOptions options,
         Map<String, Object> attributes,
         AgentCancellation cancellation) {
@@ -29,20 +29,19 @@ public record AgentRequest(
     private static final String REACT_ATTRIBUTE_PREFIX = "react.";
 
     public AgentRequest {
-        runId = runId == null || runId.isBlank() ? UUID.randomUUID().toString() : runId.trim();
+        runId = runId == null || runId.isBlank() ? null : runId.trim();
         if (task == null || task.isBlank()) {
             throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
                     "task must not be blank");
         }
         task = task.trim();
-        if (protocol == null) {
+        if (protocolId == null) {
             throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
-                    "protocol must not be null");
+                    "protocolId must not be null");
         }
         options = options == null ? AgentLoopOptions.defaults() : options;
         try {
-            attributes = attributes == null
-                    ? Map.of() : Map.copyOf(new LinkedHashMap<>(attributes));
+            attributes = AgentValueSnapshot.map(attributes);
         } catch (RuntimeException error) {
             throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
                     "request attributes must not contain null keys or values", error);
@@ -56,9 +55,27 @@ public record AgentRequest(
         cancellation = cancellation == null ? AgentCancellation.none() : cancellation;
     }
 
-    public static AgentRequest of(String task, AgentProtocolId protocol) {
-        return new AgentRequest(null, task, protocol, AgentLoopOptions.defaults(), Map.of(),
+    public static AgentRequest of(String task, AgentProtocolId protocolId) {
+        return new AgentRequest(null, task, protocolId, AgentLoopOptions.defaults(), Map.of(),
                 AgentCancellation.none());
+    }
+
+    public static AgentRequest of(
+            String runId, String task, AgentProtocolId protocolId) {
+        return new AgentRequest(runId, task, protocolId, AgentLoopOptions.defaults(), Map.of(),
+                AgentCancellation.none());
+    }
+
+    public boolean hasRunId() {
+        return runId != null;
+    }
+
+    public AgentRequest withRunId(String runId) {
+        if (runId == null || runId.isBlank()) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
+                    "runId must not be blank");
+        }
+        return new AgentRequest(runId, task, protocolId, options, attributes, cancellation);
     }
 
     public boolean isActionConfirmed(String actionId) {

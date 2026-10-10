@@ -1,12 +1,22 @@
 package com.kset.agent.core.model;
 
-import java.util.LinkedHashMap;
+import com.kset.agent.core.value.AgentValueSnapshot;
+
 import java.util.Map;
 
-/** Native tool call emitted by a provider that supports function calling. */
-public record ModelToolCall(String id, String name, Map<String, Object> arguments) {
+/** Provider-native tool call normalized to the core callId/toolName vocabulary. */
+public record ModelToolCall(
+        String callId,
+        String toolName,
+        Map<String, Object> arguments) {
 
     public ModelToolCall {
-        arguments = arguments == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(arguments));
+        callId = normalize(callId);
+        toolName = normalize(toolName);
+        arguments = AgentValueSnapshot.map(arguments);
+    }
+
+    private static String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

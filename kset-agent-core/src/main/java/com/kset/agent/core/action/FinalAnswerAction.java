@@ -9,7 +9,7 @@ public record FinalAnswerAction(String answer) implements AgentAction {
     }
 
     @Override
-    public String type() {
+    public String actionType() {
         return StandardActionTypes.FINAL_ANSWER;
     }
 }

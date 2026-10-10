@@ -1,6 +1,6 @@
 package com.kset.agent.core.api;
 
-/** Lifecycle status exposed by the stable loop API. */
+/** Stable execution status of an agent run, distinct from per-event lifecycle status. */
 public enum AgentRunStatus {
     RUNNING,
     SUSPENDED,
