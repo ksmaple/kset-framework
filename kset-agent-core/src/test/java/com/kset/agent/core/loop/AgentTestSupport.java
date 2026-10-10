@@ -1,29 +1,28 @@
 package com.kset.agent.core.loop;
 
-import com.kset.agent.core.action.AgentAction;
-import com.kset.agent.core.action.AgentActionResult;
 import com.kset.agent.core.api.AgentRequest;
-import com.kset.agent.core.api.AgentResult;
 import com.kset.agent.core.checkpoint.AgentCheckpointPort;
 import com.kset.agent.core.event.AgentLifecycleContext;
+import com.kset.agent.core.event.AgentLifecycleEventType;
 import com.kset.agent.core.event.AgentLifecycleListener;
 import com.kset.agent.core.model.AgentModel;
 import com.kset.agent.core.model.ModelRequest;
 import com.kset.agent.core.model.ModelResponse;
-import com.kset.agent.core.protocol.AgentDecision;
 import com.kset.agent.core.protocol.AgentProtocolException;
 import com.kset.agent.core.protocol.json.AgentJsonV1Codec;
 import com.kset.agent.core.stop.AgentCancellation;
-import com.kset.agent.core.stop.AgentStopDecision;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 final class AgentTestSupport {
 
@@ -52,6 +51,60 @@ final class AgentTestSupport {
         return new AgentLoopOptions(maxTurns, Duration.ofSeconds(10), protocolErrorLimit,
                 noProgressLimit, 256, Duration.ofSeconds(3), Duration.ofSeconds(3),
                 maxActions, maxBatchCalls);
+    }
+
+    static void assertLifecycleTrace(List<AgentLifecycleContext> events, String runId) {
+        assertThat(events).isNotEmpty();
+        AgentLifecycleContext runStarted = events.getFirst();
+        assertThat(runStarted.eventType()).isEqualTo(AgentLifecycleEventType.RUN_STARTED);
+        assertThat(events.getLast().eventType())
+                .isEqualTo(AgentLifecycleEventType.RUN_RETURNED);
+        Map<String, AgentLifecycleContext> openSteps = new HashMap<>();
+        for (int index = 0; index < events.size(); index++) {
+            AgentLifecycleContext event = events.get(index);
+            assertThat(event.runId()).isEqualTo(runId);
+            assertThat(event.invocationId()).isEqualTo(runStarted.invocationId());
+            assertThat(event.eventSequence()).isEqualTo(index + 1L);
+            assertThat(event.eventId())
+                    .isEqualTo(event.invocationId() + ":" + event.eventSequence());
+            AgentLifecycleEventType startedType = startedType(event.eventType());
+            if (event.eventType() == startedType) {
+                if (event.eventType() == AgentLifecycleEventType.RUN_STARTED) {
+                    assertThat(event.parentStepId()).isNull();
+                } else {
+                    assertThat(openSteps).containsKey(event.parentStepId());
+                }
+                assertThat(openSteps.put(event.stepId(), event)).isNull();
+            } else if (startedType != null) {
+                AgentLifecycleContext started = openSteps.remove(event.stepId());
+                assertThat(started).as("start event for %s", event.eventType()).isNotNull();
+                assertThat(started.eventType()).isEqualTo(startedType);
+                assertThat(event.parentStepId()).isEqualTo(started.parentStepId());
+                assertThat(event.stepType()).isEqualTo(started.stepType());
+                assertThat(event.operation()).isEqualTo(started.operation());
+            } else if (event.eventType() == AgentLifecycleEventType.RUN_FAILED) {
+                assertThat(event.stepId()).isEqualTo(runStarted.stepId());
+                assertThat(openSteps).containsKey(runStarted.stepId());
+            } else if (event.eventType() == AgentLifecycleEventType.RUN_RETURNED) {
+                assertThat(event.stepId()).isEqualTo(runStarted.stepId());
+                assertThat(openSteps).isEmpty();
+            }
+        }
+        assertThat(openSteps).isEmpty();
+    }
+
+    private static AgentLifecycleEventType startedType(AgentLifecycleEventType eventType) {
+        return switch (eventType) {
+            case RUN_STARTED, RUN_STOPPED -> AgentLifecycleEventType.RUN_STARTED;
+            case TURN_STARTED, TURN_COMPLETED, TURN_FAILED -> AgentLifecycleEventType.TURN_STARTED;
+            case MODEL_STARTED, MODEL_COMPLETED, MODEL_FAILED -> AgentLifecycleEventType.MODEL_STARTED;
+            case DECISION_STARTED, DECISION_ACCEPTED, DECISION_FAILED, PROTOCOL_ERROR ->
+                    AgentLifecycleEventType.DECISION_STARTED;
+            case ACTION_STARTED, ACTION_COMPLETED, ACTION_FAILED -> AgentLifecycleEventType.ACTION_STARTED;
+            case CHECKPOINT_SAVING, CHECKPOINT_SAVED, CHECKPOINT_FAILED ->
+                    AgentLifecycleEventType.CHECKPOINT_SAVING;
+            case RUN_FAILED, RUN_RETURNED -> null;
+        };
     }
 
     static final class ScriptedModel implements AgentModel {
@@ -104,56 +157,7 @@ final class AgentTestSupport {
         private final AtomicInteger protocolErrors = new AtomicInteger();
 
         @Override
-        public void beforeRun(
-                AgentLifecycleContext context, AgentRequest request, AgentRunState state) {
-            events.add(context);
-        }
-
-        @Override
-        public void beforeTurn(
-                AgentLifecycleContext context, AgentRequest request, AgentRunState state) {
-            events.add(context);
-        }
-
-        @Override
-        public void beforeModel(
-                AgentLifecycleContext context, AgentRequest request,
-                AgentRunState state, ModelRequest modelRequest) {
-            events.add(context);
-        }
-
-        @Override
-        public void afterModel(
-                AgentLifecycleContext context, AgentRequest request,
-                AgentRunState state, ModelResponse response) {
-            events.add(context);
-        }
-
-        @Override
-        public void afterDecision(
-                AgentLifecycleContext context, AgentRequest request,
-                AgentRunState state, AgentDecision decision) {
-            events.add(context);
-        }
-
-        @Override
-        public void beforeAction(
-                AgentLifecycleContext context, AgentRequest request,
-                AgentRunState state, AgentAction action) {
-            events.add(context);
-        }
-
-        @Override
-        public void afterAction(
-                AgentLifecycleContext context, AgentRequest request, AgentRunState state,
-                AgentAction action, AgentActionResult result) {
-            events.add(context);
-        }
-
-        @Override
-        public void afterTurn(
-                AgentLifecycleContext context, AgentRequest request, AgentRunState state,
-                AgentDecision decision, List<AgentActionResult> results) {
+        public void onEvent(AgentLifecycleContext context) {
             events.add(context);
         }
 
@@ -161,40 +165,7 @@ final class AgentTestSupport {
         public void onProtocolError(
                 AgentLifecycleContext context, AgentRequest request,
                 AgentRunState state, AgentProtocolException error) {
-            events.add(context);
             protocolErrors.incrementAndGet();
-        }
-
-        @Override
-        public void beforeCheckpoint(
-                AgentLifecycleContext context, AgentRequest request, AgentRunSnapshot snapshot) {
-            events.add(context);
-        }
-
-        @Override
-        public void afterCheckpoint(
-                AgentLifecycleContext context, AgentRequest request, AgentRunSnapshot snapshot) {
-            events.add(context);
-        }
-
-        @Override
-        public void onStop(
-                AgentLifecycleContext context, AgentRequest request,
-                AgentRunState state, AgentStopDecision decision) {
-            events.add(context);
-        }
-
-        @Override
-        public void onError(
-                AgentLifecycleContext context, AgentRequest request,
-                AgentRunState state, RuntimeException error) {
-            events.add(context);
-        }
-
-        @Override
-        public void afterRun(
-                AgentLifecycleContext context, AgentRequest request, AgentResult result) {
-            events.add(context);
         }
 
         List<AgentLifecycleContext> events() {

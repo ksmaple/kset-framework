@@ -106,7 +106,9 @@
 
 `agent.*` 和 `react.*` 是内核保留属性前缀。请求侧唯一公开的内核属性是 `agent.confirmedActionIds`；宿主不得写入快照中的内部工具操作或确认账本，扩展应使用自己的命名空间。`agent.pendingAction` 只在等待确认或标准工具结果核验时保留，并在确认消费、工具结束、核验恢复或最终回答时由内核删除。内部账本不会进入默认 ReAct Prompt。
 
-`runId`、`invocationId`、`stepId`、`parentStepId`、`stepType` 和 `operation` 属于 Kernel 生成的固定执行追踪信封，不属于模型 JSON 字段。Codec 不得从模型输出读取或覆盖这些身份；外部适配器应从 `AgentExecutionContext`、`AgentToolContext` 或 `AgentLifecycleContext` 获取。
+`runId`、`invocationId`、`stepId`、`parentStepId`、`stepType` 和 `operation` 属于 Kernel 固定的执行追踪信封，不属于模型 JSON 字段。Kernel 在入口绑定调用方提供或生成的 `runId`。该值是一次可恢复 Agent 任务的 ID，宿主跨系统字段应称为 `agentRunId` 并映射同一值；不能用会话 `sessionId` 或计划 `taskId` 替代。Codec 不得从模型输出读取或覆盖这些身份；外部适配器应从 `AgentExecutionContext`、`AgentToolContext` 或 `AgentLifecycleContext` 获取。
+
+模型 JSON 中的 `answer` 是动作文本：`final_answer` 完成后才成为 `AgentResult.answer`；`confirmation.message` 是暂停提示，只进入快照 v2 的 `suspensionMessage` 和结果的 `stopDecision.stopMessage`。Java 对象的完整字段定义见[对象与字段契约](../core-object-contract.md)。
 
 ## 错误码
 

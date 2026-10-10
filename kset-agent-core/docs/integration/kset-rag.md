@@ -22,6 +22,12 @@ new AgentProtocolId("kset-rag-json", "code-v7")
 
 禁止覆盖 `AgentJsonV1Codec.ID`。
 
+## Agent 任务身份
+
+core 的 `runId` 在 kset-rag 宿主日志和持久化字段中应命名为 `agentRunId`，表示一次可恢复的 Agent 任务；两者是同一个值，不需要双重生成。`sessionId` 表示会话，一个会话可关联多个 `agentRunId`，但同一时刻只能有一个活动 Agent 实例；core 动作的 `taskId` 表示计划任务，宿主既有的 `taskId` 可表示业务工作流任务，均不能默认当作 `agentRunId`；`invocationId` 则只覆盖一次 `run/resume` 调用。创建新 Agent 任务时必须生成或提供独立的 `agentRunId`，恢复时沿用快照中的值。
+
+宿主字段映射以[Core 对象与字段契约](../core-object-contract.md)为准。完成态读取 `AgentResult.answer`；等待确认或结果核验时读取 `stopDecision.stopMessage`，此时 `answer` 为 `null`。持久化快照为 v2；旧 v1 快照不能直接恢复，需显式迁移。
+
 ## 字段映射
 
 | kset-rag 输出 | core 动作 | 适配要求 |
@@ -60,11 +66,11 @@ new AgentProtocolId("kset-rag-json", "code-v7")
 
 ## 观测映射
 
-kset-rag 应在创建 Kernel 时注册 `SnowflakeAgentIdGenerator(datacenterId, workerId)`，节点号来自宿主配置或现有节点分配机制，不能硬编码成所有实例相同的值。新任务由 Kernel 在首个事件前绑定雪花 `runId`；已有业务全局 ID 可直接作为请求 runId；恢复必须使用快照原值。
+kset-rag 应在创建 Kernel 时注册 `SnowflakeAgentIdGenerator(datacenterId, workerId)`，节点号来自宿主配置或现有节点分配机制，不能硬编码成所有实例相同的值。新 Agent 任务由 Kernel 在首个事件前绑定雪花 `runId`，宿主记录为 `agentRunId`；已有独立的 Agent 任务唯一 ID 可直接作为请求 `runId`，但不得用 `sessionId` 或计划 `taskId` 代替；恢复必须使用快照原值。
 
 | core 端点 | kset-rag 现有能力 |
 | --- | --- |
-| `onEvent` | 输出所有步骤的 runId、invocationId、stepId、parentStepId、eventId、状态和 operation |
+| `onEvent` | 将 core `runId` 记录为 `agentRunId`，并输出 invocationId、stepId、parentStepId、eventId、状态和 operation |
 | `beforeRun/beforeTurn` | 工作流开始日志、轮次步骤和执行阶段 |
 | `beforeModel/afterModel` | 模型耗时、Token 用量、provider/model、finishReason |
 | `afterDecision` | 协议决策步骤、progressSummary、resourceRefs 和记忆建议 |
@@ -75,9 +81,9 @@ kset-rag 应在创建 Kernel 时注册 `SnowflakeAgentIdGenerator(datacenterId, 
 | `onStop/onError/afterRun` | 最终任务状态、SSE done/error 和工作流汇总指标 |
 | `onListenerError` | 上报器失败、队列丢弃与告警指标 |
 
-`KsetRagLifecycleListener` 使用 `eventId` 作为单条消息幂等身份，使用 `runId` 关联完整任务，使用 `invocationId` 区分每次 run/resume，使用 `stepId/parentStepId` 配对并组织步骤层级。工具 Action 在专用回调中追加 `callId/taskId/toolName/success/errorCode`。模型原文、Prompt、工具参数、Observation 和请求属性不得直接写日志；现有全量模型错误日志在接入前必须改为长度、指纹及脱敏摘要。
+`KsetRagLifecycleListener` 使用 `eventId` 作为单条消息幂等身份，使用 `agentRunId = event.runId()` 关联完整 Agent 任务，使用 `invocationId` 区分每次 run/resume，使用 `stepId/parentStepId` 配对并组织步骤层级。工具 Action 在专用回调中追加 `callId/taskId/toolName/success/errorCode`。模型原文、Prompt、工具参数、Observation 和请求属性不得直接写日志；现有全量模型错误日志在接入前必须改为长度、指纹及脱敏摘要。
 
-`KsetRagModelAdapter` 必须从 `AgentExecutionContext` 读取并透传 `runId/invocationId/stepId`；`KsetRagToolAdapter` 从 `AgentToolContext.executionContext()` 读取相同身份，并追加 `callId/taskId/toolName`。同一底层调用的开始、响应、异常与重试日志必须沿用这些值，禁止由适配器另行生成 invocationId 或 stepId，否则无法与 `KsetRagLifecycleListener` 的最终步骤清单对账。
+`KsetRagModelAdapter` 必须从 `AgentExecutionContext` 读取并透传 `runId/invocationId/stepId`，宿主日志将 `runId` 写入 `agentRunId` 字段；`KsetRagToolAdapter` 从 `AgentToolContext.executionContext()` 读取相同身份，并追加 `callId/taskId/toolName`。同一底层调用的开始、响应、异常与重试日志必须沿用这些值，禁止由适配器另行生成 invocationId 或 stepId，否则无法与 `KsetRagLifecycleListener` 的最终步骤清单对账。
 
 ## 并发与恢复
 

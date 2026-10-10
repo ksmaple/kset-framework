@@ -81,7 +81,8 @@ public record AgentLifecycleContext(
                     AgentLifecycleStatus.STARTED;
             case MODEL_COMPLETED, DECISION_ACCEPTED, ACTION_COMPLETED, TURN_COMPLETED,
                     CHECKPOINT_SAVED, RUN_RETURNED -> AgentLifecycleStatus.COMPLETED;
-            case TURN_FAILED, PROTOCOL_ERROR, CHECKPOINT_FAILED, RUN_FAILED ->
+            case MODEL_FAILED, DECISION_FAILED, ACTION_FAILED, TURN_FAILED,
+                    PROTOCOL_ERROR, CHECKPOINT_FAILED, RUN_FAILED ->
                     AgentLifecycleStatus.FAILED;
             case RUN_STOPPED -> AgentLifecycleStatus.STOPPED;
         };

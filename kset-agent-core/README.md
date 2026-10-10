@@ -60,6 +60,10 @@ Java API 使用以下固定术语，宿主适配器和扩展实现不应再引�
 
 这些名称是 Java 内核对象契约。`agent-json:v1` 的 `type/taskId/dependsOn/toolName/callId/toolCalls` 等 wire 字段保持固定，由 Codec 显式映射，不因 Java 访问器整理而改变。
 
+所有公开对象与字段的含义、所有者、空值、作用域和持久化边界统一见[对象与字段契约](docs/core-object-contract.md)；同名 `attributes`/`metadata` 不得跨层混用。
+
+跨宿主系统使用明确的 `agentRunId` 作为日志和持久化字段名，其值就是内核 API 的 `runId`，不是额外生成的 ID。`sessionId` 标识会话，一个会话可以包含多个 Agent 任务；计划 `taskId` 标识计划内任务；`invocationId` 只标识一次 `run/resume` 调用。上述 ID 不可互换，尤其不能以 `sessionId` 或计划 `taskId` 代替工具幂等键中的 `runId`。
+
 ### 核心专用对象
 
 | 对象 | 唯一职责 | 不应承载 |
@@ -68,7 +72,7 @@ Java API 使用以下固定术语，宿主适配器和扩展实现不应再引�
 | `AgentRunState` | Kernel 内部当前状态的不可变值 | 宿主工作流对象或外部资源句柄 |
 | `AgentRunSnapshot` | 可持久化、可恢复的版本化运行状态 | 未确认的外部副作用结果 |
 | `AgentDecision` | Codec 输出的协议无关动作集合与协议 metadata | 模型供应商指标或执行追踪身份 |
-| `AgentActionResult` | 一个动作产生的 Observation、状态变更和可选终态 | 未结构化的技术异常 |
+| `AgentActionResult` | 一个动作产生的 Observation、状态变更，以及互斥的最终回答或暂停提示 | 未结构化的技术异常 |
 | `AgentObservation` | 反馈给下一推理轮次的结构化动作结果 | Kernel 停止决定或宿主日志正文 |
 | `AgentExecutionContext` | Kernel 生成的调用、步骤、deadline 与取消信封 | 业务协议字段或可由扩展覆盖的 ID |
 | `AgentToolContext` | 工具操作身份、关联任务和工具 deadline | 单独作为持久化幂等键的 `callId` |
@@ -76,6 +80,8 @@ Java API 使用以下固定术语，宿主适配器和扩展实现不应再引�
 | `AgentLifecycleContext` | 单条观测事件的身份、步骤、状态投影和时间信息 | 恢复权威状态或业务数据载荷 |
 
 `AgentRunStatus` 表示运行状态；`AgentLifecycleContext.status()` 返回的是由事件类型推导的 `AgentLifecycleStatus`，仅用于步骤日志，二者不能混用。`AgentErrorCode`、`AgentStopReason`、`AgentLifecycleEventType`、`AgentLifecycleStatus` 和 `AgentLifecycleStepType` 均为稳定枚举，外部逻辑应按枚举分支，不应解析说明文本。
+
+`AgentResult.answer` 只在 `COMPLETED` 时返回最终回答。`SUSPENDED` 时它为 `null`，等待提示由 `AgentResult.stopDecision().stopMessage()` 返回；快照 v2 独立保存 `suspensionMessage`。旧 v1 快照不能直接按 v2 恢复，已有持久化数据需由宿主显式迁移。
 
 ## 最小接入
 
@@ -98,9 +104,11 @@ AgentRequest request = AgentRequest.of(
 AgentResult result = kernel.run(request);
 ```
 
-`runId` 是整个任务跨 `run/resume` 的全局 ID。上例在 Kernel 收到新请求后、发出第一条生命周期事件前生成雪花 ID；`datacenterId` 和 `workerId` 范围均为 0–31，宿主必须保证每个并发进程使用唯一组合，禁止所有实例沿用相同默认值。业务已有全局雪花 ID 时也可直接传入 `AgentRequest`，此时 Kernel 不调用生成器。恢复请求必须显式传入原快照 `runId`，绝不生成新 ID。生成器异常或空结果分别以稳定的 `ID_GENERATION_FAILED` 返回。
+`runId` 是一次可恢复 Agent 任务跨 `run/resume` 不变的 ID，宿主对外称 `agentRunId`。上例在 Kernel 收到新请求后、发出第一条生命周期事件前生成雪花 ID；`datacenterId` 和 `workerId` 范围均为 0–31，宿主必须保证每个并发进程使用唯一组合，禁止所有实例沿用相同默认值。业务已有专用于该 Agent 任务的唯一 ID 时也可直接传入 `AgentRequest`，此时 Kernel 不调用生成器；不能直接复用会话 ID 或计划任务 ID。恢复请求必须显式传入原快照 `runId`，绝不生成新 ID。生成器异常或空结果分别以稳定的 `ID_GENERATION_FAILED` 返回。
 
 构建器默认使用同步 `Executor`，不会创建或持有线程。需要工具并行执行时，宿主必须通过 `toolExecutor` 提供有界线程池并负责其生命周期。构建器仅用于启动期组装；`build()` 会冻结工具集合，之后修改原工具注册表不会影响已创建的 Kernel。
+
+模型调用默认最多尝试 3 次（首次调用加 2 次重试），仅当模型适配器抛出 `AgentCoreException(AgentErrorCode.MODEL_CALL_FAILED, ..., true, cause)` 时重试。普通异常、`retryable=false`、协议错误和工具错误不会自动重试。可在构建时通过 `modelRetry(new AgentModelRetryOptions(maxAttempts, initialDelay, maxDelay))` 调整次数与退避范围；`maxAttempts` 限 1–10，退避范围限 1 ms–30 s，`maxAttempts=1` 可关闭重试。等待采用有上限的指数退避与抖动，计入本次 `run/resume` 的活动 deadline；取消、线程中断或超时后不会开始下一次模型调用。整个过程仍属于同一个 MODEL step，步骤耗时包含重试等待与全部模型调用。
 
 `AgentLoopKernel` 可以作为单例供多个独立任务并发调用，但注入的 IdGenerator、Model、Strategy、Codec、Handler、Tool、StopPolicy、CheckpointPort 和 Listener 必须线程安全。进入公开数据载体的 Map、List、Set 和数组会被递归快照为只读结构，数组统一规范化为 List；不透明业务 DTO 不做反射复制，必须不可变或按调用独立创建。每个活动请求应使用独立的 `AgentCancellation`；复用同一个可变取消探针会按设计同时取消这些请求。
 
@@ -125,15 +133,16 @@ AgentResult result = kernel.run(request);
 
 ## 外部观测
 
-核心不依赖日志、指标或链路框架，通过 `AgentLifecycleListener` 提供固定观测端点。每条事件都先进入统一 `onEvent`，并携带版本、事件类型、状态、`runId`、`invocationId`、`stepId`、`parentStepId`、`eventId`、`stepType`、`operation`、严格递增序号、turn、零基 actionIndex、事件时间、deadline 和阶段耗时。`runId` 关联整个任务，`invocationId` 关联一次 `run/resume`，同一模型、决策、动作或检查点的 started/completed/failed 事件共享 `stepId`，单条消息使用 `eventId()` 幂等上报。`AgentExecutionContext` 固定携带同一组 invocation/step 身份：Model Adapter 获得 model step，Action Handler 及其 Tool Adapter 获得 action step，StopPolicy 获得检查发生时的当前 step；适配器内部日志可直接与 Listener 最终步骤日志关联。模型、动作与检查点完成事件的耗时只覆盖对应扩展调用，轮次完成事件覆盖整轮处理，最终返回事件覆盖本次调用。检查点失败会额外发出 `CHECKPOINT_FAILED` 并调用 best-effort `onCheckpointError`。
+核心不依赖日志、指标或链路框架，通过 `AgentLifecycleListener` 提供固定观测端点。每条事件都先进入统一 `onEvent`，并携带版本、事件类型、状态、`runId`、`invocationId`、`stepId`、`parentStepId`、`eventId`、`stepType`、`operation`、严格递增序号、turn、零基 actionIndex、事件时间、deadline 和阶段耗时。`runId` 关联整个任务，`invocationId` 关联一次 `run/resume`，同一模型、决策、动作或检查点的 started/completed/failed 事件共享 `stepId`，单条消息使用 `eventId()` 幂等上报。模型、决策或动作异常与提前停止分别发出对应的 `MODEL_FAILED`、`DECISION_FAILED`、`ACTION_FAILED`，未完成的轮次发出 `TURN_FAILED`；`RUN_FAILED/RUN_STOPPED/RUN_RETURNED` 始终归属 run step。`AgentExecutionContext` 固定携带同一组 invocation/step 身份：Model Adapter 获得 model step，Action Handler 及其 Tool Adapter 获得 action step，StopPolicy 获得检查发生时的当前 step；适配器内部日志可直接与 Listener 最终步骤日志关联。模型完成事件的耗时覆盖该步骤的全部尝试与退避等待；动作与检查点完成事件只覆盖对应扩展调用，轮次完成事件覆盖整轮处理，最终返回事件覆盖本次调用。检查点失败会额外发出 `CHECKPOINT_FAILED` 并调用 best-effort `onCheckpointError`。
 
-完整步骤日志优先实现一个非关键 Listener 的 `onEvent`：
+完整步骤日志优先实现一个非关键 Listener 的 `onEvent`。宿主日志字段使用 `agentRunId`，取值来自 `event.runId()`：
 
 ```java
 AgentLifecycleListener stepLogger = new AgentLifecycleListener() {
     @Override
     public void onEvent(AgentLifecycleContext event) {
-        writeStepLog(event.runId(), event.invocationId(), event.stepId(),
+        String agentRunId = event.runId();
+        writeStepLog(agentRunId, event.invocationId(), event.stepId(),
                 event.parentStepId(), event.eventId(), event.eventType(), event.status(),
                 event.stepType(), event.operation(), event.turn(), event.actionIndex(),
                 event.elapsed());
@@ -224,10 +233,11 @@ AgentResult result = kernel.run(request);
 
 ## 中断与恢复
 
-`AgentRunSnapshot` 不保存模型原始思维链，只保存轮次、标准观察、扩展属性、错误计数和停止结果。宿主负责读取快照，再显式恢复：
+`AgentRunSnapshot` v2 不保存模型原始思维链，只保存轮次、标准观察、扩展属性、错误计数、最终回答或暂停提示以及停止结果。宿主负责读取快照，再显式恢复：
 
 ```java
-AgentRunSnapshot snapshot = loadSnapshot(request.runId());
+String agentRunId = request.runId();
+AgentRunSnapshot snapshot = loadSnapshot(agentRunId);
 AgentResult result = kernel.resume(request, snapshot);
 ```
 
@@ -244,7 +254,7 @@ AgentResult result = kernel.resume(request, snapshot, input);
 
 `resume` 只保证从已保存快照继续内核状态转换，不保证崩溃时未完成的外部副作用自动恢复，也不自动重放“已执行但尚未写入快照”的动作。对于 Kernel 已经以 `RECONCILIATION_REQUIRED` 暂停的标准工具动作，宿主必须依靠稳定 `callId` 和权威数据源核验，并通过 `AgentResumeInput` 注入确定结果；其他崩溃恢复、重试和补偿仍由宿主处理。
 
-`AgentCheckpointPort` 是只写快照端口。内核会在启动、协议错误、每个动作结果和停止时同时传入不可变请求与快照，并在写入前后发出固定观测事件；宿主可从请求属性取得 owner、fencing 等执行凭据，并负责快照查询、revision 及持久化条件写。外部工具副作用无法与快照存储形成通用原子事务，工具适配器必须使用 `AgentToolContext.operationId()` 及参数指纹保证幂等；检查点写入失败会发出 `CHECKPOINT_FAILED/onCheckpointError`，并使活动运行以 `FAILED` 返回，不能继续推进后续动作。即使取消、线程中断或超时已触发，若保存对应终态快照再次失败，`run/resume` 仍返回 `FATAL_ERROR + CHECKPOINT_FAILED`，不会把持久化失败作为未捕获异常抛出。
+`AgentCheckpointPort` 是只写快照端口。内核会在启动、协议错误、每个动作结果和停止时同时传入不可变请求与快照，并在写入前后发出固定观测事件；宿主可从请求属性取得 owner、fencing 等执行凭据，并负责快照查询、revision 及持久化条件写。外部工具副作用无法与快照存储形成通用原子事务，工具适配器必须使用 `AgentToolContext.operationId()` 及参数指纹保证幂等；检查点写入失败会发出 `CHECKPOINT_FAILED/onCheckpointError`，并使活动运行以 `FAILED` 返回，不能继续推进后续动作。即使取消、线程中断或超时已触发，若保存对应终态快照再次失败，`run/resume` 仍返回 `FATAL_ERROR + CHECKPOINT_FAILED`，不会把持久化失败作为未捕获异常抛出。处理其他技术故障时若失败快照也无法保存，返回的 `AgentFailure` 优先报告 `CHECKPOINT_FAILED`，原始异常保留为 suppressed cause；宿主不得将返回快照视为已持久化。
 
 会话单飞、任务排队、跨节点租约和“同一会话只能运行一个实例”属于宿主工作流职责，不进入单次任务循环内核。不同会话的资源上限由宿主提供的模型连接池和有界 Executor 负责。
 

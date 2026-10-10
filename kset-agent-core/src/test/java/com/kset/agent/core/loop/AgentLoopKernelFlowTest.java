@@ -11,13 +11,18 @@ import com.kset.agent.core.api.AgentRequest;
 import com.kset.agent.core.api.AgentResumeInput;
 import com.kset.agent.core.api.AgentResult;
 import com.kset.agent.core.api.AgentRunStatus;
+import com.kset.agent.core.event.AgentLifecycleContext;
 import com.kset.agent.core.event.AgentLifecycleEventType;
+import com.kset.agent.core.event.AgentLifecycleListener;
+import com.kset.agent.core.event.AgentInvocationType;
+import com.kset.agent.core.model.AgentModelRetryOptions;
 import com.kset.agent.core.model.ModelRequest;
 import com.kset.agent.core.model.ModelResponse;
 import com.kset.agent.core.protocol.AgentDecision;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
 import com.kset.agent.core.protocol.AgentProtocolContext;
 import com.kset.agent.core.protocol.AgentProtocolId;
+import com.kset.agent.core.protocol.json.AgentJsonV1ErrorCode;
 import com.kset.agent.core.stop.AgentStopDecision;
 import com.kset.agent.core.stop.AgentStopReason;
 import com.kset.agent.core.strategy.AgentReasoningStrategy;
@@ -36,9 +41,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static com.kset.agent.core.loop.AgentTestSupport.assertLifecycleTrace;
 import static com.kset.agent.core.loop.AgentTestSupport.envelope;
 import static com.kset.agent.core.loop.AgentTestSupport.options;
 import static com.kset.agent.core.loop.AgentTestSupport.request;
@@ -46,6 +54,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentLoopKernelFlowTest {
+
+    @Test
+    void rejectsLegacySnapshotAndSuspendedAnswer() {
+        Instant now = Instant.parse("2026-10-10T00:00:00Z");
+        AgentProtocolId protocolId = new AgentProtocolId("agent-json", "v1");
+        assertThatThrownBy(() -> new AgentRunSnapshot(
+                1, "legacy-run", "task", protocolId, AgentRunStatus.RUNNING,
+                0, now, now, List.of(), Map.of(), 0, 0, null, null, null))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.UNSUPPORTED_SNAPSHOT_VERSION));
+
+        AgentStopDecision stopped = AgentStopDecision.stop(
+                AgentStopReason.WAITING_INPUT, AgentRunStatus.SUSPENDED, "confirm");
+        assertThatThrownBy(() -> new AgentRunSnapshot(
+                AgentRunSnapshot.CURRENT_VERSION, "paused-run", "task", protocolId,
+                AgentRunStatus.SUSPENDED, 1, now, now, List.of(), Map.of(),
+                0, 0, "confirm", null, stopped))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_SNAPSHOT));
+    }
 
     @Test
     void completesPlanToolObservationAndFinalAnswerFlow() {
@@ -108,9 +138,7 @@ class AgentLoopKernelFlowTest {
                 AgentLifecycleEventType.TURN_COMPLETED,
                 AgentLifecycleEventType.CHECKPOINT_SAVED,
                 AgentLifecycleEventType.RUN_STOPPED);
-        assertThat(listener.events()).extracting(context -> context.eventSequence())
-                .containsExactlyElementsOf(java.util.stream.LongStream
-                        .rangeClosed(1, listener.events().size()).boxed().toList());
+        assertLifecycleTrace(listener.events(), "flow-run");
     }
 
     @Test
@@ -119,7 +147,9 @@ class AgentLoopKernelFlowTest {
                 "{\"type\":\"final_answer\",\"answer\":\"missing markers\"}",
                 "corrected answer");
         AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
-        AgentLoopKernel kernel = AgentLoopKernel.builder(model).listener(listener).build();
+        List<AgentLifecycleContext> events = new CopyOnWriteArrayList<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).listener(listener)
+                .listener(recordEvents(events)).build();
 
         AgentResult result = kernel.run(request("protocol-correction"));
 
@@ -127,6 +157,36 @@ class AgentLoopKernelFlowTest {
         assertThat(result.answer()).isEqualTo("corrected answer");
         assertThat(result.snapshot().turn()).isEqualTo(2);
         assertThat(listener.protocolErrors()).isEqualTo(1);
+        assertThat(event(events, AgentLifecycleEventType.PROTOCOL_ERROR).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.DECISION_STARTED).stepId());
+        assertLifecycleTrace(events, "protocol-correction");
+    }
+
+    @Test
+    void recoversAfterModelControlCharacterProtocolError() {
+        String invalidJson = envelope("{\"type\":\"final_answer\",\"answer\":\"bad"
+                + (char) 0x01 + "text\"}");
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                invalidJson, "recovered answer");
+        AtomicReference<String> protocolErrorCode = new AtomicReference<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+                .listener(new AgentLifecycleListener() {
+                    @Override
+                    public void onProtocolError(
+                            AgentLifecycleContext context, AgentRequest request,
+                            AgentRunState state,
+                            com.kset.agent.core.protocol.AgentProtocolException error) {
+                        protocolErrorCode.set(error.protocolErrorCode());
+                    }
+                }).build();
+
+        AgentResult result = kernel.run(request("invalid-model-character"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.answer()).isEqualTo("recovered answer");
+        assertThat(model.calls()).isEqualTo(2);
+        assertThat(protocolErrorCode).hasValue(AgentJsonV1ErrorCode.INVALID_JSON.name());
+        assertThat(result.snapshot().consecutiveProtocolErrors()).isZero();
     }
 
     @Test
@@ -151,13 +211,19 @@ class AgentLoopKernelFlowTest {
     void suspendsForConfirmationAndConsumesConfirmedIdOnResume() {
         AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
                 confirmation("confirm-1"), confirmation("confirm-1"), "confirmed answer");
-        AgentLoopKernel kernel = AgentLoopKernel.builder(model).build();
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).listener(listener).build();
         AgentRequest initial = request("confirmation-run");
 
         AgentResult suspended = kernel.run(initial);
 
         assertThat(suspended.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
         assertThat(suspended.stopDecision().stopReason()).isEqualTo(AgentStopReason.WAITING_INPUT);
+        assertThat(suspended.answer()).isNull();
+        assertThat(suspended.snapshot().answer()).isNull();
+        assertThat(suspended.snapshot().suspensionMessage()).isNotBlank();
+        assertThat(suspended.stopDecision().stopMessage())
+                .isEqualTo(suspended.snapshot().suspensionMessage());
         assertThat(suspended.snapshot().attributes())
                 .containsKey(StandardActionHandlers.PENDING_ACTION);
 
@@ -167,11 +233,18 @@ class AgentLoopKernelFlowTest {
 
         assertThat(resumed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
         assertThat(resumed.answer()).isEqualTo("confirmed answer");
+        assertThat(resumed.snapshot().suspensionMessage()).isNull();
         assertThat(resumed.snapshot().attributes())
                 .doesNotContainKey(StandardActionHandlers.PENDING_ACTION);
         assertThat(resumed.snapshot().observations())
                 .anyMatch(observation -> StandardActionTypes.CONFIRMATION.equals(
                         observation.actionType()));
+        assertThat(listener.byInvocation()).hasSize(2);
+        listener.byInvocation().values().forEach(events ->
+                assertLifecycleTrace(events, "confirmation-run"));
+        assertThat(listener.byInvocation().values())
+                .extracting(events -> events.getFirst().invocationType())
+                .containsExactlyInAnyOrder(AgentInvocationType.RUN, AgentInvocationType.RESUME);
     }
 
     @Test
@@ -192,7 +265,9 @@ class AgentLoopKernelFlowTest {
         InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
                 .register(tool("writer", (arguments, context) -> ToolExecutionResult.failure(
                         AgentErrorCode.TOOL_RESULT_UNKNOWN, "remote result unknown")));
-        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools).build();
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools)
+                .listener(listener).build();
         AgentRequest request = request("reconcile-run");
 
         AgentResult suspended = kernel.run(request);
@@ -200,6 +275,9 @@ class AgentLoopKernelFlowTest {
         assertThat(suspended.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
         assertThat(suspended.stopDecision().stopReason())
                 .isEqualTo(AgentStopReason.RECONCILIATION_REQUIRED);
+        assertThat(suspended.answer()).isNull();
+        assertThat(suspended.stopDecision().stopMessage())
+                .isEqualTo(suspended.snapshot().suspensionMessage());
         assertThat(suspended.snapshot().attributes())
                 .containsKey(StandardActionHandlers.PENDING_ACTION);
         assertThatThrownBy(() -> kernel.resume(request, suspended.snapshot()))
@@ -222,10 +300,47 @@ class AgentLoopKernelFlowTest {
 
         assertThat(resumed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
         assertThat(resumed.answer()).isEqualTo("reconciled answer");
+        assertThat(resumed.snapshot().suspensionMessage()).isNull();
         assertThat(resumed.snapshot().attributes())
                 .doesNotContainKey(StandardActionHandlers.PENDING_ACTION);
         assertThat(resumed.snapshot().observations().getLast().output()).isEqualTo("saved");
         assertThat(model.calls()).isEqualTo(3);
+        assertThat(listener.byInvocation()).hasSize(2);
+        listener.byInvocation().values().forEach(events ->
+                assertLifecycleTrace(events, "reconcile-run"));
+    }
+
+    @Test
+    void recordsToolFailureAndContinuesToFinalAnswer() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"read","tasks":[
+                          {"taskId":"read","title":"Read","dependsOn":[]}
+                        ]}
+                        """),
+                toolCall("read#1", "read", "reader", "x"),
+                "handled tool failure");
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+                .tools(new InMemoryAgentToolRegistry().register(tool(
+                        "reader", (arguments, context) -> {
+                            throw new IllegalStateException("backend unavailable");
+                        })))
+                .listener(listener).build();
+
+        AgentResult result = kernel.run(request("tool-failure"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.answer()).isEqualTo("handled tool failure");
+        assertThat(result.snapshot().observations().getLast().errorCode())
+                .isEqualTo(AgentErrorCode.TOOL_EXECUTION_FAILED.name());
+        assertThat(result.snapshot().observations().getLast().attributes())
+                .containsEntry(AgentObservation.TOOL_CALL_ID, "read#1")
+                .containsEntry(AgentObservation.TOOL_NAME, "reader");
+        assertThat(result.snapshot().attributes())
+                .doesNotContainKey(StandardActionHandlers.PENDING_ACTION);
+        assertThat(model.calls()).isEqualTo(3);
+        assertLifecycleTrace(listener.events(), "tool-failure");
     }
 
     @Test
@@ -290,12 +405,14 @@ class AgentLoopKernelFlowTest {
                         ]}
                         """));
         AtomicInteger toolCalls = new AtomicInteger();
+        List<AgentLifecycleContext> events = new CopyOnWriteArrayList<>();
         InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
                 .register(tool("reader", (arguments, context) -> {
                     toolCalls.incrementAndGet();
                     return ToolExecutionResult.success("unused");
                 }));
-        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools).build();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools)
+                .listener(recordEvents(events)).build();
 
         AgentResult result = kernel.run(request(
                 "capacity", options(10, 3, 3, 8, 2), Map.of(), null));
@@ -303,6 +420,9 @@ class AgentLoopKernelFlowTest {
         assertThat(result.runStatus()).isEqualTo(AgentRunStatus.FAILED);
         assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.CAPACITY_LIMIT);
         assertThat(toolCalls).hasValue(0);
+        assertThat(events).extracting(AgentLifecycleContext::eventType)
+                .contains(AgentLifecycleEventType.DECISION_FAILED);
+        assertLifecycleTrace(events, "capacity");
     }
 
     @Test
@@ -326,6 +446,344 @@ class AgentLoopKernelFlowTest {
                 .map(context -> context.eventType()).toList();
         assertThat(eventTypes.indexOf(AgentLifecycleEventType.MODEL_COMPLETED))
                 .isLessThan(eventTypes.indexOf(AgentLifecycleEventType.RUN_STOPPED));
+        assertLifecycleTrace(listener.events(), "timeout-run");
+    }
+
+    @Test
+    void retriesExplicitlyRetryableModelFailureWithinOneModelStep() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        Set<String> modelStepIds = new java.util.HashSet<>();
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelStepIds.add(context.stepId());
+            if (modelCalls.incrementAndGet() < 3) {
+                throw retryableModelFailure();
+            }
+            return ModelResponse.text("recovered answer");
+        }).listener(listener).build();
+
+        AgentResult result = kernel.run(request("model-retry-success"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.answer()).isEqualTo("recovered answer");
+        assertThat(modelCalls).hasValue(3);
+        assertThat(modelStepIds).hasSize(1);
+        assertThat(listener.events()).extracting(AgentLifecycleContext::eventType)
+                .filteredOn(type -> type == AgentLifecycleEventType.MODEL_STARTED)
+                .hasSize(1);
+        assertLifecycleTrace(listener.events(), "model-retry-success");
+    }
+
+    @Test
+    void stopsAfterRetryableModelFailureExhaustsAttempts() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelCalls.incrementAndGet();
+            throw retryableModelFailure();
+        }).modelRetry(new AgentModelRetryOptions(
+                3, Duration.ofMillis(1), Duration.ofMillis(2)))
+                .listener(listener).build();
+
+        AgentResult result = kernel.run(request("model-retry-exhausted"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.FAILED);
+        assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.MODEL_CALL_FAILED);
+        assertThat(result.failure().retryable()).isTrue();
+        assertThat(modelCalls).hasValue(3);
+        assertThat(listener.events()).extracting(AgentLifecycleContext::eventType)
+                .contains(AgentLifecycleEventType.MODEL_FAILED);
+        assertLifecycleTrace(listener.events(), "model-retry-exhausted");
+    }
+
+    @Test
+    void doesNotRetryOrdinaryModelException() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelCalls.incrementAndGet();
+            throw new IllegalStateException("provider rejected request");
+        }).build();
+
+        AgentResult result = kernel.run(request("model-not-retryable"));
+
+        assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.MODEL_CALL_FAILED);
+        assertThat(result.failure().retryable()).isFalse();
+        assertThat(modelCalls).hasValue(1);
+    }
+
+    @Test
+    void doesNotRetryDifferentErrorCodeEvenWhenMarkedRetryable() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelCalls.incrementAndGet();
+            throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
+                    "invalid model adapter response", true, null);
+        }).build();
+
+        AgentResult result = kernel.run(request("model-wrong-retry-code"));
+
+        assertThat(result.failure().errorCode())
+                .isEqualTo(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION);
+        assertThat(modelCalls).hasValue(1);
+    }
+
+    @Test
+    void stopsRetryingWhenLaterModelFailureIsNotRetryable() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            if (modelCalls.incrementAndGet() == 1) {
+                throw retryableModelFailure();
+            }
+            throw new AgentCoreException(AgentErrorCode.MODEL_CALL_FAILED,
+                    "provider rejected request");
+        }).modelRetry(new AgentModelRetryOptions(
+                3, Duration.ofMillis(1), Duration.ofMillis(1))).build();
+
+        AgentResult result = kernel.run(request("model-retry-then-reject"));
+
+        assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.MODEL_CALL_FAILED);
+        assertThat(result.failure().retryable()).isFalse();
+        assertThat(modelCalls).hasValue(2);
+    }
+
+    @Test
+    void cancellationPreventsNextModelAttempt() {
+        AtomicBoolean cancelled = new AtomicBoolean();
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelCalls.incrementAndGet();
+            cancelled.set(true);
+            throw retryableModelFailure();
+        }).build();
+
+        AgentResult result = kernel.run(request(
+                "model-retry-cancelled", AgentLoopOptions.defaults(),
+                Map.of(), cancelled::get));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.CANCELLED);
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.USER_CANCELLED);
+        assertThat(modelCalls).hasValue(1);
+    }
+
+    @Test
+    void interruptionPreventsNextModelAttempt() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelCalls.incrementAndGet();
+            Thread.currentThread().interrupt();
+            throw retryableModelFailure();
+        }).build();
+
+        AgentResult result;
+        try {
+            result = kernel.run(request("model-retry-interrupted"));
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted();
+        }
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.CANCELLED);
+        assertThat(result.stopDecision().stopReason())
+                .isEqualTo(AgentStopReason.THREAD_INTERRUPTED);
+        assertThat(modelCalls).hasValue(1);
+    }
+
+    @Test
+    void doesNotRetryModelFailureAfterDeadline() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-10T00:00:00Z"));
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelCalls.incrementAndGet();
+            clock.advance(Duration.ofSeconds(2));
+            throw retryableModelFailure();
+        }).clock(clock).build();
+        AgentLoopOptions options = new AgentLoopOptions(
+                10, Duration.ofSeconds(1), 3, 3, 256,
+                Duration.ofSeconds(1), Duration.ofSeconds(1), 8, 8);
+
+        AgentResult result = kernel.run(request(
+                "model-retry-deadline", options, Map.of(), null));
+
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.FATAL_ERROR);
+        assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.MODEL_CALL_FAILED);
+        assertThat(modelCalls).hasValue(1);
+    }
+
+    @Test
+    void maxAttemptsOneDisablesModelRetry() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelCalls.incrementAndGet();
+            throw retryableModelFailure();
+        }).modelRetry(new AgentModelRetryOptions(
+                1, Duration.ofMillis(1), Duration.ofMillis(1))).build();
+
+        AgentResult result = kernel.run(request("model-retry-disabled"));
+
+        assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.MODEL_CALL_FAILED);
+        assertThat(modelCalls).hasValue(1);
+    }
+
+    @Test
+    void rejectsInvalidModelRetryOptions() {
+        assertThatThrownBy(() -> new AgentModelRetryOptions(
+                0, Duration.ofMillis(1), Duration.ofSeconds(1)))
+                .isInstanceOfSatisfying(AgentCoreException.class, error ->
+                        assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_CONFIGURATION));
+        assertThatThrownBy(() -> new AgentModelRetryOptions(
+                3, Duration.ofSeconds(2), Duration.ofSeconds(1)))
+                .isInstanceOfSatisfying(AgentCoreException.class, error ->
+                        assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_CONFIGURATION));
+    }
+
+    @Test
+    void recordsModelLatencyWhenResponseArrivesBeforeDeadline() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-09T00:00:00Z"));
+        List<AgentLifecycleContext> events = new CopyOnWriteArrayList<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            assertThat(context.deadline()).isEqualTo(clock.instant().plusSeconds(1));
+            clock.advance(Duration.ofMillis(750));
+            return ModelResponse.text("answer within deadline");
+        }).clock(clock).listener(recordEvents(events)).build();
+        AgentLoopOptions options = new AgentLoopOptions(
+                10, Duration.ofSeconds(1), 3, 3, 256,
+                Duration.ofSeconds(1), Duration.ofSeconds(1), 8, 8);
+
+        AgentResult result = kernel.run(request("model-latency", options, Map.of(), null));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.answer()).isEqualTo("answer within deadline");
+        assertThat(result.failure()).isNull();
+        assertThat(event(events, AgentLifecycleEventType.MODEL_COMPLETED).elapsed())
+                .isEqualTo(Duration.ofMillis(750));
+    }
+
+    @Test
+    void timesOutWhenModelReturnsExactlyAtDeadline() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-09T00:00:00Z"));
+        List<AgentLifecycleContext> events = new CopyOnWriteArrayList<>();
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelCalls.incrementAndGet();
+            clock.advance(Duration.ofSeconds(1));
+            return ModelResponse.text("answer at deadline");
+        }).clock(clock).listener(recordEvents(events)).build();
+        AgentLoopOptions options = new AgentLoopOptions(
+                10, Duration.ofSeconds(1), 3, 3, 256,
+                Duration.ofSeconds(1), Duration.ofSeconds(1), 8, 8);
+
+        AgentResult result = kernel.run(request("model-deadline-boundary", options,
+                Map.of(), null));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.FAILED);
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.TIMEOUT);
+        assertThat(result.failure()).isNull();
+        assertThat(result.answer()).isNull();
+        assertThat(modelCalls).hasValue(1);
+        assertThat(event(events, AgentLifecycleEventType.MODEL_COMPLETED).elapsed())
+                .isEqualTo(Duration.ofSeconds(1));
+        assertThat(events).extracting(AgentLifecycleContext::eventType)
+                .doesNotContain(AgentLifecycleEventType.DECISION_STARTED);
+        assertLifecycleTrace(events, "model-deadline-boundary");
+    }
+
+    @Test
+    void keepsModelFailureWhenDeadlineAlsoExpires() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-09T00:00:00Z"));
+        List<AgentLifecycleContext> events = new CopyOnWriteArrayList<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            clock.advance(Duration.ofSeconds(2));
+            throw new IllegalStateException("provider unavailable");
+        }).clock(clock).listener(recordEvents(events)).build();
+        AgentLoopOptions options = new AgentLoopOptions(
+                10, Duration.ofSeconds(1), 3, 3, 256,
+                Duration.ofSeconds(1), Duration.ofSeconds(1), 8, 8);
+
+        AgentResult result = kernel.run(request("model-error-after-deadline", options,
+                Map.of(), null));
+
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.FATAL_ERROR);
+        assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.MODEL_CALL_FAILED);
+        assertThat(event(events, AgentLifecycleEventType.MODEL_FAILED).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.MODEL_STARTED).stepId());
+        assertThat(event(events, AgentLifecycleEventType.TURN_FAILED).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.TURN_STARTED).stepId());
+        assertThat(event(events, AgentLifecycleEventType.RUN_FAILED).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.RUN_STARTED).stepId());
+        assertLifecycleTrace(events, "model-error-after-deadline");
+    }
+
+    @Test
+    void reportsStableModelFailureForExceptionWithoutMessage() {
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            throw new IllegalStateException();
+        }).build();
+
+        AgentResult result = kernel.run(request("model-empty-error-message"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.FAILED);
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.FATAL_ERROR);
+        assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.MODEL_CALL_FAILED);
+        assertThat(result.failure().errorMessage()).contains("IllegalStateException");
+    }
+
+    @Test
+    void closesStartedStepsWhenDeadlineExpiresBeforeModelCall() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-09T00:00:00Z"));
+        List<AgentLifecycleContext> events = new CopyOnWriteArrayList<>();
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLifecycleListener listener = new AgentLifecycleListener() {
+            @Override
+            public void onEvent(AgentLifecycleContext context) {
+                events.add(context);
+            }
+
+            @Override
+            public void beforeModel(
+                    AgentLifecycleContext context, AgentRequest request,
+                    AgentRunState state, ModelRequest modelRequest) {
+                clock.advance(Duration.ofSeconds(2));
+            }
+        };
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            modelCalls.incrementAndGet();
+            return ModelResponse.text("unused");
+        }).clock(clock).listener(listener).build();
+        AgentLoopOptions options = new AgentLoopOptions(
+                10, Duration.ofSeconds(1), 3, 3, 256,
+                Duration.ofSeconds(1), Duration.ofSeconds(1), 8, 8);
+
+        AgentResult result = kernel.run(request("stop-before-model", options, Map.of(), null));
+
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.TIMEOUT);
+        assertThat(modelCalls).hasValue(0);
+        assertThat(event(events, AgentLifecycleEventType.MODEL_FAILED).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.MODEL_STARTED).stepId());
+        assertThat(event(events, AgentLifecycleEventType.TURN_FAILED).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.TURN_STARTED).stepId());
+        assertThat(event(events, AgentLifecycleEventType.RUN_STOPPED).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.RUN_STARTED).stepId());
+        assertLifecycleTrace(events, "stop-before-model");
+    }
+
+    @Test
+    void completesTurnBeforeReturningFinalAnswer() {
+        List<AgentLifecycleContext> events = new CopyOnWriteArrayList<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(new AgentTestSupport.ScriptedModel("done"))
+                .listener(recordEvents(events)).build();
+
+        AgentResult result = kernel.run(request("final-answer-steps"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(event(events, AgentLifecycleEventType.TURN_COMPLETED).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.TURN_STARTED).stepId());
+        assertThat(event(events, AgentLifecycleEventType.RUN_STOPPED).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.RUN_STARTED).stepId());
+        assertThat(events).extracting(AgentLifecycleContext::eventType)
+                .doesNotContain(AgentLifecycleEventType.TURN_FAILED);
+        assertLifecycleTrace(events, "final-answer-steps");
     }
 
     @Test
@@ -354,12 +812,13 @@ class AgentLoopKernelFlowTest {
     @Test
     void reportsCheckpointFailureWithoutInvokingModel() {
         AtomicInteger modelCalls = new AtomicInteger();
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
         AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
             modelCalls.incrementAndGet();
             return com.kset.agent.core.model.ModelResponse.text("unused");
         }).checkpoints((request, snapshot) -> {
             throw new IllegalStateException("store unavailable");
-        }).build();
+        }).listener(listener).build();
 
         AgentResult result = kernel.run(request("checkpoint-failure"));
 
@@ -368,6 +827,29 @@ class AgentLoopKernelFlowTest {
         assertThat(result.failure()).isNotNull();
         assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.CHECKPOINT_FAILED);
         assertThat(modelCalls).hasValue(0);
+        assertLifecycleTrace(listener.events(), "checkpoint-failure");
+    }
+
+    @Test
+    void reportsFailureCheckpointErrorInsteadOfOnlyTheOriginalFailure() {
+        List<AgentLifecycleContext> events = new CopyOnWriteArrayList<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((request, context) -> {
+            throw new IllegalStateException("provider unavailable");
+        }).checkpoints((request, snapshot) -> {
+            if (snapshot.runStatus() == AgentRunStatus.FAILED) {
+                throw new IllegalStateException("store unavailable");
+            }
+        }).listener(recordEvents(events)).build();
+
+        AgentResult result = kernel.run(request("failure-checkpoint-error"));
+
+        assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.CHECKPOINT_FAILED);
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.FATAL_ERROR);
+        assertThat(events).extracting(AgentLifecycleContext::eventType)
+                .contains(AgentLifecycleEventType.CHECKPOINT_FAILED);
+        assertThat(event(events, AgentLifecycleEventType.RUN_FAILED).stepId())
+                .isEqualTo(event(events, AgentLifecycleEventType.RUN_STARTED).stepId());
+        assertLifecycleTrace(events, "failure-checkpoint-error");
     }
 
     @Test
@@ -488,12 +970,14 @@ class AgentLoopKernelFlowTest {
                         """),
                 toolCall("write#1", "write", "writer", "x"));
         AtomicInteger toolCalls = new AtomicInteger();
+        List<AgentLifecycleContext> events = new CopyOnWriteArrayList<>();
         AgentLoopKernel kernel = AgentLoopKernel.builder(model)
                 .tools(new InMemoryAgentToolRegistry().register(dangerousTool(
                         "writer", (arguments, context) -> {
                             toolCalls.incrementAndGet();
                             return ToolExecutionResult.success("unexpected");
                         })))
+                .listener(recordEvents(events))
                 .build();
 
         AgentResult result = kernel.run(request(
@@ -503,6 +987,9 @@ class AgentLoopKernelFlowTest {
         assertThat(result.runStatus()).isEqualTo(AgentRunStatus.FAILED);
         assertThat(result.failure().errorCode()).isEqualTo(AgentErrorCode.PENDING_ACTION_MISMATCH);
         assertThat(toolCalls).hasValue(0);
+        assertThat(events).extracting(AgentLifecycleContext::eventType)
+                .contains(AgentLifecycleEventType.ACTION_FAILED);
+        assertLifecycleTrace(events, "preconfirmed");
     }
 
     @Test
@@ -612,7 +1099,7 @@ class AgentLoopKernelFlowTest {
                                 List.of(AgentObservation.failure(
                                         action.actionType(), AgentErrorCode.TOOL_RESULT_UNKNOWN,
                                         "custom result unknown")),
-                                AgentRunStatus.SUSPENDED, "custom wait",
+                                AgentRunStatus.SUSPENDED, null, "custom wait",
                                 Map.of("custom.pending", true), Set.of());
                     }
                 })
@@ -628,6 +1115,27 @@ class AgentLoopKernelFlowTest {
         assertThat(result.snapshot().attributes()).containsEntry("custom.pending", true);
         assertThat(result.snapshot().attributes())
                 .doesNotContainKey(StandardActionHandlers.PENDING_ACTION);
+    }
+
+    private static AgentLifecycleListener recordEvents(List<AgentLifecycleContext> events) {
+        return new AgentLifecycleListener() {
+            @Override
+            public void onEvent(AgentLifecycleContext context) {
+                events.add(context);
+            }
+        };
+    }
+
+    private static AgentCoreException retryableModelFailure() {
+        return new AgentCoreException(AgentErrorCode.MODEL_CALL_FAILED,
+                "provider temporarily unavailable", true, null);
+    }
+
+    private static AgentLifecycleContext event(
+            List<AgentLifecycleContext> events, AgentLifecycleEventType eventType) {
+        return events.stream()
+                .filter(context -> context.eventType() == eventType)
+                .findFirst().orElseThrow();
     }
 
     private static AgentTool tool(String name, ToolFunction function) {

@@ -18,5 +18,8 @@ public enum AgentLifecycleEventType {
     CHECKPOINT_FAILED,
     RUN_FAILED,
     RUN_STOPPED,
-    RUN_RETURNED
+    RUN_RETURNED,
+    MODEL_FAILED,
+    DECISION_FAILED,
+    ACTION_FAILED
 }

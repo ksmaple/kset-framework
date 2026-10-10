@@ -4,7 +4,7 @@ import com.kset.agent.core.api.AgentRunStatus;
 
 import java.util.Objects;
 
-/** Authoritative decision describing whether, why and in which run status a loop stops. */
+/** Authoritative stop decision; stopMessage is readable text, not a branching code. */
 public record AgentStopDecision(
         boolean shouldStop,
         AgentStopReason stopReason,

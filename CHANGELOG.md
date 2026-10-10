@@ -12,6 +12,7 @@
 - **kset-agent-core 步骤追踪**：新增可配置雪花全局 runId、逻辑 stepId/parentStepId、固定步骤类型与状态；统一 `onEvent` 覆盖 run、turn、model、decision、action、checkpoint 全部步骤，同一步骤开始、完成和失败可直接配对。固定追踪身份同步下沉至 `AgentExecutionContext`，Model、Action、Tool 和 StopPolicy 的内部日志可与最终步骤日志精确关联，宿主可附加工具 callId/taskId/toolName 与结构化错误码定位问题。
 - **kset-agent-core 命名契约**：统一公开对象和扩展点的 actionType、toolName、callId、taskId、toolCalls、executionContext、runStatus、stopDecision、errorCode、protocolId、strategyId 与 eventSequence 等业务限定名称；补齐 Agent 专用对象职责与稳定枚举说明，`agent-json:v1` wire 字段保持不变。
 - **kset-agent-core 内核边界**：将 `AgentRunState` 的启动、恢复、推进、动作应用与停止转换收窄为 Kernel 包内能力，并将默认 `ReactPhase` 收敛为策略内部类型；公开 Action、Registry、Listener 扩展方法保持不变。
+- **kset-agent-core 字段契约**：统一公开对象与字段的所有者、作用域、空值和持久化含义；`answer` 仅表示完成态最终回答，暂停提示独立为 `suspensionMessage` 并通过停止消息返回。快照升级至 v2，不直接解释 v1；内置模型 JSON wire 不变。
 
 ## [v1.0.16] - 2026-08-30
 

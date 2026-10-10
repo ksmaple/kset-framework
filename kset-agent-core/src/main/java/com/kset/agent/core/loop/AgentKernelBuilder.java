@@ -10,6 +10,7 @@ import com.kset.agent.core.checkpoint.AgentCheckpointPort;
 import com.kset.agent.core.event.AgentLifecycleListener;
 import com.kset.agent.core.id.AgentIdGenerator;
 import com.kset.agent.core.model.AgentModel;
+import com.kset.agent.core.model.AgentModelRetryOptions;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
 import com.kset.agent.core.protocol.AgentProtocolRegistry;
 import com.kset.agent.core.protocol.json.AgentJsonV1Codec;
@@ -30,6 +31,7 @@ import java.util.concurrent.Executor;
 public final class AgentKernelBuilder {
 
     private final AgentModel model;
+    private AgentModelRetryOptions modelRetryOptions = AgentModelRetryOptions.defaults();
     private AgentToolRegistry toolRegistry = new InMemoryAgentToolRegistry();
     private Executor toolExecutor = Runnable::run;
     private AgentReasoningStrategy reasoningStrategy;
@@ -68,6 +70,12 @@ public final class AgentKernelBuilder {
 
     public AgentKernelBuilder clock(Clock clock) {
         this.clock = requireConfiguration(clock, "clock");
+        return this;
+    }
+
+    /** Configures bounded retries for explicitly retryable model-call failures. */
+    public AgentKernelBuilder modelRetry(AgentModelRetryOptions modelRetryOptions) {
+        this.modelRetryOptions = requireConfiguration(modelRetryOptions, "modelRetryOptions");
         return this;
     }
 
@@ -116,7 +124,8 @@ public final class AgentKernelBuilder {
             AgentReasoningStrategy selectedReasoningStrategy = reasoningStrategy == null
                     ? new ReactReasoningStrategy(fixedToolRegistry) : reasoningStrategy;
             String strategyId = requireStrategyId(selectedReasoningStrategy);
-            return new AgentLoopKernel(model, selectedReasoningStrategy, strategyId,
+            return new AgentLoopKernel(model, modelRetryOptions,
+                    selectedReasoningStrategy, strategyId,
                     new AgentProtocolRegistry(registeredProtocolCodecs),
                     new AgentActionRegistry(registeredActionHandlers),
                     new AgentStopController(stopPolicies), checkpointPort, listeners, clock,

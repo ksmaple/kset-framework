@@ -15,6 +15,7 @@ import com.kset.agent.core.tool.InMemoryAgentToolRegistry;
 import com.kset.agent.core.tool.ToolExecutionResult;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.kset.agent.core.loop.AgentTestSupport.assertLifecycleTrace;
 import static com.kset.agent.core.loop.AgentTestSupport.envelope;
 import static com.kset.agent.core.loop.AgentTestSupport.request;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,9 +87,7 @@ class AgentLoopKernelConcurrencyTest {
                 .allSatisfy(events -> {
                     assertThat(events).extracting(event -> event.runId()).containsOnly(
                             events.getFirst().runId());
-                    assertThat(events).extracting(event -> event.eventSequence())
-                            .containsExactlyElementsOf(java.util.stream.LongStream
-                                    .rangeClosed(1, events.size()).boxed().toList());
+                    assertLifecycleTrace(events, events.getFirst().runId());
                 });
         assertThat(byInvocation.values().stream()
                 .map(events -> events.getFirst().runId()).collect(java.util.stream.Collectors.toSet()))
@@ -195,6 +195,65 @@ class AgentLoopKernelConcurrencyTest {
         Map<?, ?> pending = (Map<?, ?>) result.snapshot().attributes().get(
                 StandardActionHandlers.PENDING_ACTION);
         assertThat(pending.get("type")).isEqualTo("tool_batch");
+    }
+
+    @Test
+    void suspendsTimedOutToolBatchForReconciliation() {
+        CountDownLatch releaseTools = new CountDownLatch(1);
+        AgentTool tool = new AgentTool() {
+            @Override
+            public AgentToolDescriptor descriptor() {
+                return new AgentToolDescriptor(
+                        "slow", "slow test tool", Map.of(), true, false, Map.of());
+            }
+
+            @Override
+            public ToolExecutionResult execute(
+                    Map<String, Object> arguments, AgentToolContext context) {
+                await(releaseTools);
+                return ToolExecutionResult.success(context.callId());
+            }
+        };
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"slow batch","tasks":[
+                          {"taskId":"batch","title":"Batch","dependsOn":[]}
+                        ]}
+                        """),
+                envelope("""
+                        {"type":"tool_batch","plan":"slow calls","toolCalls":[
+                          {"callId":"slow-1","taskId":"batch","toolName":"slow","arguments":{}},
+                          {"callId":"slow-2","taskId":"batch","toolName":"slow","arguments":{}}
+                        ]}
+                        """));
+        AgentLoopOptions options = new AgentLoopOptions(
+                10, Duration.ofSeconds(10), 3, 3, 256,
+                Duration.ofSeconds(3), Duration.ofMillis(100), 8, 8);
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
+        ExecutorService toolExecutor = Executors.newFixedThreadPool(2);
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+                .tools(new InMemoryAgentToolRegistry().register(tool))
+                .toolExecutor(toolExecutor).listener(listener).build();
+
+        AgentResult result;
+        try {
+            result = kernel.run(request("timed-out-batch", options, Map.of(), null));
+        } finally {
+            releaseTools.countDown();
+            toolExecutor.shutdownNow();
+        }
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
+        assertThat(result.stopDecision().stopReason())
+                .isEqualTo(AgentStopReason.RECONCILIATION_REQUIRED);
+        assertThat(result.snapshot().observations().getLast().errorCode())
+                .isEqualTo(AgentErrorCode.TOOL_RESULT_UNKNOWN.name());
+        assertThat(result.snapshot().observations().getLast().attributes())
+                .containsEntry("causeCode", AgentErrorCode.TOOL_TIMEOUT.name());
+        assertThat(result.snapshot().attributes())
+                .containsKey(StandardActionHandlers.PENDING_ACTION);
+        assertThat(model.calls()).isEqualTo(2);
+        assertLifecycleTrace(listener.events(), "timed-out-batch");
     }
 
     @SuppressWarnings("unchecked")

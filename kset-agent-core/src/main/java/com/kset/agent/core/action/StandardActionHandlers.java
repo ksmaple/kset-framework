@@ -63,7 +63,8 @@ public final class StandardActionHandlers {
             Map<String, Object> attributes = Map.of(PLAN_CREATED, true, PLAN_TASKS, tasks);
             AgentObservation observation = new AgentObservation(action.actionType(), true, true,
                     plan.summary(), null, null, Map.of("tasks", tasks));
-            return new AgentActionResult(List.of(observation), null, null, attributes, Set.of());
+            return new AgentActionResult(List.of(observation), null, null, null,
+                    attributes, Set.of());
         }
     }
 
@@ -195,7 +196,7 @@ public final class StandardActionHandlers {
                 }
                 return rememberConfirmedOperations(confirmedCalls, context,
                         new AgentActionResult(
-                                observations, null, null, Map.of(), Set.of(PENDING_ACTION)));
+                                observations, null, null, null, Map.of(), Set.of(PENDING_ACTION)));
             } catch (Exception error) {
                 futures.forEach(future -> future.cancel(true));
                 if (error instanceof InterruptedException) {
@@ -257,7 +258,7 @@ public final class StandardActionHandlers {
             return new AgentActionResult(
                     List.of(AgentObservation.success(
                             action.actionType(), chunk.text(), true)),
-                    null, null, Map.of(ANSWER_CHUNKS, List.copyOf(chunks)), Set.of());
+                    null, null, null, Map.of(ANSWER_CHUNKS, List.copyOf(chunks)), Set.of());
         }
     }
 
@@ -324,7 +325,7 @@ public final class StandardActionHandlers {
             List<AgentObservation> observations, Map<String, Object> pendingAction,
             String suspensionMessage) {
         return new AgentActionResult(
-                observations, AgentRunStatus.SUSPENDED, suspensionMessage,
+                observations, AgentRunStatus.SUSPENDED, null, suspensionMessage,
                 Map.of(PENDING_ACTION, pendingAction), Set.of());
     }
 
@@ -375,7 +376,7 @@ public final class StandardActionHandlers {
         attributes.put(CONFIRMED_TOOL_OPERATIONS, Map.copyOf(confirmed));
         return new AgentActionResult(
                 result.observations(), result.terminalRunStatus(), result.answer(),
-                attributes, result.removedStateAttributes());
+                result.suspensionMessage(), attributes, result.removedStateAttributes());
     }
 
     private static Map<String, Object> confirmedToolOperations(AgentActionContext context) {

@@ -45,7 +45,7 @@ final class AgentResumeReconciler {
                     + unmatched.keySet());
         }
         AgentActionResult reconciled = new AgentActionResult(
-                input.reconciledObservations(), null, null, Map.of(),
+                input.reconciledObservations(), null, null, null, Map.of(),
                 Set.of(StandardActionHandlers.PENDING_ACTION));
         return state.apply(reconciled, now);
     }

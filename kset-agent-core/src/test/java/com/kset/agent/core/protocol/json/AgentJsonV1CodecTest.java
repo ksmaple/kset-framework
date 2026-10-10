@@ -111,6 +111,32 @@ class AgentJsonV1CodecTest {
     }
 
     @Test
+    void preservesUnicodeAndEscapedCharactersInModelAnswer() throws Exception {
+        String answer = Character.toString(0x4E2D) + Character.toString(0x6587)
+                + " \"quoted\" \\ path\n" + Character.toString(0x1F680);
+        String json = new ObjectMapper().writeValueAsString(
+                Map.of("type", "final_answer", "answer", answer));
+
+        AgentDecision decision = decode(json);
+
+        assertThat(decision.actions().getFirst()).isInstanceOfSatisfying(
+                FinalAnswerAction.class,
+                action -> assertThat(action.answer()).isEqualTo(answer));
+    }
+
+    @Test
+    void rejectsUnescapedControlCharacterAndInvalidEscapeInModelJson() {
+        String unescapedControl = "{\"type\":\"final_answer\",\"answer\":\"bad"
+                + (char) 0x01 + "text\"}";
+
+        assertProtocolError(envelope(unescapedControl), AgentJsonV1ErrorCode.INVALID_JSON);
+        assertProtocolError(envelope(
+                "{\"type\":\"final_answer\",\"answer\":\"bad\\q\"}"),
+                AgentJsonV1ErrorCode.INVALID_JSON);
+        assertProtocolError(" \r\n\t ", AgentJsonV1ErrorCode.EMPTY_RESPONSE);
+    }
+
+    @Test
     void preservesBuiltInProtocolAndAllowsDistinctCustomProtocol() {
         AgentProtocolId customId = new AgentProtocolId("custom", "v2");
         AgentProtocolCodec custom = new AgentProtocolCodec() {

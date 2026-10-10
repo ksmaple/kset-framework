@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
-/** Serializable, versioned representation of a loop run. */
+/** Serializable run state. Version 2 separates final answer from suspended wait text. */
 public record AgentRunSnapshot(
         int version,
         String runId,
@@ -27,13 +27,15 @@ public record AgentRunSnapshot(
         int consecutiveProtocolErrors,
         int consecutiveNoProgress,
         String answer,
+        String suspensionMessage,
         AgentStopDecision stopDecision) {
 
-    public static final int CURRENT_VERSION = 1;
+    public static final int CURRENT_VERSION = 2;
 
     public AgentRunSnapshot {
-        if (version < 1) {
-            throw invalid("snapshot version must be positive");
+        if (version != CURRENT_VERSION) {
+            throw new AgentCoreException(AgentErrorCode.UNSUPPORTED_SNAPSHOT_VERSION,
+                    "unsupported agent snapshot version: " + version);
         }
         if (runId == null || runId.isBlank() || task == null || task.isBlank()) {
             throw invalid("snapshot runId and task must not be blank");
@@ -54,6 +56,17 @@ public record AgentRunSnapshot(
         if (stopDecision != null
                 && (!stopDecision.shouldStop() || stopDecision.runStatus() != runStatus)) {
             throw invalid("snapshot stop decision does not match status");
+        }
+        if (runStatus == AgentRunStatus.COMPLETED
+                && (answer == null || answer.isBlank() || suspensionMessage != null)) {
+            throw invalid("completed snapshot requires only a non-blank answer");
+        }
+        if (runStatus != AgentRunStatus.COMPLETED && answer != null) {
+            throw invalid("snapshot answer is only valid for a completed run");
+        }
+        if (suspensionMessage != null
+                && (runStatus != AgentRunStatus.SUSPENDED || suspensionMessage.isBlank())) {
+            throw invalid("snapshot suspensionMessage must be non-blank and suspended");
         }
         try {
             observations = observations == null ? List.of() : List.copyOf(observations);

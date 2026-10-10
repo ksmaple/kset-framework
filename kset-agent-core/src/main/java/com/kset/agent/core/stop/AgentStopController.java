@@ -27,7 +27,7 @@ public final class AgentStopController {
         }
         if (context.state().runStatus() == AgentRunStatus.SUSPENDED) {
             return AgentStopDecision.stop(AgentStopReason.WAITING_INPUT,
-                    AgentRunStatus.SUSPENDED, "external input required");
+                    AgentRunStatus.SUSPENDED, suspensionStopMessage(context));
         }
         if (context.state().runStatus() == AgentRunStatus.FAILED) {
             return AgentStopDecision.stop(AgentStopReason.FATAL_ERROR,
@@ -88,6 +88,11 @@ public final class AgentStopController {
                 ? error.getClass().getSimpleName() : error.getMessage();
         return AgentStopDecision.stop(
                 AgentStopReason.FATAL_ERROR, AgentRunStatus.FAILED, stopMessage);
+    }
+
+    private static String suspensionStopMessage(AgentStopContext context) {
+        return context.state().suspensionMessage() == null
+                ? "external input required" : context.state().suspensionMessage();
     }
 
     private AgentStopDecision evaluatePolicies(AgentStopContext context) {

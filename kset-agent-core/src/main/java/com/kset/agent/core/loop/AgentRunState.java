@@ -20,7 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Immutable runtime state owned by the loop kernel. */
+/** Immutable runtime state owned by the loop kernel; answer and wait text are separate. */
 public final class AgentRunState {
 
     public static final String PROTOCOL_METADATA_ATTRIBUTE = "agent.protocolMetadata";
@@ -38,6 +38,7 @@ public final class AgentRunState {
     private final int consecutiveProtocolErrors;
     private final int consecutiveNoProgress;
     private final String answer;
+    private final String suspensionMessage;
     private final AgentStopDecision stopDecision;
 
     private AgentRunState(
@@ -46,7 +47,7 @@ public final class AgentRunState {
             int turn, Instant startedAt, Instant updatedAt,
             List<AgentObservation> observations, Map<String, Object> attributes,
             int consecutiveProtocolErrors, int consecutiveNoProgress,
-            String answer, AgentStopDecision stopDecision) {
+            String answer, String suspensionMessage, AgentStopDecision stopDecision) {
         this.runId = runId;
         this.task = task;
         this.protocolId = protocolId;
@@ -59,13 +60,14 @@ public final class AgentRunState {
         this.consecutiveProtocolErrors = consecutiveProtocolErrors;
         this.consecutiveNoProgress = consecutiveNoProgress;
         this.answer = answer;
+        this.suspensionMessage = suspensionMessage;
         this.stopDecision = stopDecision;
     }
 
     static AgentRunState start(AgentRequest request, Instant now) {
         return new AgentRunState(
                 request.runId(), request.task(), request.protocolId(), AgentRunStatus.RUNNING,
-                0, now, now, List.of(), Map.of(), 0, 0, null, null);
+                0, now, now, List.of(), Map.of(), 0, 0, null, null, null);
     }
 
     static AgentRunState restore(AgentRunSnapshot snapshot, Instant now) {
@@ -78,12 +80,27 @@ public final class AgentRunState {
                 snapshot.turn(), snapshot.startedAt(), now,
                 snapshot.observations(), snapshot.attributes(),
                 snapshot.consecutiveProtocolErrors(), snapshot.consecutiveNoProgress(),
-                snapshot.answer(), null);
+                null, null, null);
+    }
+
+    // agent-core / agent-core-20261010-17: retain the prior answer restoration for rollback.
+    @SuppressWarnings("unused")
+    private static AgentRunState restoreForRollback(AgentRunSnapshot snapshot, Instant now) {
+        if (snapshot.version() != AgentRunSnapshot.CURRENT_VERSION) {
+            throw new AgentCoreException(AgentErrorCode.UNSUPPORTED_SNAPSHOT_VERSION,
+                    "unsupported agent snapshot version: " + snapshot.version());
+        }
+        return new AgentRunState(
+                snapshot.runId(), snapshot.task(), snapshot.protocolId(), AgentRunStatus.RUNNING,
+                snapshot.turn(), snapshot.startedAt(), now,
+                snapshot.observations(), snapshot.attributes(),
+                snapshot.consecutiveProtocolErrors(), snapshot.consecutiveNoProgress(),
+                snapshot.answer(), null, null);
     }
 
     AgentRunState nextTurn(Instant now) {
         return copy(AgentRunStatus.RUNNING, turn + 1, now, observations, attributes,
-                consecutiveProtocolErrors, consecutiveNoProgress, answer, null);
+                consecutiveProtocolErrors, consecutiveNoProgress, answer, null, null);
     }
 
     AgentRunState protocolFailed(
@@ -92,7 +109,7 @@ public final class AgentRunState {
         nextAttributes.put("agent.lastProtocolErrorCode", protocolErrorCode);
         nextAttributes.put("agent.lastProtocolError", errorMessage);
         return copy(AgentRunStatus.RUNNING, turn, now, observations, nextAttributes,
-                consecutiveProtocolErrors + 1, consecutiveNoProgress, answer, null);
+                consecutiveProtocolErrors + 1, consecutiveNoProgress, answer, null, null);
     }
 
     AgentRunState decisionAccepted(AgentDecision decision, Instant now) {
@@ -104,7 +121,7 @@ public final class AgentRunState {
                 .map(AgentAction::actionType).toList());
         recordToolOperations(nextAttributes, decision);
         return copy(runStatus, turn, now, observations, nextAttributes,
-                0, consecutiveNoProgress, answer, stopDecision);
+                0, consecutiveNoProgress, answer, suspensionMessage, stopDecision);
     }
 
     private static void recordToolOperations(
@@ -136,7 +153,8 @@ public final class AgentRunState {
             nextAttributes.putAll(values);
         }
         return copy(runStatus, turn, now, observations, nextAttributes,
-                consecutiveProtocolErrors, consecutiveNoProgress, answer, stopDecision);
+                consecutiveProtocolErrors, consecutiveNoProgress, answer, suspensionMessage,
+                stopDecision);
     }
 
     AgentRunState apply(AgentActionResult result, Instant now) {
@@ -148,21 +166,53 @@ public final class AgentRunState {
         int noProgress = result.madeProgress() ? 0 : consecutiveNoProgress + 1;
         AgentRunStatus nextRunStatus = result.terminalRunStatus() == null
                 ? runStatus : result.terminalRunStatus();
-        String nextAnswer = result.answer() == null ? answer : result.answer();
+        String nextAnswer = nextRunStatus == AgentRunStatus.COMPLETED ? result.answer() : null;
+        String nextSuspensionMessage = nextRunStatus == AgentRunStatus.SUSPENDED
+                ? result.suspensionMessage() : null;
         return copy(nextRunStatus, turn, now, nextObservations, nextAttributes,
-                consecutiveProtocolErrors, noProgress, nextAnswer, stopDecision);
+                consecutiveProtocolErrors, noProgress, nextAnswer, nextSuspensionMessage,
+                stopDecision);
+    }
+
+    // agent-core / agent-core-20261010-17: retain the mixed terminal text mapping for rollback.
+    @SuppressWarnings("unused")
+    private AgentRunState applyForRollback(AgentActionResult result, Instant now) {
+        List<AgentObservation> nextObservations = new ArrayList<>(observations);
+        nextObservations.addAll(result.observations());
+        Map<String, Object> nextAttributes = new LinkedHashMap<>(attributes);
+        result.removedStateAttributes().forEach(nextAttributes::remove);
+        nextAttributes.putAll(result.stateAttributes());
+        int noProgress = result.madeProgress() ? 0 : consecutiveNoProgress + 1;
+        AgentRunStatus nextRunStatus = result.terminalRunStatus() == null
+                ? runStatus : result.terminalRunStatus();
+        String terminalText = result.terminalRunStatus() == AgentRunStatus.SUSPENDED
+                ? result.suspensionMessage() : result.answer();
+        String nextAnswer = terminalText == null ? answer : terminalText;
+        return copy(nextRunStatus, turn, now, nextObservations, nextAttributes,
+                consecutiveProtocolErrors, noProgress, nextAnswer, null, stopDecision);
     }
 
     AgentRunState stopped(AgentStopDecision decision, Instant now) {
         return copy(decision.runStatus(), turn, now, observations, attributes,
-                consecutiveProtocolErrors, consecutiveNoProgress, answer, decision);
+                consecutiveProtocolErrors, consecutiveNoProgress,
+                decision.runStatus() == AgentRunStatus.COMPLETED ? answer : null,
+                decision.runStatus() == AgentRunStatus.SUSPENDED ? suspensionMessage : null,
+                decision);
+    }
+
+    // agent-core / agent-core-20261010-17: retain the prior terminal answer mapping for rollback.
+    @SuppressWarnings("unused")
+    private AgentRunState stoppedForRollback(AgentStopDecision decision, Instant now) {
+        return copy(decision.runStatus(), turn, now, observations, attributes,
+                consecutiveProtocolErrors, consecutiveNoProgress, answer, null, decision);
     }
 
     public AgentRunSnapshot snapshot() {
         return new AgentRunSnapshot(
                 AgentRunSnapshot.CURRENT_VERSION, runId, task, protocolId, runStatus,
                 turn, startedAt, updatedAt, observations, attributes,
-                consecutiveProtocolErrors, consecutiveNoProgress, answer, stopDecision);
+                consecutiveProtocolErrors, consecutiveNoProgress, answer, suspensionMessage,
+                stopDecision);
     }
 
     private AgentRunState copy(AgentRunStatus nextRunStatus, int nextTurn, Instant nextUpdatedAt,
@@ -170,11 +220,12 @@ public final class AgentRunState {
                                Map<String, Object> nextAttributes,
                                int nextConsecutiveProtocolErrors,
                                int nextConsecutiveNoProgress,
-                               String nextAnswer, AgentStopDecision nextStopDecision) {
+                               String nextAnswer, String nextSuspensionMessage,
+                               AgentStopDecision nextStopDecision) {
         return new AgentRunState(
                 runId, task, protocolId, nextRunStatus, nextTurn, startedAt, nextUpdatedAt,
                 nextObservations, nextAttributes, nextConsecutiveProtocolErrors,
-                nextConsecutiveNoProgress, nextAnswer, nextStopDecision);
+                nextConsecutiveNoProgress, nextAnswer, nextSuspensionMessage, nextStopDecision);
     }
 
     public String runId() { return runId; }
@@ -189,5 +240,6 @@ public final class AgentRunState {
     public int consecutiveProtocolErrors() { return consecutiveProtocolErrors; }
     public int consecutiveNoProgress() { return consecutiveNoProgress; }
     public String answer() { return answer; }
+    public String suspensionMessage() { return suspensionMessage; }
     public AgentStopDecision stopDecision() { return stopDecision; }
 }
