@@ -28,8 +28,10 @@ class HttpConvertUtilsTest {
     void encodesChineseAndEmptyMap() {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("name", "中文");
+        params.put("a&b", "x=y");
 
-        assertThat(HttpConvertUtils.convertMapToHttpGetParams(params)).isEqualTo("name=%E4%B8%AD%E6%96%87");
+        assertThat(HttpConvertUtils.convertMapToHttpGetParams(params))
+                .isEqualTo("name=%E4%B8%AD%E6%96%87&a%26b=x%3Dy");
         assertThat(HttpConvertUtils.convertMapToHttpGetParams(null)).isEmpty();
         assertThat(HttpConvertUtils.convertMapToHttpGetParams(Map.of())).isEmpty();
     }

@@ -181,6 +181,14 @@ public final class Monitor {
         return new SafeMonitorTransaction(transaction, type, name);
     }
 
+    public static MonitorTransaction newTransaction(String type, String name, long startedNanos) {
+        MonitorTransaction transaction = safeGet("newTransaction",
+                () -> facade.newTransaction(type, name, startedNanos),
+                () -> new NoOpMonitorTransaction(type, name),
+                new NoOpMonitorTransaction(type, name));
+        return new SafeMonitorTransaction(transaction, type, name);
+    }
+
     public static void logEvent(String type, String name, MonitorStatus status, String data) {
         safeRun("logEvent", () -> facade.logEvent(type, name, status, data));
     }

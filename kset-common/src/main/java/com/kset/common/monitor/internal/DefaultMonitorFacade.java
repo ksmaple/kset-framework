@@ -248,11 +248,16 @@ public final class DefaultMonitorFacade implements MonitorFacade {
 
     @Override
     public MonitorTransaction newTransaction(String type, String name) {
+        return newTransaction(type, name, System.nanoTime());
+    }
+
+    @Override
+    public MonitorTransaction newTransaction(String type, String name, long startedNanos) {
         String traceId = currentTraceId().orElse(null);
         if (!sampler.shouldSample(traceId, type)) {
             return new com.kset.common.monitor.internal.NoOpMonitorTransaction(type, name);
         }
-        ActiveTransaction active = new ActiveTransaction(type, name, System.nanoTime());
+        ActiveTransaction active = new ActiveTransaction(type, name, startedNanos);
         transactionStack.get().push(active);
         return new FacadeMonitorTransaction(active);
     }

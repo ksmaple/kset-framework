@@ -1,17 +1,15 @@
 package com.kset.common.monitor.autoconfigure;
 
-import com.kset.common.monitor.config.KsetMonitorProperties;
 import com.kset.common.utils.http.KsetHttp;
-import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
 
 @AutoConfiguration
 public class KsetMonitorHttpClientAutoConfiguration {
 
-    @Bean
-    ApplicationRunner ksetMonitorHttpClientConfigurer(KsetMonitorProperties properties) {
-        return args -> KsetHttp.setMonitorEnabled(
-                properties.isEnabled() && properties.getHttpClient().isEnabled());
+    public KsetMonitorHttpClientAutoConfiguration(Environment environment) {
+        KsetHttp.setMonitorEnabled(
+                environment.getProperty("kset.monitor.enabled", Boolean.class, true)
+                        && environment.getProperty("kset.monitor.http-client.enabled", Boolean.class, true));
     }
 }

@@ -139,13 +139,17 @@ VersionUtil.inRange("1.5.0", "1.0.0", "2.0.0");
 
 ```java
 import com.kset.common.utils.http.KsetHttp;
+import java.net.URI;
+import java.net.http.HttpRequest;
 
-String body = KsetHttp.get("https://example.com/api")
+HttpRequest request = HttpRequest.newBuilder(URI.create("https://example.com/api"))
         .header("X-Token", token)
-        .executeString();
+        .GET()
+        .build();
+String body = KsetHttp.build().execute(request);
 ```
 
-配套：`HttpConvertUtils`、`HttpLogInterceptor`（SLF4J）、`RetryInterceptor`。
+配套表单和查询参数编码工具：`HttpConvertUtils`。
 
 ## 线程池（`com.kset.common.utils.thread`）
 

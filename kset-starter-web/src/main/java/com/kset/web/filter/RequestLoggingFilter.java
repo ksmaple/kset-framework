@@ -2,8 +2,10 @@ package com.kset.web.filter;
 
 import com.kset.common.logging.LogMaskingUtil;
 import com.kset.common.monitor.Monitor;
+import com.kset.common.monitor.TraceSnapshot;
 import com.kset.common.monitor.facade.MonitorStatus;
 import com.kset.common.monitor.facade.MonitorTypes;
+import com.kset.common.trace.TraceHeaders;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,7 +13,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingRequestWrapper;
-import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -31,27 +32,43 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         ContentCachingRequestWrapper wrappedRequest = new ContentCachingRequestWrapper(request, REQUEST_BODY_CACHE_LIMIT);
-        ContentCachingResponseWrapper wrappedResponse = new ContentCachingResponseWrapper(response);
-        long start = System.currentTimeMillis();
+        TraceSnapshot entryTrace = Monitor.capture();
+        long start = System.nanoTime();
         try {
-            filterChain.doFilter(wrappedRequest, wrappedResponse);
+            filterChain.doFilter(wrappedRequest, response);
         } finally {
-            long cost = System.currentTimeMillis() - start;
-            if (cost >= 500) {
-                Monitor.logEvent(MonitorTypes.URL, "request-log", MonitorStatus.FAIL,
-                        cost + "ms " + request.getMethod() + " " + request.getRequestURI());
+            long cost = (System.nanoTime() - start) / 1_000_000L;
+            if (cost >= 500 || log.isDebugEnabled()) {
+                String traceId = response.getHeader(TraceHeaders.TRACE_ID_HEADER);
+                if (traceId == null || traceId.isBlank()) {
+                    traceId = entryTrace.getTraceId();
+                }
+                if (traceId == null || traceId.isBlank()) {
+                    traceId = Monitor.currentTraceId().orElse(null);
+                }
+                String spanId = response.getHeader(TraceHeaders.SPAN_ID_HEADER);
+                if (spanId == null || spanId.isBlank()) {
+                    spanId = entryTrace.getSpanId();
+                }
+                TraceSnapshot trace = new TraceSnapshot(traceId,
+                        spanId, entryTrace.getGrayTag());
+                try (var ignored = Monitor.openScope(trace)) {
+                    if (cost >= 500) {
+                        Monitor.logEvent(MonitorTypes.URL, "request-log", MonitorStatus.FAIL,
+                                cost + "ms " + request.getMethod() + " " + request.getRequestURI());
+                    }
+                    if (log.isDebugEnabled()) {
+                        String body = readBody(wrappedRequest);
+                        log.debug("HTTP {} {} status={} costMs={} traceId={} body={}",
+                                request.getMethod(),
+                                request.getRequestURI(),
+                                response.getStatus(),
+                                cost,
+                                Monitor.currentTraceId().orElse(null),
+                                LogMaskingUtil.maskText(body));
+                    }
+                }
             }
-            if (log.isDebugEnabled()) {
-                String body = readBody(wrappedRequest);
-                log.debug("HTTP {} {} status={} costMs={} traceId={} body={}",
-                        request.getMethod(),
-                        request.getRequestURI(),
-                        wrappedResponse.getStatus(),
-                        cost,
-                        Monitor.currentTraceId().orElse(null),
-                        LogMaskingUtil.maskText(body));
-            }
-            wrappedResponse.copyBodyToResponse();
         }
     }
 

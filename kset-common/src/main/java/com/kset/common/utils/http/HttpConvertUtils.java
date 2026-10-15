@@ -37,7 +37,8 @@ public class HttpConvertUtils {
     private static String encodeParamsSkippingNull(Map<String, String> params) {
         return params.entrySet().stream()
                 .filter(entry -> entry.getKey() != null && entry.getValue() != null)
-                .map(entry -> entry.getKey() + "=" + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
+                .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8)
+                        + "=" + URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
                 .collect(Collectors.joining("&"));
     }
 

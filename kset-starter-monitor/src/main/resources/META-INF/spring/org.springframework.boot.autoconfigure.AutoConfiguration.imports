@@ -1,1 +1,2 @@
 com.kset.common.monitor.autoconfigure.KsetMonitorAutoConfiguration
+com.kset.common.monitor.autoconfigure.KsetMonitorHttpClientAutoConfiguration

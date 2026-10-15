@@ -50,6 +50,10 @@ public interface MonitorFacade {
 
     MonitorTransaction newTransaction(String type, String name);
 
+    default MonitorTransaction newTransaction(String type, String name, long startedNanos) {
+        return newTransaction(type, name);
+    }
+
     void logEvent(String type, String name, MonitorStatus status, String data);
 
     void logMetric(String name, long value, MetricKind kind);

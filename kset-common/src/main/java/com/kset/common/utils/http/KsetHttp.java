@@ -22,11 +22,10 @@ import java.util.concurrent.CompletableFuture;
 /**
  * JDK 21 HTTP 客户端封装。
  *
- * <p>出站自动带 Trace / 灰度头，不改调用线程的 Trace。监控 scope 包住整次发送。
+ * <p>出站自动带 Trace / 灰度头，不改调用线程的 Trace。监控记录整次发送耗时。
  */
 public final class KsetHttp {
 
-    private static final KsetHttp INSTANCE = new KsetHttp();
     private static final Set<String> MANAGED_HEADERS = Set.of(
             "connection", "content-length", "expect", "host", "upgrade");
     private static volatile boolean monitorEnabled = true;
@@ -42,7 +41,7 @@ public final class KsetHttp {
     }
 
     public static KsetHttp build() {
-        return INSTANCE;
+        return Holder.INSTANCE;
     }
 
     public static void setMonitorEnabled(boolean enabled) {
@@ -54,11 +53,23 @@ public final class KsetHttp {
         return response.body();
     }
 
+    /**
+     * 取消返回的 Future 会尝试取消底层请求；已到达服务端的操作仍需按业务单号核验结果。
+     */
     public CompletableFuture<HttpResponse<String>> enqueue(HttpRequest request) {
         OutboundTrace trace = resolveOutboundTrace();
         HttpRequest tracedRequest = copyWithTraceHeaders(request, trace);
-        return client.sendAsync(tracedRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-                .whenComplete((response, error) -> finish(tracedRequest, trace, response, error));
+        long startedNanos = System.nanoTime();
+        CompletableFuture<HttpResponse<String>> responseFuture =
+                client.sendAsync(tracedRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        CompletableFuture<HttpResponse<String>> result = responseFuture.whenComplete(
+                (response, error) -> finish(tracedRequest, trace, startedNanos, response, error));
+        result.whenComplete((response, error) -> {
+            if (result.isCancelled()) {
+                responseFuture.cancel(true);
+            }
+        });
+        return result;
     }
 
     public String execute(String url, Map<String, String> headers, Map<String, String> formBody)
@@ -88,8 +99,9 @@ public final class KsetHttp {
         }
     }
 
-    private void finish(HttpRequest request, OutboundTrace trace, HttpResponse<String> response, Throwable error) {
-        try (MonitorScope scope = MonitorScope.open(request, trace)) {
+    private void finish(HttpRequest request, OutboundTrace trace, long startedNanos,
+                        HttpResponse<String> response, Throwable error) {
+        try (MonitorScope scope = MonitorScope.open(request, trace, startedNanos)) {
             if (error != null) {
                 scope.failure(error);
             } else {
@@ -161,16 +173,17 @@ public final class KsetHttp {
         HttpRequest.Builder builder = HttpRequest.newBuilder(request.uri())
                 .timeout(request.timeout().orElse(Duration.ofSeconds(10)))
                 .version(request.version().orElse(HttpClient.Version.HTTP_2))
+                .expectContinue(request.expectContinue())
                 .method(request.method(), request.bodyPublisher().orElse(HttpRequest.BodyPublishers.noBody()));
         request.headers().map().forEach((name, values) -> {
             if (!MANAGED_HEADERS.contains(name.toLowerCase())) {
                 values.forEach(value -> builder.header(name, value));
             }
         });
-        builder.header(TraceHeaders.TRACE_ID_HEADER, trace.traceId())
-                .header(TraceHeaders.SPAN_ID_HEADER, trace.spanId());
+        builder.setHeader(TraceHeaders.TRACE_ID_HEADER, trace.traceId())
+                .setHeader(TraceHeaders.SPAN_ID_HEADER, trace.spanId());
         if (trace.grayTag() != null && !trace.grayTag().isBlank()) {
-            builder.header(TraceHeaders.GRAY_TAG_HEADER, trace.grayTag());
+            builder.setHeader(TraceHeaders.GRAY_TAG_HEADER, trace.grayTag());
         }
         return builder.build();
     }
@@ -188,7 +201,7 @@ public final class KsetHttp {
     private static void addHeaders(HttpRequest.Builder builder, Map<String, String> headers) {
         headers.forEach((name, value) -> {
             if (value != null && !MANAGED_HEADERS.contains(name.toLowerCase())) {
-                builder.header(name, value);
+                builder.setHeader(name, value);
             }
         });
     }
@@ -196,15 +209,23 @@ public final class KsetHttp {
     private record OutboundTrace(String traceId, String spanId, String grayTag) {
     }
 
+    private static final class Holder {
+        private static final KsetHttp INSTANCE = new KsetHttp();
+    }
+
     private static final class MonitorScope implements AutoCloseable {
         private final TraceSnapshot previous;
         private final MonitorTransaction transaction;
 
         private static MonitorScope open(HttpRequest request, OutboundTrace trace) {
-            return new MonitorScope(request, trace);
+            return new MonitorScope(request, trace, System.nanoTime());
         }
 
-        private MonitorScope(HttpRequest request, OutboundTrace trace) {
+        private static MonitorScope open(HttpRequest request, OutboundTrace trace, long startedNanos) {
+            return new MonitorScope(request, trace, startedNanos);
+        }
+
+        private MonitorScope(HttpRequest request, OutboundTrace trace, long startedNanos) {
             this.previous = Monitor.capture();
             Monitor.setTraceId(trace.traceId());
             Monitor.setSpanId(trace.spanId());
@@ -216,7 +237,7 @@ public final class KsetHttp {
                 return;
             }
             String name = request.method() + " " + request.uri().getPath();
-            this.transaction = Monitor.newTransaction(MonitorTypes.HTTP_CLIENT, name);
+            this.transaction = Monitor.newTransaction(MonitorTypes.HTTP_CLIENT, name, startedNanos);
             transaction.addData("component", "http-client");
             transaction.addData("method", request.method());
             transaction.addData("host", request.uri().getHost());

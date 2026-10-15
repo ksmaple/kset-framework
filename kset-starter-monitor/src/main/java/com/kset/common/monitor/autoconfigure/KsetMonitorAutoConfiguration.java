@@ -21,7 +21,6 @@ import org.springframework.context.annotation.Import;
         KsetMonitorServletAutoConfiguration.class,
         KsetMonitorDubboAutoConfiguration.class,
         KsetMonitorGatewayAutoConfiguration.class,
-        KsetMonitorHttpClientAutoConfiguration.class,
         KsetMonitorThreadPoolAutoConfiguration.class,
         KsetMonitorAsyncAutoConfiguration.class
 })
