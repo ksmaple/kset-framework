@@ -516,11 +516,6 @@ public class KsetRedisTemplateOperations implements KsetRedisOperations {
         return Boolean.TRUE.equals(template.opsForSet().isMember(key, value));
     }
 
-    @Override
-    public RedisTemplate<String, Object> template() {
-        return template;
-    }
-
     private <T> T convert(Object raw, Class<T> type) {
         if (raw == null || type == null) {
             return null;

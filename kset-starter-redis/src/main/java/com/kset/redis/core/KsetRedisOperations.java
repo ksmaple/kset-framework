@@ -1,7 +1,6 @@
 package com.kset.redis.core;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import org.springframework.data.redis.core.RedisTemplate;
 
 import java.time.Duration;
 import java.util.Collection;
@@ -176,6 +175,4 @@ public interface KsetRedisOperations {
     Long sRem(String key, Object... values);
 
     Boolean sIsMember(String key, Object value);
-
-    RedisTemplate<String, Object> template();
 }

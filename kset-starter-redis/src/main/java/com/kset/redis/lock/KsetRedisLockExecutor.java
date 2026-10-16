@@ -231,10 +231,6 @@ public class KsetRedisLockExecutor {
         });
     }
 
-    public KsetRedissonLockProvider provider() {
-        return provider;
-    }
-
     private Optional<KsetRedisLock> resolveAcquire(List<String> keys,
                                                    KsetRedisLockOptions options,
                                                    boolean allowOptional) {

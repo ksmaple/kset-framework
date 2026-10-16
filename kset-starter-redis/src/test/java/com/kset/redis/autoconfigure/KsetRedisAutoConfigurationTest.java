@@ -11,7 +11,6 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,8 +37,6 @@ class KsetRedisAutoConfigurationTest {
             assertThat(context).hasSingleBean(RedissonClient.class);
             assertThat(context).hasSingleBean(KsetRedissonLockProvider.class);
             assertThat(context).hasSingleBean(KsetRedisLockExecutor.class);
-            assertThat(context.getBean(KsetRedisService.class).template())
-                    .isSameAs(context.getBean("ksetRedisTemplate", RedisTemplate.class));
             assertThat(context.getBean("redisTemplate"))
                     .isNotSameAs(context.getBean("ksetRedisTemplate"));
         });

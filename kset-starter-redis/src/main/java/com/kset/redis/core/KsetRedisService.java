@@ -308,9 +308,4 @@ public class KsetRedisService implements KsetRedisOperations {
     public Boolean sIsMember(String key, Object value) {
         return delegate.sIsMember(key, value);
     }
-
-    @Override
-    public RedisTemplate<String, Object> template() {
-        return delegate.template();
-    }
 }

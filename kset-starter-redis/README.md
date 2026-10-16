@@ -410,4 +410,3 @@ Optional<Integer> myRank = guildBoard.memberRankInGroup("guild-1", "player-9");
 | 流式 | `scanKeys`, `deleteByPattern`, `hScan`, `sScan`, `mgetChunked` |
 | 锁 | `KsetRedisLockExecutor` / `KsetRedisLocks` / `@KsetLocked`（仅 Redisson） |
 | 排行榜 | `KsetRedisRankService` → `board` / `groupBoard` |
-| 高级 | `template()` |
