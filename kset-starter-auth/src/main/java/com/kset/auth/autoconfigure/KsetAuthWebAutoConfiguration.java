@@ -6,6 +6,7 @@ import com.kset.auth.web.AuthExceptionHandler;
 import com.kset.auth.web.DefaultServletAuthFailureHandler;
 import com.kset.auth.web.LoginAuthFilter;
 import com.kset.auth.web.ServletAuthFailureHandler;
+import com.kset.web.config.KsetWebProperties;
 import jakarta.servlet.Filter;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.Ordered;
 import org.springframework.web.servlet.HandlerMapping;
@@ -37,8 +39,8 @@ public class KsetAuthWebAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public ServletAuthFailureHandler servletAuthFailureHandler() {
-        return new DefaultServletAuthFailureHandler();
+    public ServletAuthFailureHandler servletAuthFailureHandler(ObjectProvider<KsetWebProperties> webProperties) {
+        return new DefaultServletAuthFailureHandler(webProperties.getIfAvailable(KsetWebProperties::new));
     }
 
     @Bean
@@ -54,7 +56,7 @@ public class KsetAuthWebAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public AuthExceptionHandler authExceptionHandler() {
-        return new AuthExceptionHandler();
+    public AuthExceptionHandler authExceptionHandler(ObjectProvider<KsetWebProperties> webProperties) {
+        return new AuthExceptionHandler(webProperties.getIfAvailable(KsetWebProperties::new));
     }
 }

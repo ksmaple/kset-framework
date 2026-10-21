@@ -1,6 +1,8 @@
 package com.kset.gateway.auth;
 
 import com.kset.cloud.config.KsetCloudProperties;
+import com.kset.common.trace.TraceHeaders;
+import com.kset.gateway.handler.GatewayErrorResponse;
 import com.kset.gateway.spi.GatewayAuthProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.StringUtils;
@@ -21,9 +23,15 @@ import java.util.Objects;
 public class HeaderTokenGatewayAuthProvider implements GatewayAuthProvider {
 
     private final KsetCloudProperties properties;
+    private final String traceHeader;
 
     public HeaderTokenGatewayAuthProvider(KsetCloudProperties properties) {
+        this(properties, TraceHeaders.TRACE_ID_HEADER);
+    }
+
+    public HeaderTokenGatewayAuthProvider(KsetCloudProperties properties, String traceHeader) {
         this.properties = Objects.requireNonNull(properties, "properties");
+        this.traceHeader = traceHeader;
     }
 
     @Override
@@ -69,8 +77,7 @@ public class HeaderTokenGatewayAuthProvider implements GatewayAuthProvider {
         return MessageDigest.isEqual(left, right);
     }
 
-    private static Mono<Void> unauthorized(ServerWebExchange exchange) {
-        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-        return exchange.getResponse().setComplete();
+    private Mono<Void> unauthorized(ServerWebExchange exchange) {
+        return GatewayErrorResponse.write(exchange, HttpStatus.UNAUTHORIZED, traceHeader);
     }
 }

@@ -21,6 +21,9 @@ import com.kset.common.utils.JsonUtil;
 import com.kset.common.auth.AuthHeaders;
 import com.kset.common.auth.LoginContext;
 import com.kset.common.auth.LoginUser;
+import com.kset.common.monitor.Monitor;
+import com.kset.common.trace.TraceHeaders;
+import com.kset.web.config.KsetWebProperties;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +50,7 @@ class LoginAuthFilterTest {
     @AfterEach
     void clear() {
         LoginContext.clear();
+        Monitor.clear();
     }
 
     @Test
@@ -59,6 +63,21 @@ class LoginAuthFilterTest {
 
         assertThat(response.getStatus()).isEqualTo(HttpServletResponse.SC_OK);
         assertThat(response.getContentAsString()).contains("\"code\":401");
+    }
+
+    @Test
+    void authFailureUsesConfiguredHttpStatusAndTraceId() throws Exception {
+        KsetWebProperties webProperties = new KsetWebProperties();
+        webProperties.getExceptionHandling().setUseHttpStatus(true);
+        Monitor.setTraceId("auth-trace");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        new DefaultServletAuthFailureHandler(webProperties).handle(
+                new MockHttpServletRequest("GET", "/api/orders"), response, 401, "未登录");
+
+        assertThat(response.getStatus()).isEqualTo(HttpServletResponse.SC_UNAUTHORIZED);
+        assertThat(response.getHeader(TraceHeaders.TRACE_ID_HEADER)).isEqualTo("auth-trace");
+        assertThat(response.getContentAsString()).contains("\"traceId\":\"auth-trace\"");
     }
 
     @Test

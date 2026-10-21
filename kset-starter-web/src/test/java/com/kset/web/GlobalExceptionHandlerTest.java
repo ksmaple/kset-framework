@@ -4,6 +4,7 @@ import com.kset.common.exception.BusinessException;
 import com.kset.common.exception.BizErrorCode;
 import com.kset.web.config.KsetWebProperties;
 import com.kset.web.handler.GlobalExceptionHandler;
+import com.kset.web.handler.WebExceptionMapper;
 import com.kset.web.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 
 import java.util.Set;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -97,6 +99,39 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getCode()).isEqualTo(400);
+    }
+
+    @Test
+    void mapsOuterExceptionBeforeItsCause() {
+        WebExceptionMapper mapper = new WebExceptionMapper() {
+            @Override
+            public boolean supports(Exception exception) {
+                return exception instanceof IllegalStateException || exception instanceof IllegalArgumentException;
+            }
+
+            @Override
+            public ResponseEntity<ApiResponse<Void>> handle(Exception exception) {
+                return ResponseEntity.ok(ApiResponse.fail(
+                        exception instanceof IllegalStateException ? 409 : 400, "mapped"));
+            }
+        };
+        GlobalExceptionHandler rootFirst = new GlobalExceptionHandler(new KsetWebProperties(), List.of(mapper));
+
+        var response = rootFirst.handleException(new IllegalStateException(new IllegalArgumentException("cause")));
+
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo(409);
+    }
+
+    @Test
+    void mapsWrappedBusinessExceptionBeforeNestedTechnicalException() {
+        GlobalExceptionHandler rootFirst = new GlobalExceptionHandler(new KsetWebProperties());
+
+        var response = rootFirst.handleException(new IllegalStateException(
+                new BusinessException("1001", "业务失败", new IllegalArgumentException("cause"))));
+
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo(1001);
     }
 
     private enum TestErrorCode implements BizErrorCode {

@@ -11,8 +11,11 @@ import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.gateway.auth.HeaderTokenGatewayAuthProvider;
 import com.kset.gateway.auth.PassThroughGatewayAuthProvider;
 import com.kset.gateway.filter.AuthGatewayFilter;
+import com.kset.gateway.filter.DownstreamErrorResponseFilter;
 import com.kset.gateway.spi.GatewayAuthProvider;
 import com.kset.gateway.filter.GrayTagGatewayFilter;
+import com.kset.gateway.handler.GatewayErrorResponse;
+import com.kset.gateway.handler.KsetGatewayErrorHandler;
 import com.kset.gateway.route.GatewayRouteRuleProvider;
 import com.kset.cloud.nacos.NacosConfigConvention;
 import com.kset.cloud.loadbalancer.KsetGrayLoadBalancerConfiguration;
@@ -70,9 +73,9 @@ public class KsetGatewayAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "kset.cloud.gateway", name = "auth-enabled", havingValue = "true")
-    @ConditionalOnMissingBean(HeaderTokenGatewayAuthProvider.class)
-    public GatewayAuthProvider headerTokenGatewayAuthProvider(KsetCloudProperties properties) {
-        return new HeaderTokenGatewayAuthProvider(properties);
+    @ConditionalOnMissingBean(GatewayAuthProvider.class)
+    public GatewayAuthProvider headerTokenGatewayAuthProvider(KsetCloudProperties properties, Environment environment) {
+        return new HeaderTokenGatewayAuthProvider(properties, GatewayErrorResponse.configuredTraceHeader(environment));
     }
 
     @Bean
@@ -85,6 +88,12 @@ public class KsetGatewayAutoConfiguration {
     public GatewayRouteRuleProvider gatewayRouteRuleProvider(RouteDefinitionRepository routeDefinitionRepository,
                                                              ApplicationEventPublisher eventPublisher) {
         return new GatewayRouteRuleProvider(routeDefinitionRepository, eventPublisher);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public DownstreamErrorResponseFilter downstreamErrorResponseFilter(Environment environment) {
+        return new DownstreamErrorResponseFilter(GatewayErrorResponse.configuredTraceHeader(environment));
     }
 
     @Bean
@@ -102,8 +111,17 @@ public class KsetGatewayAutoConfiguration {
     }
 
     @Bean
-    @Order(-1)
-    public ErrorWebExceptionHandler ksetGatewayErrorWebExceptionHandler() {
+    @Order(-2)
+    public ErrorWebExceptionHandler ksetGatewayErrorWebExceptionHandler(Environment environment) {
+        return new KsetGatewayErrorHandler(GatewayErrorResponse.configuredTraceHeader(environment));
+    }
+
+    /**
+     * 保留原因（feature-key=dubbo-error-response, change-id=dubbo-error-response-v1）：
+     * 原网关兜底响应只用于回滚对照，不再承接生产请求。
+     */
+    @SuppressWarnings("unused")
+    private ErrorWebExceptionHandler gatewayErrorHandlerForRollback() {
         return (ServerWebExchange exchange, Throwable ex) -> {
             exchange.getResponse().setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR);
             exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);

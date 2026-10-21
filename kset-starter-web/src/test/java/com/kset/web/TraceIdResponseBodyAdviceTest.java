@@ -1,6 +1,8 @@
 package com.kset.web;
 
 import com.kset.common.monitor.Monitor;
+import com.kset.common.trace.TraceHeaders;
+import com.kset.web.config.KsetWebProperties;
 import com.kset.common.monitor.backend.LogBackend;
 import com.kset.common.monitor.internal.DefaultMonitorFacade;
 import com.kset.common.monitor.reporter.NoOpMetricAggregator;
@@ -12,6 +14,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.server.ServletServerHttpRequest;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.lang.reflect.Method;
 
@@ -19,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class TraceIdResponseBodyAdviceTest {
 
-    private final TraceIdResponseBodyAdvice advice = new TraceIdResponseBodyAdvice();
+    private final TraceIdResponseBodyAdvice advice = new TraceIdResponseBodyAdvice(new KsetWebProperties());
 
     @BeforeEach
     void installMonitorFacade() {
@@ -50,6 +54,22 @@ class TraceIdResponseBodyAdviceTest {
 
         assertThat(result).isSameAs(body);
         assertThat(body.getTraceId()).isEqualTo("trace-web");
+    }
+
+    @Test
+    void marksFailedApiResponseEvenWhenTraceIdBodyFieldIsDisabled() throws Exception {
+        KsetWebProperties properties = new KsetWebProperties();
+        properties.getResponse().setTraceIdEnabled(false);
+        TraceIdResponseBodyAdvice disabledAdvice = new TraceIdResponseBodyAdvice(properties);
+        Method method = SampleController.class.getDeclaredMethod("apiResponse");
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        ApiResponse<String> body = ApiResponse.fail(503, "服务暂时不可用");
+
+        disabledAdvice.beforeBodyWrite(body, new MethodParameter(method, -1), null, null,
+                new ServletServerHttpRequest(request), null);
+
+        assertThat(request.getAttribute(TraceHeaders.HTTP_FAILURE_ATTRIBUTE)).isEqualTo(true);
+        assertThat(body.getTraceId()).isNull();
     }
 
     static class SampleController {

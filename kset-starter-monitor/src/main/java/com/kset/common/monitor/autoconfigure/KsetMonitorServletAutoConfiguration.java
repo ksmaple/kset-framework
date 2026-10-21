@@ -2,7 +2,6 @@ package com.kset.common.monitor.autoconfigure;
 
 import com.kset.common.monitor.config.KsetMonitorCloudCompat;
 import com.kset.common.monitor.config.KsetMonitorProperties;
-import com.kset.common.monitor.interceptor.MvcMonitorInterceptor;
 import com.kset.common.monitor.web.GrayTagServletFilter;
 import com.kset.common.monitor.web.TraceIdFilter;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -24,7 +23,7 @@ public class KsetMonitorServletAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "kset.monitor.servlet", name = "trace-enabled", havingValue = "true", matchIfMissing = true)
-    @ConditionalOnMissingBean({TraceIdFilter.class, MvcMonitorInterceptor.class})
+    @ConditionalOnMissingBean(TraceIdFilter.class)
     public TraceIdFilter traceIdFilter() {
         return new TraceIdFilter();
     }

@@ -1,15 +1,17 @@
 package com.kset.web.advice;
 
 import com.kset.common.monitor.Monitor;
+import com.kset.common.trace.TraceHeaders;
+import com.kset.web.config.KsetWebProperties;
 import com.kset.web.response.ApiResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
+import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
@@ -18,8 +20,13 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
  */
 @RestControllerAdvice
 @ConditionalOnClass(ApiResponse.class)
-@ConditionalOnProperty(prefix = "kset.web.response", name = "trace-id-enabled", havingValue = "true", matchIfMissing = true)
 public class TraceIdResponseBodyAdvice implements ResponseBodyAdvice<Object> {
+
+    private final boolean traceIdEnabled;
+
+    public TraceIdResponseBodyAdvice(KsetWebProperties properties) {
+        this.traceIdEnabled = properties.getResponse().isTraceIdEnabled();
+    }
 
     @Override
     public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
@@ -32,7 +39,10 @@ public class TraceIdResponseBodyAdvice implements ResponseBodyAdvice<Object> {
                                   Class<? extends HttpMessageConverter<?>> selectedConverterType,
                                   ServerHttpRequest request, ServerHttpResponse response) {
         if (body instanceof ApiResponse<?> apiResponse) {
-            if (apiResponse.getTraceId() == null || apiResponse.getTraceId().isBlank()) {
+            if (request instanceof ServletServerHttpRequest servletRequest && apiResponse.getCode() != 0) {
+                servletRequest.getServletRequest().setAttribute(TraceHeaders.HTTP_FAILURE_ATTRIBUTE, true);
+            }
+            if (traceIdEnabled && (apiResponse.getTraceId() == null || apiResponse.getTraceId().isBlank())) {
                 apiResponse.setTraceId(Monitor.currentTraceId().orElse(null));
             }
             return apiResponse;

@@ -6,6 +6,8 @@ import com.kset.web.response.ApiResponse;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,19 +24,27 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
  * 全局异常处理
  */
 @RestControllerAdvice
+@Order(Ordered.LOWEST_PRECEDENCE)
 @Slf4j
 public class GlobalExceptionHandler {
 
     private final KsetWebProperties.ExceptionHandling properties;
+    private final List<WebExceptionMapper> mappers;
 
     public GlobalExceptionHandler(KsetWebProperties webProperties) {
+        this(webProperties, List.of());
+    }
+
+    public GlobalExceptionHandler(KsetWebProperties webProperties, List<WebExceptionMapper> mappers) {
         this.properties = webProperties.getExceptionHandling();
+        this.mappers = List.copyOf(mappers);
     }
 
     @ExceptionHandler(BusinessException.class)
@@ -108,9 +118,34 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
+        ResponseEntity<ApiResponse<Void>> mapped = map(ex);
+        if (mapped != null) {
+            return mapped;
+        }
+        Throwable cause = ex.getCause();
+        for (int depth = 0; cause != null && depth < 16; depth++, cause = cause.getCause()) {
+            if (cause instanceof BusinessException businessException) {
+                return handleBusinessException(businessException);
+            }
+            if (cause instanceof Exception nested) {
+                mapped = map(nested);
+                if (mapped != null) {
+                    return mapped;
+                }
+            }
+        }
         log.error("Unhandled web exception", ex);
         return response(HttpStatus.INTERNAL_SERVER_ERROR,
                 ApiResponse.fail(properties.getSystemCode(), "系统异常，请稍后重试"));
+    }
+
+    private ResponseEntity<ApiResponse<Void>> map(Exception exception) {
+        for (WebExceptionMapper mapper : mappers) {
+            if (mapper.supports(exception)) {
+                return mapper.handle(exception);
+            }
+        }
+        return null;
     }
 
     private ResponseEntity<ApiResponse<Void>> response(HttpStatus status, ApiResponse<Void> body) {

@@ -13,6 +13,7 @@ import com.kset.auth.gateway.LoginAuthGatewayFilter;
 import com.kset.auth.session.LoginSessionStore;
 import com.kset.common.auth.AuthHeaders;
 import com.kset.common.auth.LoginUser;
+import com.kset.common.trace.TraceHeaders;
 import com.kset.common.utils.JsonUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -106,6 +107,17 @@ class LoginAuthGatewayFilterTest {
         filter.filter(exchange, ignored -> Mono.empty()).block();
 
         assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"code\":401");
+    }
+
+    @Test
+    void authFailureIncludesGatewayTraceId() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/api/orders"));
+        exchange.getAttributes().put(TraceHeaders.TRACE_ID_KEY, "gateway-trace");
+
+        new DefaultGatewayAuthFailureHandler().handle(exchange, 401, "未登录").block();
+
+        assertThat(exchange.getAttribute(TraceHeaders.HTTP_FAILURE_ATTRIBUTE)).isEqualTo(true);
+        assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"traceId\":\"gateway-trace\"");
     }
 
     private LoginAuthGatewayFilter filter(LoginSessionStore store) {

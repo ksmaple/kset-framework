@@ -57,6 +57,10 @@ public class MvcMonitorInterceptor implements HandlerInterceptor {
                 tx.setStatus(ex);
                 tx.addData("status", String.valueOf(response.getStatus()));
                 Monitor.logError(ex, tx.getName());
+            } else if (response.getStatus() >= 400
+                    || Boolean.TRUE.equals(request.getAttribute(TraceHeaders.HTTP_FAILURE_ATTRIBUTE))) {
+                tx.setStatus(MonitorStatus.FAIL);
+                tx.addData("status", String.valueOf(response.getStatus()));
             } else {
                 tx.setStatus(MonitorStatus.SUCCESS);
                 tx.addData("status", String.valueOf(response.getStatus()));

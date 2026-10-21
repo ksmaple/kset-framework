@@ -4,6 +4,7 @@ import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.gateway.auth.HeaderTokenGatewayAuthProvider;
 import com.kset.gateway.auth.PassThroughGatewayAuthProvider;
 import com.kset.gateway.spi.GatewayAuthProvider;
+import com.kset.common.utils.JsonUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -51,6 +52,10 @@ class AuthGatewayFilterTest {
 
         assertThat(continued).isFalse();
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        var body = JsonUtil.readTree(exchange.getResponse().getBodyAsString().block());
+        assertThat(body.get("code").asInt()).isEqualTo(401);
+        assertThat(body.get("message").asText()).isEqualTo("未登录");
+        assertThat(body.get("traceId").asText()).isNotBlank();
     }
 
     @Test

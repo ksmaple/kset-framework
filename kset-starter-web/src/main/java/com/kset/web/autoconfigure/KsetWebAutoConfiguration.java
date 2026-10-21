@@ -6,6 +6,8 @@ import com.kset.web.config.KsetWebMvcConfigurer;
 import com.kset.web.config.KsetWebProperties;
 import com.kset.web.filter.RequestLoggingFilter;
 import com.kset.web.handler.GlobalExceptionHandler;
+import com.kset.web.handler.WebExceptionMapper;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -25,8 +27,9 @@ public class KsetWebAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public GlobalExceptionHandler globalExceptionHandler(KsetWebProperties properties) {
-        return new GlobalExceptionHandler(properties);
+    public GlobalExceptionHandler globalExceptionHandler(KsetWebProperties properties,
+                                                         ObjectProvider<WebExceptionMapper> mappers) {
+        return new GlobalExceptionHandler(properties, mappers.orderedStream().toList());
     }
 
     @Bean
