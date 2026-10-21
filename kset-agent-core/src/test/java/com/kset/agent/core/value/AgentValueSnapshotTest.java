@@ -1,5 +1,9 @@
 package com.kset.agent.core.value;
 
+import com.kset.agent.core.action.AgentObservation;
+import com.kset.agent.core.action.ToolCallAction;
+import com.kset.agent.core.model.ModelToolCall;
+import com.kset.agent.core.tool.ToolExecutionResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -75,5 +79,65 @@ class AgentValueSnapshotTest {
         assertThatThrownBy(() -> AgentValueSnapshot.value(cyclicList))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("cyclic structured values");
+    }
+
+    @Test
+    void toolFieldsPreserveExplicitNullWithoutRelaxingStateAttributes() {
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("projectId", null);
+        Map<String, Object> nested = new LinkedHashMap<>();
+        nested.put("filter", null);
+        arguments.put("nested", nested);
+        ToolCallAction call = new ToolCallAction("call-1", "task-1", "search", arguments);
+        arguments.remove("projectId");
+        nested.remove("filter");
+
+        assertThat(call.arguments()).containsKey("projectId");
+        assertThat(call.arguments().get("projectId")).isNull();
+        assertThat(((Map<?, ?>) call.arguments().get("nested")).containsKey("filter"))
+                .isTrue();
+        assertThat(call.operationDefinition()).isNotEqualTo(
+                new ToolCallAction("call-1", "task-1", "search", Map.of("nested", Map.of()))
+                        .operationDefinition());
+        assertThatThrownBy(() -> call.arguments().put("other", "value"))
+                .isInstanceOf(UnsupportedOperationException.class);
+
+        ModelToolCall nativeCall = new ModelToolCall("call-2", "search", call.arguments());
+        assertThat(nativeCall.arguments()).containsKey("projectId");
+        assertThat(nativeCall.arguments().get("projectId")).isNull();
+        assertThatThrownBy(() -> nativeCall.arguments().put("other", "value"))
+                .isInstanceOf(UnsupportedOperationException.class);
+
+        ToolCallAction withoutTask = new ToolCallAction("call-3", null, "search", call.arguments());
+        assertThat(withoutTask.operationDefinition()).containsKey("taskId");
+        assertThat(withoutTask.operationDefinition().get("taskId")).isNull();
+        assertThat(withoutTask.pendingState()).containsKey("taskId");
+        Map<String, Object> legacyOperation = new LinkedHashMap<>(withoutTask.operationDefinition());
+        legacyOperation.remove("taskId");
+        Map<String, Object> legacyPending = new LinkedHashMap<>(withoutTask.pendingState());
+        legacyPending.remove("taskId");
+        assertThat(withoutTask.matchesStoredOperation(legacyOperation)).isTrue();
+        assertThat(withoutTask.matchesStoredPendingState(legacyPending)).isTrue();
+        legacyOperation.remove("arguments");
+        assertThat(withoutTask.matchesStoredOperation(legacyOperation)).isFalse();
+
+        Map<String, Object> resultAttributes = new LinkedHashMap<>();
+        resultAttributes.put("source", null);
+        ToolExecutionResult result = new ToolExecutionResult(
+                true, true, "found", null, null, resultAttributes);
+        AgentObservation observation = AgentObservation.toolResult(
+                "call-3", null, "search", result);
+        resultAttributes.remove("source");
+        assertThat(observation.attributes()).containsKeys("taskId", "source");
+        assertThat(observation.attributes().get("taskId")).isNull();
+        assertThat(observation.attributes().get("source")).isNull();
+        assertThatThrownBy(() -> observation.attributes().put("other", "value"))
+                .isInstanceOf(UnsupportedOperationException.class);
+
+        Map<String, Object> stateAttributes = new LinkedHashMap<>();
+        stateAttributes.put("current", null);
+        assertThatThrownBy(() -> AgentValueSnapshot.map(stateAttributes))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("structured map values must not be null");
     }
 }

@@ -7,6 +7,7 @@ import com.kset.agent.core.action.AgentObservation;
 import com.kset.agent.core.action.ExtensionAction;
 import com.kset.agent.core.action.StandardActionHandlers;
 import com.kset.agent.core.action.StandardActionTypes;
+import com.kset.agent.core.action.ToolCallAction;
 import com.kset.agent.core.api.AgentRequest;
 import com.kset.agent.core.api.AgentResumeInput;
 import com.kset.agent.core.api.AgentResult;
@@ -27,6 +28,7 @@ import com.kset.agent.core.stop.AgentStopDecision;
 import com.kset.agent.core.stop.AgentStopReason;
 import com.kset.agent.core.strategy.AgentReasoningStrategy;
 import com.kset.agent.core.strategy.AgentTurn;
+import com.kset.agent.core.strategy.ReactReasoningStrategy;
 import com.kset.agent.core.tool.AgentTool;
 import com.kset.agent.core.tool.AgentToolDescriptor;
 import com.kset.agent.core.tool.InMemoryAgentToolRegistry;
@@ -37,11 +39,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -54,6 +59,63 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentLoopKernelFlowTest {
+
+    @Test
+    void defaultStrategyOnlyShowsConversationStateToModel() {
+        AgentRequest request = request("model-state-boundary");
+        Instant now = Instant.parse("2026-10-21T00:00:00Z");
+        List<Map<String, Object>> tasks = List.of(Map.of(
+                "taskId", "inspect", "title", "Inspect", "dependsOn", List.of()));
+        Map<String, Object> pending = Map.of(
+                "type", StandardActionTypes.CONFIRMATION,
+                "confirmationId", "confirm-1", "message", "approve", "options", Map.of());
+        AgentRunState state = AgentRunState.start(request, now).withAttributes(Map.of(
+                StandardActionHandlers.PLAN_CREATED, true,
+                StandardActionHandlers.PLAN_TASKS, tasks,
+                StandardActionHandlers.PENDING_ACTION, pending,
+                AgentRunState.PROTOCOL_METADATA_ATTRIBUTE, Map.of("tenant", "private-tenant"),
+                "business.permissionScope", "private-scope"), now);
+        ReactReasoningStrategy strategy =
+                new ReactReasoningStrategy(new InMemoryAgentToolRegistry());
+
+        ModelRequest modelRequest = strategy.nextTurn(request, state).modelRequest();
+
+        assertThat(modelRequest.attributes().get("state")).isEqualTo(Map.of(
+                StandardActionHandlers.PLAN_CREATED, true,
+                StandardActionHandlers.PLAN_TASKS, tasks,
+                StandardActionHandlers.PENDING_ACTION, pending));
+        assertThat(modelRequest.userPrompt()).contains("inspect")
+                .doesNotContain("private-scope", "private-tenant");
+        assertThat(state.attributes()).containsKeys(
+                "business.permissionScope", AgentRunState.PROTOCOL_METADATA_ATTRIBUTE);
+    }
+
+    @Test
+    void acceptsToolPendingStateWithNullOrLegacyMissingTaskId() {
+        AgentRequest request = request("optional-tool-task");
+        Instant now = Instant.parse("2026-10-10T00:00:00Z");
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("projectId", null);
+        ToolCallAction call = new ToolCallAction("call-1", null, "search", arguments);
+        Map<String, Object> legacyPending = new LinkedHashMap<>(call.pendingState());
+        legacyPending.remove("taskId");
+        AgentStopDecision waiting = AgentStopDecision.stop(
+                AgentStopReason.WAITING_INPUT, AgentRunStatus.SUSPENDED, "approve");
+
+        for (Map<String, Object> pending : List.of(call.pendingState(), legacyPending)) {
+            AgentRunSnapshot snapshot = new AgentRunSnapshot(
+                    AgentRunSnapshot.CURRENT_VERSION, request.agentRunId(), request.task(),
+                    request.protocolId(), AgentRunStatus.SUSPENDED, 1, now, now,
+                    List.of(), Map.of(StandardActionHandlers.PENDING_ACTION, pending),
+                    0, 0, null, "approve", waiting);
+
+            assertThat(snapshot.pendingToolCall()).contains(call);
+            assertThat(snapshot.pendingToolCalls()).containsExactly(call);
+            assertThat(snapshot.pendingConfirmationId()).isEmpty();
+            AgentResumeReconciler.validatePendingDecision(
+                    AgentRunState.restore(snapshot, now), AgentDecision.of(call));
+        }
+    }
 
     @Test
     void rejectsLegacySnapshotsAndSuspendedAnswer() {
@@ -349,6 +411,8 @@ class AgentLoopKernelFlowTest {
                 .isEqualTo(suspended.snapshot().suspensionMessage());
         assertThat(suspended.snapshot().attributes())
                 .containsKey(StandardActionHandlers.PENDING_ACTION);
+        assertThat(suspended.snapshot().pendingConfirmationId()).contains("confirm-1");
+        assertThat(suspended.snapshot().pendingToolCalls()).isEmpty();
 
         AgentRequest approved = request("confirmation-run", initial.options(),
                 Map.of(AgentRequest.APPROVED_CONFIRMATION_IDS, List.of("confirm-1")), null);
@@ -562,6 +626,10 @@ class AgentLoopKernelFlowTest {
         assertThat(failed.snapshot().attributes())
                 .containsEntry(StandardActionHandlers.RECONCILIATION_PENDING, true)
                 .containsKey(StandardActionHandlers.PENDING_ACTION);
+        assertThat(failed.snapshot().pendingToolCall()).isEmpty();
+        assertThat(failed.snapshot().pendingToolCalls())
+                .extracting(ToolCallAction::callId)
+                .containsExactly("read#1", "read#2");
         assertThatThrownBy(() -> kernel.resume(request, failed.snapshot()))
                 .isInstanceOfSatisfying(AgentCoreException.class,
                         error -> assertThat(error.errorCode())
@@ -580,6 +648,71 @@ class AgentLoopKernelFlowTest {
         assertThat(resumed.snapshot().attributes())
                 .doesNotContainKeys(StandardActionHandlers.PENDING_ACTION,
                         StandardActionHandlers.RECONCILIATION_PENDING);
+    }
+
+    @Test
+    void preservesExplicitNullToolFieldsThroughBatchExecutionAndSnapshot() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"inspect","tasks":[
+                          {"taskId":"inspect","title":"Inspect","dependsOn":[]}
+                        ]}
+                        """),
+                envelope("""
+                        {"type":"tool_batch","plan":"inspect both","toolCalls":[
+                          {"callId":"inspect#1","taskId":"inspect","toolName":"first",
+                           "arguments":{"projectId":null,"filters":{"language":null},"ids":[null,7]}},
+                          {"callId":"inspect#2","taskId":"inspect","toolName":"second",
+                           "arguments":{"query":null,"projectIds":[1,2]}}
+                        ]}
+                        """),
+                "inspection complete");
+        AtomicReference<Map<String, Object>> firstArguments = new AtomicReference<>();
+        AtomicReference<Map<String, Object>> secondArguments = new AtomicReference<>();
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(tool("first", (arguments, context) -> {
+                    firstArguments.set(arguments);
+                    return ToolExecutionResult.success("first result");
+                }))
+                .register(tool("second", (arguments, context) -> {
+                    secondArguments.set(arguments);
+                    return ToolExecutionResult.success("second result");
+                }));
+        AgentTestSupport.RecordingListener listener = new AgentTestSupport.RecordingListener();
+        AgentTestSupport.RecordingCheckpoint checkpoints =
+                new AgentTestSupport.RecordingCheckpoint();
+        ExecutorService toolExecutor = Executors.newFixedThreadPool(2);
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools)
+                .toolExecutor(toolExecutor).checkpoints(checkpoints).listener(listener).build();
+
+        AgentResult result;
+        try {
+            result = kernel.run(request("batch-null-fields"));
+        } finally {
+            toolExecutor.shutdownNow();
+        }
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.answer()).isEqualTo("inspection complete");
+        assertThat(listener.protocolErrors()).isZero();
+        assertThat(firstArguments.get()).containsEntry("projectId", null);
+        assertThat(((Map<?, ?>) firstArguments.get().get("filters"))
+                .containsKey("language")).isTrue();
+        assertThat(((Map<?, ?>) firstArguments.get().get("filters")).get("language"))
+                .isNull();
+        assertThat(firstArguments.get().get("ids")).isEqualTo(java.util.Arrays.asList(null, 7));
+        assertThat(secondArguments.get()).containsEntry("query", null)
+                .containsEntry("projectIds", List.of(1, 2));
+        Map<?, ?> operations = (Map<?, ?>) result.snapshot().attributes()
+                .get(AgentRunState.TOOL_OPERATIONS_ATTRIBUTE);
+        Map<?, ?> first = (Map<?, ?>) operations.get("inspect#1");
+        Map<?, ?> second = (Map<?, ?>) operations.get("inspect#2");
+        assertThat(first.get("taskId")).isEqualTo("inspect");
+        assertThat(first.get("arguments")).isEqualTo(firstArguments.get());
+        assertThat(second.get("taskId")).isEqualTo("inspect");
+        assertThat(second.get("arguments")).isEqualTo(secondArguments.get());
+        assertThat(checkpoints.latest("batch-null-fields").attributes()
+                .get(AgentRunState.TOOL_OPERATIONS_ATTRIBUTE)).isEqualTo(operations);
     }
 
     @Test
@@ -1215,8 +1348,8 @@ class AgentLoopKernelFlowTest {
     void confirmsToolBatchCallsOneAtATimeBeforeExecution() {
         String batch = envelope("""
                 {"type":"tool_batch","plan":"write both","toolCalls":[
-                  {"callId":"write#1","taskId":"write","toolName":"first","arguments":{}},
-                  {"callId":"write#2","taskId":"write","toolName":"second","arguments":{}}
+                  {"callId":"write#1","taskId":"write","toolName":"first","arguments":{"projectId":null}},
+                  {"callId":"write#2","taskId":"write","toolName":"second","arguments":{"query":null}}
                 ]}
                 """);
         AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
@@ -1229,10 +1362,12 @@ class AgentLoopKernelFlowTest {
         AtomicInteger toolCalls = new AtomicInteger();
         InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
                 .register(dangerousTool("first", (arguments, context) -> {
+                    assertThat(arguments).containsEntry("projectId", null);
                     toolCalls.incrementAndGet();
                     return ToolExecutionResult.success("first done");
                 }))
                 .register(dangerousTool("second", (arguments, context) -> {
+                    assertThat(arguments).containsEntry("query", null);
                     toolCalls.incrementAndGet();
                     return ToolExecutionResult.success("second done");
                 }));
@@ -1249,8 +1384,16 @@ class AgentLoopKernelFlowTest {
 
         assertThat(firstWait.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
         assertThat(secondWait.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
+        assertThat(firstWait.snapshot().pendingToolCall().orElseThrow().callId())
+                .isEqualTo("write#1");
+        assertThat(firstWait.snapshot().pendingToolCalls())
+                .extracting(ToolCallAction::callId)
+                .containsExactly("write#1", "write#2");
+        assertThat(secondWait.snapshot().pendingToolCall().orElseThrow().callId())
+                .isEqualTo("write#2");
         assertThat(completed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
         assertThat(completed.answer()).isEqualTo("both written");
+        assertThat(completed.snapshot().pendingToolCalls()).isEmpty();
         assertThat(toolCalls).hasValue(2);
     }
 

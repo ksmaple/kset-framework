@@ -20,6 +20,7 @@ import com.kset.agent.core.stop.AgentStopReason;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -86,8 +87,7 @@ final class AgentResumeReconciler {
         Object pendingBatch = state.attributes().get(StandardActionHandlers.PENDING_BATCH);
         if (pendingBatch != null) {
             matches = matches && firstAction instanceof ToolBatchAction batch
-                    && batch.toolCalls().stream()
-                    .map(ToolCallAction::operationDefinition).toList().equals(pendingBatch);
+                    && matchesPendingBatch(batch, pendingBatch);
         }
         if (!matches) {
             throw new AgentProtocolException(
@@ -143,22 +143,29 @@ final class AgentResumeReconciler {
                 "options", confirmation.options());
     }
 
-    private static Map<String, Object> toolCallState(ToolCallAction call) {
-        Map<String, Object> state = new LinkedHashMap<>(call.operationDefinition());
-        state.put("type", call.actionType());
-        return state;
-    }
-
     private static boolean matchesPendingToolCall(
             AgentAction action, Map<?, ?> pending) {
         if (action instanceof ToolCallAction call) {
-            return toolCallState(call).equals(pending);
+            return call.matchesStoredPendingState(pending);
         }
         if (action instanceof ToolBatchAction batch) {
             return batch.toolCalls().stream()
-                    .anyMatch(call -> toolCallState(call).equals(pending));
+                    .anyMatch(call -> call.matchesStoredPendingState(pending));
         }
         return false;
+    }
+
+    private static boolean matchesPendingBatch(ToolBatchAction batch, Object stored) {
+        if (!(stored instanceof List<?> calls)
+                || calls.size() != batch.toolCalls().size()) {
+            return false;
+        }
+        for (int index = 0; index < calls.size(); index++) {
+            if (!batch.toolCalls().get(index).matchesStoredOperation(calls.get(index))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void requireReconciliationSnapshot(AgentRunSnapshot snapshot) {
@@ -233,9 +240,9 @@ final class AgentResumeReconciler {
         }
         String toolName = requiredText(
                 observation.attributes().get(AgentObservation.TOOL_NAME), "observation toolName");
-        String taskId = observation.attributes().containsKey(AgentObservation.TOOL_TASK_ID)
-                ? requiredText(observation.attributes().get(AgentObservation.TOOL_TASK_ID),
-                        "observation taskId") : null;
+        Object taskIdValue = observation.attributes().get(AgentObservation.TOOL_TASK_ID);
+        String taskId = taskIdValue == null ? null
+                : requiredText(taskIdValue, "observation taskId");
         if (!expected.toolName().equals(toolName) || !Objects.equals(expected.taskId(), taskId)) {
             throw mismatch("observation identity does not match pending callId: " + callId);
         }

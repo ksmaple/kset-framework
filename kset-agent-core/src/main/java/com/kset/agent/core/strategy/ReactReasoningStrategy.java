@@ -17,6 +17,7 @@ import com.kset.agent.core.tool.AgentToolDescriptor;
 import com.kset.agent.core.tool.AgentToolRegistry;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,6 +28,13 @@ import java.util.Set;
 public final class ReactReasoningStrategy implements AgentReasoningStrategy {
 
     public static final String PHASE_ATTRIBUTE = "react.phase";
+    private static final List<String> MODEL_VISIBLE_STATE_KEYS = List.of(
+            StandardActionHandlers.PLAN_CREATED,
+            StandardActionHandlers.PLAN_TASKS,
+            StandardActionHandlers.ANSWER_CHUNKS,
+            StandardActionHandlers.PENDING_ACTION,
+            StandardActionHandlers.PENDING_BATCH,
+            PHASE_ATTRIBUTE);
 
     private final AgentToolRegistry toolRegistry;
 
@@ -195,6 +203,18 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
     }
 
     private Map<String, Object> modelVisibleState(AgentRunState state) {
+        Map<String, Object> visible = new LinkedHashMap<>();
+        for (String key : MODEL_VISIBLE_STATE_KEYS) {
+            if (state.attributes().containsKey(key)) {
+                visible.put(key, state.attributes().get(key));
+            }
+        }
+        return Collections.unmodifiableMap(visible);
+    }
+
+    // react-model-context / react-model-context-20261021-01: retain the prior projection for rollback.
+    @SuppressWarnings("unused")
+    private Map<String, Object> modelVisibleStateForRollback(AgentRunState state) {
         Map<String, Object> visible = new LinkedHashMap<>(state.attributes());
         visible.remove(AgentRunState.TOOL_OPERATIONS_ATTRIBUTE);
         visible.remove(StandardActionHandlers.APPROVED_TOOL_OPERATIONS);

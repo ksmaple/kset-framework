@@ -8,6 +8,7 @@
 
 - **kset-agent-core**：Java 21 + Jackson 的框架无关 Agent 内核。同步 `run/resume` 固定 `RunState → ModelResponse → Decision → Action → Observation → StopDecision` 循环；默认提供 ReAct 策略和不可覆盖的 `agent-json:v1`，支持注册模型、协议、策略、动作、工具、停止策略、检查点和生命周期监听器。
 - **执行与恢复契约**：集中处理取消、超时、轮次、协议错误、无进展和容量限制；模型仅对显式可重试故障进行有限重试。当前快照 v4 保存任务状态、批次批准和未知工具结果核验标记；`agentRunId` 为可恢复任务身份，标准工具使用结构化 `(agentRunId, callId)` 幂等键。确认恢复与 `RECONCILIATION_REQUIRED` 恢复须满足待处理动作和权威结果校验，会话单飞、持久化条件写及业务补偿由宿主负责。
+- **问答上下文与待处理动作**：默认 ReAct 仅向模型投影循环所需状态；v4 快照提供类型化的待处理工具调用和确认 ID 访问器，宿主无需解析 Core 内部状态 Map。权限筛选与执行时校验仍由宿主负责。
 - **并发与观测**：Kernel 可并发运行相互独立的任务，公开结构化载荷递归快照为只读值；共享扩展须线程安全。生命周期观测提供 `agentRunId/invocationId/stepId/parentStepId/eventId`、事件状态、耗时与错误码，检查点端口负责可靠状态写入；核心不依赖 Spring、Web、数据库、Redis 或 RAG 业务模型。
 
 ## [v1.0.16] - 2026-08-30

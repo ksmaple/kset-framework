@@ -364,13 +364,17 @@ public final class StandardActionHandlers {
             return false;
         }
         Map<String, Object> approved = approvedToolOperations(context);
-        if (call.operationDefinition().equals(approved.get(call.callId()))) {
+        if (call.matchesStoredOperation(approved.get(call.callId()))) {
             return true;
         }
         if (!context.request().isToolCallApproved(call.callId())) {
             return false;
         }
-        requirePendingAction(context, toolCallState(call), call.callId());
+        if (!call.matchesStoredPendingState(
+                context.state().attributes().get(PENDING_ACTION))) {
+            throw new AgentCoreException(AgentErrorCode.PENDING_ACTION_MISMATCH,
+                    "approved action does not match pending action: " + call.callId());
+        }
         return true;
     }
 
@@ -465,9 +469,7 @@ public final class StandardActionHandlers {
     }
 
     private static Map<String, Object> toolCallState(ToolCallAction call) {
-        Map<String, Object> state = new LinkedHashMap<>(call.operationDefinition());
-        state.put("type", call.actionType());
-        return Map.copyOf(state);
+        return call.pendingState();
     }
 
     private static Map<String, Object> toolBatchState(ToolBatchAction batch) {

@@ -5,6 +5,7 @@ import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.action.AgentObservation;
 import com.kset.agent.core.action.StandardActionHandlers;
 import com.kset.agent.core.action.StandardActionTypes;
+import com.kset.agent.core.action.ToolCallAction;
 import com.kset.agent.core.api.AgentRunStatus;
 import com.kset.agent.core.protocol.AgentProtocolId;
 import com.kset.agent.core.stop.AgentStopDecision;
@@ -16,6 +17,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /** Serializable run state. Version 4 preserves approval batches and reconciliation state. */
@@ -82,6 +84,48 @@ public record AgentRunSnapshot(
                     "snapshot collections must not contain null keys or values", error);
         }
         validatePendingState(runStatus, stopDecision, observations, attributes);
+    }
+
+    /** Returns the current pending single tool call, whether awaiting approval or reconciliation. */
+    public Optional<ToolCallAction> pendingToolCall() {
+        Object value = attributes.get(StandardActionHandlers.PENDING_ACTION);
+        if (value instanceof Map<?, ?> pending
+                && StandardActionTypes.TOOL_CALL.equals(pending.get("type"))) {
+            return Optional.of(toolCall(pending));
+        }
+        return Optional.empty();
+    }
+
+    /** Returns pending tool calls, including a complete approval or reconciliation batch. */
+    public List<ToolCallAction> pendingToolCalls() {
+        Object batch = attributes.get(StandardActionHandlers.PENDING_BATCH);
+        if (batch instanceof List<?> calls) {
+            return calls.stream().map(value -> toolCall((Map<?, ?>) value)).toList();
+        }
+        Object value = attributes.get(StandardActionHandlers.PENDING_ACTION);
+        if (value instanceof Map<?, ?> pending
+                && StandardActionTypes.TOOL_BATCH.equals(pending.get("type"))) {
+            return ((List<?>) pending.get("toolCalls")).stream()
+                    .map(call -> toolCall((Map<?, ?>) call)).toList();
+        }
+        return pendingToolCall().map(call -> List.of(call)).orElse(List.of());
+    }
+
+    public Optional<String> pendingConfirmationId() {
+        Object value = attributes.get(StandardActionHandlers.PENDING_ACTION);
+        if (value instanceof Map<?, ?> pending
+                && StandardActionTypes.CONFIRMATION.equals(pending.get("type"))) {
+            return Optional.of((String) pending.get("confirmationId"));
+        }
+        return Optional.empty();
+    }
+
+    private static ToolCallAction toolCall(Map<?, ?> call) {
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        ((Map<?, ?>) call.get("arguments")).forEach((key, value) ->
+                arguments.put((String) key, value));
+        return new ToolCallAction((String) call.get("callId"),
+                (String) call.get("taskId"), (String) call.get("toolName"), arguments);
     }
 
     private static void validatePendingState(
@@ -180,7 +224,7 @@ public record AgentRunSnapshot(
                 || (includesType && !StandardActionTypes.TOOL_CALL.equals(call.get("type")))
                 || !hasText(call.get("callId"))
                 || !hasText(call.get("toolName"))
-                || (call.containsKey("taskId") && !hasText(call.get("taskId")))
+                || (call.get("taskId") != null && !hasText(call.get("taskId")))
                 || !(call.get("arguments") instanceof Map<?, ?>)) {
             throw invalid("pending tool call is missing required fields");
         }

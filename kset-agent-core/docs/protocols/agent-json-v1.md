@@ -8,7 +8,7 @@
 - 开始标记：`<<<AGENT_JSON>>>`
 - 结束标记：`<<<END_AGENT_JSON>>>`
 - 每轮最多一个标记信封，信封外不得有内容。
-- 信封内必须是单个 JSON 对象，重复字段、未知字段、尾随对象和 `null` 占位均不属于有效输入。
+- 信封内必须是单个 JSON 对象；重复字段、未知字段、尾随对象和必填控制字段的 `null` 占位均不属于有效输入。工具 `arguments` 对象内的 JSON null 是有效参数值。
 - 无标记且不是控制 JSON 的普通文本映射为 `final_answer`。
 - 无标记且以对象开头、包含受支持 `type` 的控制 JSON（包括截断的对象）返回 `MISSING_MARKERS`。
 
@@ -44,7 +44,7 @@
 }
 ```
 
-`callId`、`toolName` 和对象类型 `arguments` 必填；可选 `taskId` 若出现，必须是非空字符串，不接受数字或其他 JSON 类型。`callId` 在整个 run 内只能标识一个工具操作；后续轮次的不同操作必须使用新 ID，确认、重试、核验和恢复同一副作用时必须复用原 ID。Kernel 会在单个决策内判重，并把 `callId/taskId/toolName/arguments` 身份写入快照账本；跨轮同 ID 异身份以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。持久化时仍须使用结构化 `(agentRunId, callId)` 作为操作身份，并保存 `toolName + 规范化 arguments` 指纹，作为跨进程和外部副作用的最终防线；同身份异指纹必须返回 `TOOL_IDEMPOTENCY_CONFLICT`。标准工具 Observation 的 attributes 固定返回 `callId`、可选 `taskId` 和 `toolName`。
+`callId`、`toolName` 和对象类型 `arguments` 必填；可选 `taskId` 若出现，必须是非空字符串，不接受数字或其他 JSON 类型。协议输入可省略 `taskId`，Core 的操作定义、待处理状态和标准工具 Observation 始终写入 `taskId`，无计划关联时为 null。`arguments` 中已提供的字段不删减，显式 null 与缺少字段不同；结构化容器会复制为只读值。`callId` 在整个 run 内只能标识一个工具操作；后续轮次的不同操作必须使用新 ID，确认、重试、核验和恢复同一副作用时必须复用原 ID。Kernel 会在单个决策内判重，并把 `callId/taskId/toolName/arguments` 身份写入快照账本；跨轮同 ID 异身份以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。持久化时仍须使用结构化 `(agentRunId, callId)` 作为操作身份，并保存 `toolName + 规范化 arguments` 指纹，作为跨进程和外部副作用的最终防线；同身份异指纹必须返回 `TOOL_IDEMPOTENCY_CONFLICT`。
 
 ### tool_batch
 

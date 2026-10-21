@@ -1,6 +1,6 @@
 # Agent Core 对象与字段契约
 
-本表定义 Java API 语义；`agent-json:v1` 的模型输出字段另见[内置协议](protocols/agent-json-v1.md)。同名字段只在所属对象的作用域内解释，不能跨层当作控制指令。`null` 表示该阶段不适用，空集合表示适用但没有元素。公开结构化容器进入 core 时递归复制为只读值；不透明 DTO 由宿主保证不可变或按调用隔离。
+本表定义 Java API 语义；`agent-json:v1` 的模型输出字段另见[内置协议](protocols/agent-json-v1.md)。同名字段只在所属对象的作用域内解释，不能跨层当作控制指令。`null` 表示该阶段不适用，空集合表示适用但没有元素。公开结构化容器进入 core 时递归复制为只读值；工具调用相关 Map 保留每个已提供的键及其显式 `null`，普通请求、状态和 metadata Map 仍拒绝顶层 null 值。不透明 DTO 由宿主保证不可变或按调用隔离。
 
 ## 对象职责
 
@@ -44,7 +44,7 @@
 | `AgentTurn` | `protocolId/modelRequest` | 策略为本轮选定的已注册协议及模型请求；恢复期间不得切换 run 的协议。 |
 | `ModelRequest` | `systemPrompt/userPrompt/maxOutputTokens/attributes` | 发送给模型的提示、输出上限及模型适配器专用属性；不等同于 `AgentRequest.attributes`。 |
 | `ModelResponse` | `text/toolCalls/finishReason/metrics/metadata` | 模型原文、供应商原生工具调用、供应商结束原因、标准指标、供应商专有响应元数据；`metadata` 不进入内核控制协议。 |
-| `ModelToolCall` | `callId/toolName/arguments` | 模型原生工具调用的规范化载体；Codec 决定是否映射为内核动作。 |
+| `ModelToolCall` | `callId/toolName/arguments` | 模型原生工具调用的规范化载体；`arguments` 不删减字段，保留显式 JSON null；Codec 决定是否映射为内核动作。 |
 | `ModelCallMetrics` | `provider/model/requestId/inputTokens/outputTokens/totalTokens/attributes` | 上报用模型身份、供应商请求 ID、非负 token 用量及供应商指标扩展值；`attributes` 仅供观测，不是决策 metadata。 |
 | `AgentModelRetryOptions` | `maxAttempts/initialDelay/maxDelay` | 可重试模型失败的总调用次数及退避边界；仅 `MODEL_CALL_FAILED` 且 `retryable=true` 触发。 |
 
@@ -58,7 +58,7 @@
 | `AgentAction` | `actionType/metadata()` | 动作分发类型；默认 `metadata()` 是扩展附属值，Kernel 不以它驱动状态转换，也不自动持久化。 |
 | `ExtensionAction` | `actionType/payload` | 自定义动作类型与其协议载荷，由对应 Handler 解释。 |
 | `PlanTask` / `TaskPlanAction` | `taskId/title/dependsOn`；`summary/tasks` | 计划节点身份、标题、依赖节点 ID；计划摘要和节点集合。计划不等于宿主工作流任务。 |
-| `ToolCallAction` | `callId/taskId/toolName/arguments` | 一次工具操作 ID、可空计划节点关联、工具名、参数；四者组成快照中的操作身份。 |
+| `ToolCallAction` | `callId/taskId/toolName/arguments` | 一次工具操作 ID、可空计划节点关联、工具名、参数；四者组成快照中的操作身份。Core 的操作定义和待处理状态始终写入 `taskId`，无关联时值为 null；`arguments` 不删减字段并保留显式 JSON null。读取旧 v4 快照时仍接受未写入的可空 `taskId`。 |
 | `ToolBatchAction` | `summary/toolCalls` | 独立工具批次摘要及至少两个无依赖工具调用；带依赖批次须自定义动作。 |
 | `AnswerChunkAction` / `FinalAnswerAction` | `text` / `answer` | 非终态回答片段 / 最终回答动作文本。 |
 | `ConfirmationAction` | `confirmationId/message/options` | 确认身份、给用户的等待提示和协议提供的确认选项；`options` 不控制 Kernel。 |
@@ -70,8 +70,8 @@
 | `AgentToolIdempotencyKey` | `agentRunId/callId` | 工具持久化幂等键的两个结构化分量；不可只保存 `callId`。`ToolCallAction.operationDefinition()` 是包含工具名、关联任务和参数的操作定义，不可充当幂等键。 |
 | `AgentToolDescriptor` | `toolName/description/inputSchema` | 策略可见的工具名、说明和输入结构定义；`inputSchema` 不是一次调用的参数。 |
 | `AgentToolDescriptor` | `readOnly/requiresConfirmation/metadata` | 是否只读、是否要求执行前确认、工具目录附属信息；`metadata` 不等于模型或协议 metadata。 |
-| `ToolExecutionResult` | `success/progress/output/errorCode/errorMessage/attributes` | 工具权威结果；`progress` 表示动作推进循环状态，不代表外部副作用提交；失败必须有稳定错误码，属性进入标准工具 Observation。 |
-| `AgentObservation` | `actionType/success/progress/output/errorCode/errorMessage/attributes` | 下轮策略可见且进入快照的动作反馈；标准工具的属性固定含 `callId/toolName` 及可选 `taskId`，工具自定义值不得覆盖这些身份。 |
+| `ToolExecutionResult` | `success/progress/output/errorCode/errorMessage/attributes` | 工具权威结果；`progress` 表示动作推进循环状态，不代表外部副作用提交；失败必须有稳定错误码，属性进入标准工具 Observation，显式 null 值不被删减。 |
+| `AgentObservation` | `actionType/success/progress/output/errorCode/errorMessage/attributes` | 下轮策略可见且进入快照的动作反馈；标准工具的属性固定含 `callId/taskId/toolName`，无计划关联时 `taskId` 为 null，工具自定义值不得覆盖这些身份。普通动作属性仍拒绝顶层 null 值。 |
 
 ## 状态、停止、恢复与观测
 
@@ -80,12 +80,13 @@
 | `AgentRunState` / `AgentRunSnapshot` | `agentRunId/task/protocolId/runStatus/turn` | 当前 run 身份、完整任务、固定协议、运行状态、累计轮数；快照只由 Kernel 投影，`version = 4`。 |
 | `AgentRunState` / `AgentRunSnapshot` | `startedAt/updatedAt/observations/attributes` | run 初始时间、最近状态更新时间、累计观察、持久化运行属性。`attributes` 含 Kernel `agent.*`、ReAct `react.*` 和扩展命名空间，不等同于请求属性。 |
 | `AgentRunState` / `AgentRunSnapshot` | `agent.pendingAction/agent.pendingBatch/agent.reconciliationPending` | 分别表示待批准或待核验动作、逐项批准时不可改写的完整工具批次、未知工具结果必须核验的标记；均由 Kernel 管理。v4 快照在构造时校验待处理确认、工具调用及批次的固定字段和成员关系，并拒绝核验标记与停止原因冲突或未知工具结果缺失核验标记；损坏的内部状态返回 `INVALID_SNAPSHOT`。核验检查点失败导致状态变为 `FAILED/FATAL_ERROR` 时仍保留标记。 |
+| `AgentRunSnapshot` | `pendingToolCall()/pendingToolCalls()/pendingConfirmationId()` | 只读投影当前待批准工具、完整批准或核验批次，以及普通确认 ID；返回值不包含权限判定或权威结果。无对应待处理动作时返回空值。工具参数保留显式 null，读取旧 v4 快照时可空 `taskId` 可以缺省。 |
 | `AgentRunState` / `AgentRunSnapshot` | `consecutiveProtocolErrors/consecutiveNoProgress` | 连续协议纠错次数与连续无进展次数，成功决策或有效动作按规则清零。 |
 | `AgentRunState` / `AgentRunSnapshot` | `answer/suspensionMessage/stopDecision` | 只在 `COMPLETED` 有最终回答；只在 `SUSPENDED` 可有等待提示；非运行态有停止决定。`resume` 只接受当前 v4 快照。 |
 | `AgentResult` | `agentRunId/runStatus/answer/stopDecision/snapshot/failure` | 单次同步调用结果；只有完成态可有 `answer`。`snapshot` 是返回时状态投影，不代表宿主已成功持久化；技术故障通过可空 `failure` 表达。 |
 | `AgentFailure` | `errorCode/errorMessage/retryable` | 活动循环技术失败的稳定枚举、说明及可重试标记；不得依赖消息文本作分支。 |
 | `AgentStopDecision` | `shouldStop/stopReason/runStatus/stopMessage` | 是否停止、枚举原因、目标运行状态、可读说明；暂停动作的等待提示由 `stopMessage` 对外返回，说明文本不是分支依据。 |
-| `AgentResumeInput` | `reconciledObservations` | 核验暂停后由宿主提供的完整权威工具结果；普通恢复为空。每条标准工具 Observation 的 `callId/taskId/toolName` 必须为字符串身份（`taskId` 可缺省），与 pending 完整匹配，不接受数字等值的隐式转换。 |
+| `AgentResumeInput` | `reconciledObservations` | 核验暂停后由宿主提供的完整权威工具结果；普通恢复为空。每条标准工具 Observation 的 `callId/toolName` 必须为字符串身份，`taskId` 为字符串或 null；读取旧观察时也接受缺少 `taskId`，并与 pending 完整匹配，不接受数字等值的隐式转换。 |
 | `AgentStopContext` | `request/state/executionContext/now` | 一次停止策略评估的只读输入及评估时刻。 |
 | `AgentLifecycleContext` | `version/eventType/invocationType/eventSequence` | 固定观测协议版本、事件枚举、run 或 resume、invocation 内事件序号；当前版本为 3。 |
 | `AgentLifecycleContext` | `agentRunId/invocationId/stepId/parentStepId/stepType/operation` | 事件追踪身份；`eventId()` 按 invocation 与序号派生，不是额外存储字段。 |

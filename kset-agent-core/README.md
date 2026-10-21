@@ -185,7 +185,7 @@ Listener 在循环线程同步执行，耗时计入本次活动 deadline。普�
 
 Model 和 Tool 是同步边界，内核不会为它们创建线程。适配器必须把 `AgentExecutionContext` 或 `AgentToolContext` 的 deadline 转换成底层 SDK/HTTP 超时，并主动响应 cancellation；记录底层请求日志时必须沿用其中的 `agentRunId/invocationId/stepId`，工具再追加 `callId/taskId/toolName`。内核会在模型和动作调用前后执行停止检查。该 deadline 是协作式约束：同步调用未返回时，核心不会强制中断线程，也不承诺立即返回。
 
-`AgentLoopOptions` 同时限制每轮动作数量、工具批次大小、单工具时限和批次时限。容量超限以 `CAPACITY_LIMIT` 结束，不进入后续动作。工具 `callId` 在同一决策内由 Kernel 判重，并且在整个 run 内只能标识一个工具操作；Kernel 会把 `callId/taskId/toolName/arguments` 身份写入快照账本，跨轮复用同 ID 但更换身份时以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。后续轮次的新操作必须使用新 ID，只有确认、重试、核验或恢复同一操作时才复用原 ID。工具持久化幂等身份固定为结构化 `AgentToolIdempotencyKey(agentRunId, callId)`，禁止单独使用 `callId` 或用无边界字符串拼接替代结构化字段。适配器仍必须保存 `toolName + 规范化 arguments` 参数指纹，作为跨进程和外部副作用的最终防线：同身份同指纹返回原结果，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。每条标准工具 Observation 固定携带 `callId`、可选 `taskId` 和 `toolName`，工具自定义 attributes 不能覆盖这些身份字段。
+`AgentLoopOptions` 同时限制每轮动作数量、工具批次大小、单工具时限和批次时限。容量超限以 `CAPACITY_LIMIT` 结束，不进入后续动作。工具 `callId` 在同一决策内由 Kernel 判重，并且在整个 run 内只能标识一个工具操作；Kernel 会把 `callId/taskId/toolName/arguments` 身份写入快照账本，跨轮复用同 ID 但更换身份时以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。后续轮次的新操作必须使用新 ID，只有确认、重试、核验或恢复同一操作时才复用原 ID。工具持久化幂等身份固定为结构化 `AgentToolIdempotencyKey(agentRunId, callId)`，禁止单独使用 `callId` 或用无边界字符串拼接替代结构化字段。适配器仍必须保存 `toolName + 规范化 arguments` 参数指纹，作为跨进程和外部副作用的最终防线：同身份同指纹返回原结果，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。每条标准工具 Observation 固定携带 `callId/taskId/toolName`，无计划关联时 `taskId` 为 null；工具自定义 attributes 不能覆盖这些身份字段。
 
 标准 `tool_batch` 将调用提交给宿主配置的 Executor；默认 Executor 同步执行，只有宿主提供并行 Executor 时工具才会并发。已有任务提交后，若批次等待超时、线程中断或提交/汇总异常导致结果无法确认，Kernel 会将结果标记为 `TOOL_RESULT_UNKNOWN`、保留完整 `agent.pendingAction`，并以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止本次调用。默认同步 Executor 不会强制中断尚未返回的工具调用。工具适配器主动返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)` 时采用相同出口：单工具保存原调用，批次任一调用未知则保存完整批次及全部 Observation。该核验停止优先于同一批次等待期间发生的通用超时或线程中断；线程中断标志仍会保留。宿主恢复前必须按每个 `AgentToolIdempotencyKey` 查询权威结果；带依赖关系的批次仍应使用自定义 Action/Handler。
 
@@ -224,6 +224,8 @@ AgentResult result = kernel.run(request);
 
 内置 `agent-json:v1` 使用 `<<<AGENT_JSON>>>` / `<<<END_AGENT_JSON>>>` 严格包裹控制 JSON；无标记普通文本按最终回答处理。协议支持 `task_plan`、`tool_call`、`tool_batch`、`answer_chunk`、`final_answer` 和 `confirmation`，完整字段与错误码见[协议规范](docs/protocols/agent-json-v1.md)。
 
+工具参数和工具结果属性保留已提供字段及显式 JSON null。Core 写入的工具操作身份、待处理状态与标准工具 Observation 固定包含 `taskId`，无计划关联时值为 null；旧 v4 快照中省略的可空 `taskId` 仍可读取。普通请求、状态和 metadata 属性的顶层 null 校验不变。
+
 等待批准时，Kernel 将动作写入 `agent.pendingAction` 并以 `SUSPENDED` 返回。宿主恢复确认动作时通过 `agent.approvedConfirmationIds` 传入 `confirmationId`，恢复危险工具时通过 `agent.approvedToolCallIds` 传入 `callId`；缺少对应批准 ID 会在模型调用前以 `INVALID_RESUME_INPUT` 拒绝。批准后，模型本轮的首个动作必须重述同一待处理动作，危险工具须完整匹配 `callId/taskId/toolName/arguments`；批次可包含待批准的原工具调用并继续逐项批准。批次等待后续批准时，Kernel 还会在 `agent.pendingBatch` 固定完整工具调用清单；模型不得删减、替换或重排该批次，否则计入可纠正的 `PENDING_ACTION_MISMATCH` 协议错误。不允许其他动作清理 pending。新 run 预置批准 ID 不能绕过暂停。内置 ReAct 只把这两类公开批准 ID 注入模型上下文，不暴露其他宿主请求属性和内部操作账本。相同且已批准的操作可安全重试；批准消费、工具完成或失败以及最终回答都会清理对应 pending 状态。
 
 自定义协议可以映射到标准动作，也可以返回 `ExtensionAction`。自定义动作必须同时注册对应 `AgentActionHandler`；未注册动作会显式失败。只有标准 `ToolCallAction` 和 `ToolBatchAction` 的 `TOOL_RESULT_UNKNOWN` 会触发内置 `RECONCILIATION_REQUIRED`；扩展动作应使用自己的 pending 状态和恢复协议，其未知结果不会被误解释为标准工具核验。
@@ -232,11 +234,15 @@ AgentResult result = kernel.run(request);
 
 `AgentReasoningStrategy` 只负责生成本轮模型请求和校验语义动作。默认 `ReactReasoningStrategy` 的 planning、acting、evaluating、answering 阶段不会进入循环内核。
 
+默认 ReAct 只将计划、回答分片、待处理动作和阶段等问答循环状态投影给模型；快照中的宿主业务属性与协议 metadata 不会自动进入 `ModelRequest`。需要额外业务上下文时由宿主的自定义 Strategy 明确选择字段。Core 不识别用户、角色或项目范围，也不执行工具权限判断；宿主提供本轮可见工具，并在工具执行时校验实际操作权限。`approvedToolCallIds` 与 `approvedConfirmationIds` 只表示用户对待处理动作的确认，不能替代权限校验。
+
 接入 Plan-and-Execute、Supervisor 或其他策略时，实现 `AgentReasoningStrategy` 并通过构建器替换即可，无需修改协议注册和停止控制。
 
 ## 中断与恢复
 
 `AgentRunSnapshot` v4 不保存模型原始思维链，只保存轮次、标准观察、扩展属性、错误计数、最终回答或暂停提示以及停止结果。宿主负责读取快照，再显式恢复：
+
+读取待处理动作可用 `snapshot.pendingToolCall()`、`snapshot.pendingToolCalls()` 和 `snapshot.pendingConfirmationId()`；工具调用返回 Core 类型，批次保持保存顺序。宿主仍须自行核验结果和业务权限。
 
 ```java
 String agentRunId = request.agentRunId();

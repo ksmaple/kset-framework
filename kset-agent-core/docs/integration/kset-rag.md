@@ -12,6 +12,8 @@
 
 SSE 不是模型协议，不进入 Codec。会话单飞、任务租约、确认接口和断流恢复也继续由 kset-rag 工作流负责。
 
+Core 仅编排模型、决策、工具结果与停止状态，不读取用户、角色或项目范围。kset-rag 在构造本轮工具目录时决定可见工具，并在每次工具执行时按当前业务上下文复核权限；Core 的工具批准 ID 只用于确认待处理动作，不能作为权限凭据。默认 ReAct 不自动把宿主业务状态投影给模型，kset-rag 的自定义 Strategy 应明确选择需要的问答上下文。
+
 ## 协议身份
 
 kset-rag `code-v7` 与内置 `agent-json:v1` 使用相同标记和六个动作名，但 wire 字段与执行语义不同，不能复用内置 ID。建议注册：
@@ -90,6 +92,7 @@ kset-rag 应在创建 Kernel 时注册 `SnowflakeAgentRunIdGenerator(datacenterI
 - 一个会话只能有一个活动实例；接入前必须补充基于 `sessionId` 的原子抢占或活动任务唯一约束，现有按 `taskId` 的租约不能替代会话单飞。
 - 不同会话可以并发调用同一个 Kernel；所有共享扩展必须线程安全。
 - core 的 `resume` 只恢复宿主传入的逻辑快照，不负责读取快照、重新抢占任务或查询未知工具结果；`RECONCILIATION_REQUIRED` 快照必须同时传入 `AgentResumeInput`。
+- 宿主读取待处理动作时使用 `AgentRunSnapshot.pendingToolCall()`、`pendingToolCalls()` 和 `pendingConfirmationId()`；完整批次保持原顺序，工具参数中的显式 null 不丢失。宿主仍须查询权威工具结果并校验参数指纹，不能把这些只读视图当作批准或执行凭据。
 - 带副作用的工具恢复前必须按原 `(agentRunId, callId)` 查询权威结果并校验参数指纹，再决定复用结果、重试或补偿。
 - 危险工具或普通确认的恢复请求必须从已持久化快照的 `agent.pendingAction` 生成：前者通过 `agent.approvedToolCallIds` 传入原 `callId`，后者通过 `agent.approvedConfirmationIds` 传入原 `confirmationId`；禁止在新 run 中预置批准 ID，也禁止批准后替换工具名、任务或参数。
 - 标准工具返回 `TOOL_RESULT_UNKNOWN` 时，结果固定为 `RECONCILIATION_REQUIRED + SUSPENDED`；必须逐项完成权威结果核验，使用 `AgentObservation.toolResult` 为 pending 中每个调用构造携带原 `callId/taskId/toolName` 的最终 Observation，再通过三参数 `resume` 恢复。空输入、缺项或身份不匹配会被 core 拒绝，不得让仍可能运行的旧批次与新一轮动作并行。

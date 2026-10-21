@@ -85,6 +85,26 @@ class AgentJsonV1CodecTest {
     }
 
     @Test
+    void preservesExplicitNullToolArgumentsFromModelJson() {
+        AgentDecision decision = decode("""
+                {"type":"tool_call","toolCall":{
+                  "callId":"call-1","toolName":"search",
+                  "arguments":{"projectId":null,"filters":{"status":null}}
+                }}
+                """);
+
+        assertThat(decision.actions().getFirst()).isInstanceOfSatisfying(
+                ToolCallAction.class, action -> {
+                    assertThat(action.arguments()).containsKey("projectId");
+                    assertThat(action.arguments().get("projectId")).isNull();
+                    assertThat(((Map<?, ?>) action.arguments().get("filters"))
+                            .containsKey("status")).isTrue();
+                    assertThat(action.operationDefinition()).containsKey("taskId");
+                    assertThat(action.operationDefinition().get("taskId")).isNull();
+                });
+    }
+
+    @Test
     void treatsPlainTextAsAnswerButRejectsUnwrappedControlJson() {
         AgentDecision plain = codec.decode(ModelResponse.text("plain answer"), null);
 

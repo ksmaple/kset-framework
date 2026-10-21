@@ -924,7 +924,7 @@ public final class AgentLoopKernel {
                     "DUPLICATE_TOOL_CALL_ID", "tool call ids must be unique within a decision");
         }
         if (operations.containsKey(call.callId())
-                && !call.operationDefinition().equals(operations.get(call.callId()))) {
+                && !call.matchesStoredOperation(operations.get(call.callId()))) {
             throw new AgentProtocolException(
                     AgentErrorCode.TOOL_IDEMPOTENCY_CONFLICT.name(),
                     "tool call id is already bound to a different operation: " + call.callId());

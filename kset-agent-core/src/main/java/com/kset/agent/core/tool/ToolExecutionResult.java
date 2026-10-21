@@ -30,7 +30,7 @@ public record ToolExecutionResult(
             throw new IllegalArgumentException("failed tool result cannot report progress");
         }
         output = AgentValueSnapshot.value(output);
-        attributes = AgentValueSnapshot.map(attributes);
+        attributes = AgentValueSnapshot.toolFields(attributes);
     }
 
     public static ToolExecutionResult success(Object output) {

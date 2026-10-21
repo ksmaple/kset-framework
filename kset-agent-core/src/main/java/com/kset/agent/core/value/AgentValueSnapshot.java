@@ -24,6 +24,14 @@ public final class AgentValueSnapshot {
         return snapshotMap(values, new IdentityHashMap<>(), true);
     }
 
+    /** Tool fields retain every supplied key, including fields with explicit null values. */
+    public static Map<String, Object> toolFields(Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            return Map.of();
+        }
+        return snapshotMap(values, new IdentityHashMap<>(), false);
+    }
+
     public static Object value(Object value) {
         return snapshot(value, new IdentityHashMap<>());
     }

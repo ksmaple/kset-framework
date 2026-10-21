@@ -39,7 +39,9 @@ public record AgentObservation(
             throw new IllegalArgumentException("failed observation cannot report progress");
         }
         output = AgentValueSnapshot.value(output);
-        attributes = AgentValueSnapshot.map(attributes);
+        attributes = StandardActionTypes.TOOL_CALL.equals(actionType)
+                ? AgentValueSnapshot.toolFields(attributes)
+                : AgentValueSnapshot.map(attributes);
     }
 
     public static AgentObservation success(
@@ -68,11 +70,8 @@ public record AgentObservation(
         ToolExecutionResult value = Objects.requireNonNull(result, "result");
         Map<String, Object> attributes = new LinkedHashMap<>(value.attributes());
         attributes.put(TOOL_CALL_ID, callId.trim());
-        if (taskId == null || taskId.isBlank()) {
-            attributes.remove(TOOL_TASK_ID);
-        } else {
-            attributes.put(TOOL_TASK_ID, taskId.trim());
-        }
+        attributes.put(TOOL_TASK_ID,
+                taskId == null || taskId.isBlank() ? null : taskId.trim());
         attributes.put(TOOL_NAME, toolName.trim());
         return new AgentObservation(
                 StandardActionTypes.TOOL_CALL, value.success(), value.progress(), value.output(),

@@ -13,7 +13,7 @@ public record ModelToolCall(
     public ModelToolCall {
         callId = normalize(callId);
         toolName = normalize(toolName);
-        arguments = AgentValueSnapshot.map(arguments);
+        arguments = AgentValueSnapshot.toolFields(arguments);
     }
 
     private static String normalize(String value) {
