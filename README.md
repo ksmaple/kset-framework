@@ -12,6 +12,8 @@ KSet 公共框架 — 统一版本管理、按能力拆分的 Starter、云服�
 | GitHub | [ksmaple/kset-framework](https://github.com/ksmaple/kset-framework) |
 | 克隆 | `git clone git@github.com:ksmaple/kset-framework.git` |
 
+Git 修改、提交与推送约定见 [Git 工作流](docs/git-workflow.md)。
+
 > 自 `kset-comm` 更名为 `kset-framework`：根聚合 `artifactId`、BOM `kset-boot-parent`、Starter `kset-starter-*`；子模块 `kset-common` 名称不变。
 
 当前构件版本以 `kset-boot-parent` 的 `<version>` 为准（现为 `1.0.17-SNAPSHOT`）。发布到仓库后去掉 `-SNAPSHOT`。
