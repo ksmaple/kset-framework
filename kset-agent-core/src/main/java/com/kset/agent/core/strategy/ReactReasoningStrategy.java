@@ -218,6 +218,7 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         Map<String, Object> visible = new LinkedHashMap<>(state.attributes());
         visible.remove(AgentRunState.TOOL_OPERATIONS_ATTRIBUTE);
         visible.remove(StandardActionHandlers.APPROVED_TOOL_OPERATIONS);
+        visible.remove(StandardActionHandlers.APPROVAL_PENDING_ACTION);
         return Map.copyOf(visible);
     }
 

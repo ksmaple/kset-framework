@@ -5,6 +5,7 @@ import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.action.AgentAction;
 import com.kset.agent.core.action.AgentActionResult;
 import com.kset.agent.core.action.AgentObservation;
+import com.kset.agent.core.action.StandardActionHandlers;
 import com.kset.agent.core.action.ToolBatchAction;
 import com.kset.agent.core.action.ToolCallAction;
 import com.kset.agent.core.api.AgentRequest;
@@ -16,6 +17,7 @@ import com.kset.agent.core.value.AgentValueSnapshot;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -122,6 +124,38 @@ public final class AgentRunState {
         recordToolOperations(nextAttributes, decision);
         return copy(runStatus, turn, now, observations, nextAttributes,
                 0, consecutiveNoProgress, answer, suspensionMessage, stopDecision);
+    }
+
+    AgentRunState beforeToolDispatch(AgentAction action, Instant now) {
+        Map<String, Object> pending = new LinkedHashMap<>();
+        if (action instanceof ToolCallAction call) {
+            pending.putAll(call.operationDefinition());
+        } else if (action instanceof ToolBatchAction batch) {
+            pending.put("summary", batch.summary());
+            pending.put("toolCalls", batch.toolCalls().stream()
+                    .map(call -> {
+                        Map<String, Object> item = new LinkedHashMap<>(call.operationDefinition());
+                        item.put("type", call.actionType());
+                        return Collections.unmodifiableMap(item);
+                    }).toList());
+        } else {
+            return this;
+        }
+        pending.put("type", action.actionType());
+        Map<String, Object> nextAttributes = new LinkedHashMap<>(attributes);
+        // Batch approval checks still need the original member while the full batch is in flight.
+        if (action instanceof ToolBatchAction
+                && nextAttributes.containsKey(StandardActionHandlers.PENDING_BATCH)) {
+            nextAttributes.put(StandardActionHandlers.APPROVAL_PENDING_ACTION,
+                    nextAttributes.get(StandardActionHandlers.PENDING_ACTION));
+        }
+        nextAttributes.remove(StandardActionHandlers.PENDING_BATCH);
+        nextAttributes.put(StandardActionHandlers.PENDING_ACTION,
+                Collections.unmodifiableMap(pending));
+        nextAttributes.put(StandardActionHandlers.RECONCILIATION_PENDING, true);
+        return copy(runStatus, turn, now, observations, nextAttributes,
+                consecutiveProtocolErrors, consecutiveNoProgress,
+                answer, suspensionMessage, stopDecision);
     }
 
     private static void recordToolOperations(

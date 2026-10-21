@@ -191,7 +191,9 @@ Model 和 Tool 是同步边界，内核不会为它们创建线程。适配器�
 
 `RECONCILIATION_REQUIRED` 快照禁止空输入恢复。若核验终态的检查点写入失败，返回的 `FAILED` 快照也保留 `agent.reconciliationPending`，同样必须先核验，不能作为普通失败直接续跑。宿主必须为 pending 中每个调用提供一条权威 `tool_call` Observation，并通过 `AgentResumeInput` 调用三参数 `resume`；`callId/taskId/toolName` 必须是与 pending 完整匹配的字符串身份，不能依赖数字等值的隐式转换。空输入、非工具动作或仍为 `TOOL_RESULT_UNKNOWN` 的结果返回 `INVALID_RESUME_INPUT`；缺项、重复项和身份不匹配返回 `PENDING_ACTION_MISMATCH`。校验成功后 Kernel 清理 pending 与核验标记、保存新快照并进入下一模型轮次。
 
-工具适配器必须区分“明确执行失败”和“可能已产生副作用但响应未知”。前者返回具体失败码并允许 Strategy 决定下一步；后者必须返回 `TOOL_RESULT_UNKNOWN`，不得仅抛普通运行时异常或降级成 `TOOL_EXECUTION_FAILED`。
+工具适配器必须区分“明确执行失败”和“可能已产生副作用但响应未知”。前者返回具体失败码并允许 Strategy 决定下一步；后者应返回 `TOOL_RESULT_UNKNOWN`。有副作用工具的普通运行时异常或空结果会由标准 Handler 保守地转为未知结果，不应把远端响应丢失报告为确定失败。
+
+标准工具执行前，Kernel 先保存包含完整调用身份和 `agent.reconciliationPending` 的 `RUNNING` 快照。崩溃后恢复这类快照也必须注入完整权威 Observation；确认某项调用未执行时，宿主须提供明确的失败结果。批次超时后取消 `CompletableFuture` 不保证中断已启动的工具，宿主必须确认旧调用结束，或依靠持久幂等与隔离机制避免重复副作用。有副作用工具抛出运行时异常或返回 `null` 时，标准 Handler 保守地暂停核验；只读工具仍返回明确失败。
 
 ## 协议扩展
 
@@ -230,6 +232,8 @@ AgentResult result = kernel.run(request);
 
 自定义协议可以映射到标准动作，也可以返回 `ExtensionAction`。自定义动作必须同时注册对应 `AgentActionHandler`；未注册动作会显式失败。只有标准 `ToolCallAction` 和 `ToolBatchAction` 的 `TOOL_RESULT_UNKNOWN` 会触发内置 `RECONCILIATION_REQUIRED`；扩展动作应使用自己的 pending 状态和恢复协议，其未知结果不会被误解释为标准工具核验。
 
+待审批动作也可通过 `agent.rejectedConfirmationIds` 或 `agent.rejectedToolCallIds` 拒绝。请求须传入原 `confirmationId` 或 `callId`，且同一 ID 不可同时批准和拒绝；拒绝会清理 pending、生成 `CONFIRMATION_REJECTED` 或 `TOOL_REJECTED` Observation，随后继续模型轮次，不执行被拒绝的工具。已批准动作仍按上述完整重述规则处理。
+
 ## 推理策略扩展
 
 `AgentReasoningStrategy` 只负责生成本轮模型请求和校验语义动作。默认 `ReactReasoningStrategy` 的 planning、acting、evaluating、answering 阶段不会进入循环内核。
@@ -261,11 +265,13 @@ AgentResult result = kernel.resume(request, snapshot, input);
 
 同一运行恢复时不能切换协议，保证快照与后续决策使用同一语义。
 
-`resume` 只保证从已保存快照继续内核状态转换，不保证崩溃时未完成的外部副作用自动恢复，也不自动重放“已执行但尚未写入快照”的动作。对于 Kernel 已经以 `RECONCILIATION_REQUIRED` 暂停的标准工具动作，宿主必须依靠稳定 `callId` 和权威数据源核验，并通过 `AgentResumeInput` 注入确定结果；其他崩溃恢复、重试和补偿仍由宿主处理。
+`resume` 只保证从已保存快照继续内核状态转换，不保证崩溃时未完成的外部副作用自动恢复。标准工具执行前的 `RUNNING` 核验快照以及 `RECONCILIATION_REQUIRED` 暂停快照，都要求宿主依靠稳定 `callId` 和权威数据源核验，并通过 `AgentResumeInput` 注入确定结果；其他崩溃恢复、重试和补偿仍由宿主处理。
 
 `AgentCheckpointPort` 是只写快照端口。内核会在启动、协议错误、每个动作结果和停止时同时传入不可变请求与快照，并在写入前后发出固定观测事件；宿主可从请求属性取得 owner、fencing 等执行凭据，并负责快照查询、revision 及持久化条件写。外部工具副作用无法与快照存储形成通用原子事务，工具适配器必须使用 `AgentToolContext.idempotencyKey()` 及参数指纹保证幂等；检查点写入失败会发出 `CHECKPOINT_FAILED/onCheckpointError`，并使活动运行以 `FAILED` 返回，不能继续推进后续动作。即使取消、线程中断或超时已触发，若保存对应终态快照再次失败，`run/resume` 仍返回 `FATAL_ERROR + CHECKPOINT_FAILED`，不会把持久化失败作为未捕获异常抛出。处理其他技术故障时若失败快照也无法保存，返回的 `AgentFailure` 优先报告 `CHECKPOINT_FAILED`，原始异常保留为 suppressed cause；宿主不得将返回快照视为已持久化。
 
 会话单飞、任务排队、跨节点租约和“同一会话只能运行一个实例”属于宿主工作流职责，不进入单次任务循环内核。不同会话的资源上限由宿主提供的模型连接池和有界 Executor 负责。
+
+执行前 `RUNNING` 快照的 `agent.reconciliationPending` 表示该工具可能仍在执行或已产生副作用；恢复时不能仅凭快照判断是否实际执行。`AgentCheckpointPort` 仍需宿主提供持久化实现，工具适配器仍需持久幂等账本。
 
 ## 非目标
 

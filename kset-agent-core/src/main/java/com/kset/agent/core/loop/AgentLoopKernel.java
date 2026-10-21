@@ -385,6 +385,11 @@ public final class AgentLoopKernel {
                     if (afterBeforeAction.shouldStop()) {
                         return finish(request, state, afterBeforeAction, events);
                     }
+                    if ((action instanceof ToolCallAction || action instanceof ToolBatchAction)
+                            && canStageToolAction(request, state, action)) {
+                        state = state.beforeToolDispatch(action, clock.instant());
+                        saveCheckpoint(request, state, events);
+                    }
                     Instant actionExecutionStartedAt = clock.instant();
                     AgentActionResult result = dispatchAction(action, new AgentActionContext(
                             request, state,
@@ -915,6 +920,21 @@ public final class AgentLoopKernel {
                 }
             }
         }
+    }
+
+    // A new pre-dispatch pending record must not serve as proof of an earlier approval.
+    private boolean canStageToolAction(
+            AgentRequest request, AgentRunState state, AgentAction action) {
+        if (state.attributes().containsKey(StandardActionHandlers.PENDING_ACTION)) {
+            return true;
+        }
+        Object value = state.attributes().get(StandardActionHandlers.APPROVED_TOOL_OPERATIONS);
+        java.util.Map<?, ?> approved = value instanceof java.util.Map<?, ?> map
+                ? map : java.util.Map.of();
+        List<ToolCallAction> calls = action instanceof ToolCallAction call
+                ? List.of(call) : ((ToolBatchAction) action).toolCalls();
+        return calls.stream().noneMatch(call -> request.isToolCallApproved(call.callId())
+                && !call.matchesStoredOperation(approved.get(call.callId())));
     }
 
     private void validateToolCallId(

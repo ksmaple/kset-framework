@@ -32,6 +32,7 @@ public final class StandardActionHandlers {
     public static final String PENDING_ACTION = "agent.pendingAction";
     public static final String PENDING_BATCH = "agent.pendingBatch";
     public static final String RECONCILIATION_PENDING = "agent.reconciliationPending";
+    public static final String APPROVAL_PENDING_ACTION = "agent.approvalPendingAction";
     public static final String APPROVED_TOOL_OPERATIONS = "agent.approvedToolOperations";
 
     private StandardActionHandlers() {
@@ -93,8 +94,10 @@ public final class StandardActionHandlers {
             }
             boolean approved = isToolApproved(tool, call, context);
             if (requiresConfirmation(tool) && !approved) {
-                return AgentActionResult.suspended("tool confirmation required",
-                        Map.of(PENDING_ACTION, toolCallState(call)));
+                return new AgentActionResult(List.of(), AgentRunStatus.SUSPENDED,
+                        null, "tool confirmation required",
+                        Map.of(PENDING_ACTION, toolCallState(call)),
+                        Set.of(RECONCILIATION_PENDING, APPROVAL_PENDING_ACTION));
             }
             AgentActionResult result;
             try {
@@ -111,17 +114,16 @@ public final class StandardActionHandlers {
                             "tool deadline reached"));
                 } else {
                     AgentObservation observation = toObservation(
-                            call, tool.execute(call.arguments(), toolContext));
+                            call, tool.descriptor().readOnly(),
+                            tool.execute(call.arguments(), toolContext));
                     result = isResultUnknown(observation)
                             ? suspendUnknownCall(call, observation)
                             : observedAndClearPending(observation);
                 }
             } catch (CancellationException error) {
-                result = observedAndClearPending(toolFailure(
-                        call, AgentErrorCode.TOOL_CANCELLED, errorMessage(error)));
+                result = uncertainToolFailure(call, tool, AgentErrorCode.TOOL_CANCELLED, error);
             } catch (RuntimeException error) {
-                result = observedAndClearPending(toolFailure(
-                        call, AgentErrorCode.TOOL_EXECUTION_FAILED, errorMessage(error)));
+                result = uncertainToolFailure(call, tool, AgentErrorCode.TOOL_EXECUTION_FAILED, error);
             }
             return rememberApprovedOperations(
                     approved ? List.of(call) : List.of(), context, result);
@@ -160,10 +162,12 @@ public final class StandardActionHandlers {
                 }
             }
             if (nextPending != null) {
-                AgentActionResult suspended = AgentActionResult.suspended(
+                AgentActionResult suspended = new AgentActionResult(
+                        List.of(), AgentRunStatus.SUSPENDED, null,
                         "tool confirmation required",
                         Map.of(PENDING_ACTION, toolCallState(nextPending),
-                                PENDING_BATCH, pendingBatchState(batch)));
+                                PENDING_BATCH, pendingBatchState(batch)),
+                        Set.of(RECONCILIATION_PENDING, APPROVAL_PENDING_ACTION));
                 return rememberApprovedOperations(approvedCalls, context, suspended);
             }
 
@@ -206,9 +210,11 @@ public final class StandardActionHandlers {
                 return rememberApprovedOperations(approvedCalls, context,
                         new AgentActionResult(
                                 observations, null, null, null, Map.of(),
-                                Set.of(PENDING_ACTION, PENDING_BATCH)));
+                                Set.of(PENDING_ACTION, PENDING_BATCH,
+                                        RECONCILIATION_PENDING,
+                                        APPROVAL_PENDING_ACTION)));
             } catch (Exception error) {
-                futures.forEach(future -> future.cancel(true));
+                futures.forEach(future -> future.cancel(false));
                 if (error instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
@@ -243,13 +249,13 @@ public final class StandardActionHandlers {
                             AgentErrorCode.TOOL_TIMEOUT, "tool deadline reached");
                 }
                 return toObservation(call,
+                        tool.descriptor().readOnly(),
                         tool.execute(call.arguments(), toolContext));
             } catch (CancellationException error) {
-                return toolFailure(call,
-                        AgentErrorCode.TOOL_CANCELLED, errorMessage(error));
+                return uncertainBatchToolFailure(call, tool, AgentErrorCode.TOOL_CANCELLED, error);
             } catch (RuntimeException error) {
-                return toolFailure(call,
-                        AgentErrorCode.TOOL_EXECUTION_FAILED, errorMessage(error));
+                return uncertainBatchToolFailure(call, tool,
+                        AgentErrorCode.TOOL_EXECUTION_FAILED, error);
             }
         }
     }
@@ -309,7 +315,25 @@ public final class StandardActionHandlers {
     }
 
     private static AgentActionResult observedAndClearPending(AgentObservation observation) {
-        return AgentActionResult.observed(observation, Set.of(PENDING_ACTION, PENDING_BATCH));
+        return AgentActionResult.observed(observation,
+                Set.of(PENDING_ACTION, PENDING_BATCH, RECONCILIATION_PENDING,
+                        APPROVAL_PENDING_ACTION));
+    }
+
+    private static AgentActionResult uncertainToolFailure(
+            ToolCallAction call, AgentTool tool, AgentErrorCode code, RuntimeException error) {
+        AgentObservation observation = uncertainBatchToolFailure(call, tool, code, error);
+        return isResultUnknown(observation)
+                ? suspendUnknownCall(call, observation) : observedAndClearPending(observation);
+    }
+
+    private static AgentObservation uncertainBatchToolFailure(
+            ToolCallAction call, AgentTool tool, AgentErrorCode code, RuntimeException error) {
+        if (!tool.descriptor().readOnly()) {
+            return toolFailure(call, AgentErrorCode.TOOL_RESULT_UNKNOWN,
+                    "tool outcome is unknown: " + errorMessage(error));
+        }
+        return toolFailure(call, code, errorMessage(error));
     }
 
     private static AgentActionResult suspendUnknownBatch(
@@ -337,7 +361,7 @@ public final class StandardActionHandlers {
         return new AgentActionResult(
                 observations, AgentRunStatus.SUSPENDED, null, suspensionMessage,
                 Map.of(PENDING_ACTION, pendingAction, RECONCILIATION_PENDING, true),
-                Set.of(PENDING_BATCH));
+                Set.of(PENDING_BATCH, APPROVAL_PENDING_ACTION));
     }
 
     private static boolean isResultUnknown(AgentObservation observation) {
@@ -370,8 +394,10 @@ public final class StandardActionHandlers {
         if (!context.request().isToolCallApproved(call.callId())) {
             return false;
         }
-        if (!call.matchesStoredPendingState(
-                context.state().attributes().get(PENDING_ACTION))) {
+        Object pending = context.state().attributes().getOrDefault(
+                APPROVAL_PENDING_ACTION,
+                context.state().attributes().get(PENDING_ACTION));
+        if (!call.matchesStoredPendingState(pending)) {
             throw new AgentCoreException(AgentErrorCode.PENDING_ACTION_MISMATCH,
                     "approved action does not match pending action: " + call.callId());
         }
@@ -410,7 +436,9 @@ public final class StandardActionHandlers {
 
     private static void requirePendingAction(
             AgentActionContext context, Map<String, Object> expected, String actionId) {
-        Object pending = context.state().attributes().get(PENDING_ACTION);
+        Object pending = context.state().attributes().getOrDefault(
+                APPROVAL_PENDING_ACTION,
+                context.state().attributes().get(PENDING_ACTION));
         if (!expected.equals(pending)) {
             throw new AgentCoreException(AgentErrorCode.PENDING_ACTION_MISMATCH,
                     "approved action does not match pending action: " + actionId);
@@ -438,10 +466,11 @@ public final class StandardActionHandlers {
     }
 
     private static AgentObservation toObservation(
-            ToolCallAction call, ToolExecutionResult result) {
+            ToolCallAction call, boolean readOnly, ToolExecutionResult result) {
         if (result == null) {
             return toolFailure(
-                    call, AgentErrorCode.TOOL_RESULT_MISSING, "tool returned null");
+                    call, readOnly ? AgentErrorCode.TOOL_RESULT_MISSING
+                            : AgentErrorCode.TOOL_RESULT_UNKNOWN, "tool returned null");
         }
         return AgentObservation.toolResult(
                 call.callId(), call.taskId(), call.toolName(), result);

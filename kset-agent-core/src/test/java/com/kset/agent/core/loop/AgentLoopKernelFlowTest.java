@@ -7,6 +7,7 @@ import com.kset.agent.core.action.AgentObservation;
 import com.kset.agent.core.action.ExtensionAction;
 import com.kset.agent.core.action.StandardActionHandlers;
 import com.kset.agent.core.action.StandardActionTypes;
+import com.kset.agent.core.action.ToolBatchAction;
 import com.kset.agent.core.action.ToolCallAction;
 import com.kset.agent.core.api.AgentRequest;
 import com.kset.agent.core.api.AgentResumeInput;
@@ -115,6 +116,49 @@ class AgentLoopKernelFlowTest {
             AgentResumeReconciler.validatePendingDecision(
                     AgentRunState.restore(snapshot, now), AgentDecision.of(call));
         }
+    }
+
+    @Test
+    void preDispatchSnapshotsKeepNullTaskIdsForSingleAndBatchCalls() {
+        AgentRequest request = request("null-task-pre-dispatch");
+        Instant now = Instant.parse("2026-10-21T00:00:00Z");
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("value", null);
+        ToolCallAction first = new ToolCallAction("call-1", null, "reader", arguments);
+        ToolCallAction second = new ToolCallAction("call-2", null, "reader", Map.of());
+        AgentRunState state = AgentRunState.start(request, now);
+
+        AgentRunSnapshot single = state.beforeToolDispatch(first, now).snapshot();
+        AgentRunSnapshot batch = state.beforeToolDispatch(
+                new ToolBatchAction("read both", List.of(first, second)), now).snapshot();
+
+        assertThat(single.pendingToolCalls()).containsExactly(first);
+        assertThat(batch.pendingToolCalls()).containsExactly(first, second);
+        assertThat(single.attributes()).containsEntry(
+                StandardActionHandlers.RECONCILIATION_PENDING, true);
+        assertThat(batch.attributes()).containsEntry(
+                StandardActionHandlers.RECONCILIATION_PENDING, true);
+
+        Map<String, Object> legacyPending = new LinkedHashMap<>(first.pendingState());
+        legacyPending.remove("taskId");
+        Map<String, Object> legacyFirst = new LinkedHashMap<>(first.operationDefinition());
+        legacyFirst.remove("taskId");
+        Map<String, Object> legacySecond = new LinkedHashMap<>(second.operationDefinition());
+        legacySecond.remove("taskId");
+        AgentRunSnapshot awaitingApproval = new AgentRunSnapshot(
+                AgentRunSnapshot.CURRENT_VERSION, request.agentRunId(), request.task(),
+                request.protocolId(), AgentRunStatus.SUSPENDED, 1, now, now, List.of(),
+                Map.of(StandardActionHandlers.PENDING_ACTION, legacyPending,
+                        StandardActionHandlers.PENDING_BATCH, List.of(legacyFirst, legacySecond)),
+                0, 0, null, "approve", AgentStopDecision.stop(
+                        AgentStopReason.WAITING_INPUT, AgentRunStatus.SUSPENDED, "approve"));
+        AgentRunSnapshot resumedBatch = AgentRunState.restore(awaitingApproval, now)
+                .beforeToolDispatch(new ToolBatchAction("read both", List.of(first, second)), now)
+                .snapshot();
+
+        assertThat(resumedBatch.pendingToolCalls()).containsExactly(first, second);
+        assertThat(resumedBatch.attributes())
+                .containsEntry(StandardActionHandlers.APPROVAL_PENDING_ACTION, legacyPending);
     }
 
     @Test
@@ -483,6 +527,26 @@ class AgentLoopKernelFlowTest {
     }
 
     @Test
+    void rejectedConfirmationBecomesAnObservation() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                confirmation("confirm-1"), "request declined");
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).build();
+        AgentRequest initial = request("reject-confirmation");
+        AgentResult suspended = kernel.run(initial);
+        AgentRequest rejected = request("reject-confirmation", initial.options(),
+                Map.of(AgentRequest.REJECTED_CONFIRMATION_IDS, List.of("confirm-1")), null);
+
+        AgentResult result = kernel.resume(rejected, suspended.snapshot());
+
+        assertThat(result.answer()).isEqualTo("request declined");
+        assertThat(result.snapshot().observations()).anyMatch(observation ->
+                AgentErrorCode.CONFIRMATION_REJECTED.name().equals(observation.errorCode()));
+        assertThat(result.snapshot().attributes())
+                .doesNotContainKey(StandardActionHandlers.PENDING_ACTION);
+        assertThat(model.calls()).isEqualTo(2);
+    }
+
+    @Test
     void requiresAuthoritativeResultsBeforeReconciliationResume() {
         AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
                 envelope("""
@@ -543,6 +607,235 @@ class AgentLoopKernelFlowTest {
         assertThat(listener.byInvocation()).hasSize(2);
         listener.byInvocation().values().forEach(events ->
                 assertLifecycleTrace(events, "reconcile-run"));
+    }
+
+    @Test
+    void persistsToolIdentityBeforeExecutionAndRequiresReconciliation() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"read","tasks":[
+                          {"taskId":"read","title":"Read","dependsOn":[]}
+                        ]}
+                        """),
+                toolCall("read#1", "read", "reader", "x"), "original answer");
+        AtomicReference<AgentRunSnapshot> inFlight = new AtomicReference<>();
+        AtomicInteger toolCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+                .tools(new InMemoryAgentToolRegistry().register(tool("reader", (args, context) -> {
+                    toolCalls.incrementAndGet();
+                    return ToolExecutionResult.success("saved");
+                })))
+                .checkpoints((request, snapshot) -> {
+                    if (snapshot.runStatus() == AgentRunStatus.RUNNING
+                            && Boolean.TRUE.equals(snapshot.attributes().get(
+                                    StandardActionHandlers.RECONCILIATION_PENDING))) {
+                        inFlight.set(snapshot);
+                    }
+                }).build();
+        AgentRequest request = request("in-flight-checkpoint");
+
+        assertThat(kernel.run(request).answer()).isEqualTo("original answer");
+        assertThat(inFlight.get()).isNotNull();
+        assertThat(inFlight.get().attributes().get(StandardActionHandlers.PENDING_ACTION))
+                .isInstanceOf(Map.class);
+        assertThatThrownBy(() -> kernel.resume(request, inFlight.get()))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_RESUME_INPUT));
+
+        AgentLoopKernel recovery = AgentLoopKernel.builder((modelRequest, context) ->
+                ModelResponse.text("recovered answer")).build();
+        AgentObservation authoritative = AgentObservation.toolResult(
+                "read#1", "read", "reader", ToolExecutionResult.success("saved"));
+        AgentResult resumed = recovery.resume(request, inFlight.get(),
+                new AgentResumeInput(List.of(authoritative)));
+
+        assertThat(resumed.answer()).isEqualTo("recovered answer");
+        assertThat(toolCalls).hasValue(1);
+        assertThat(resumed.snapshot().attributes())
+                .doesNotContainKeys(StandardActionHandlers.PENDING_ACTION,
+                        StandardActionHandlers.RECONCILIATION_PENDING);
+    }
+
+    @Test
+    void writeToolExceptionRequiresReconciliationAfterApproval() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"write","tasks":[
+                          {"taskId":"write","title":"Write","dependsOn":[]}
+                        ]}
+                        """),
+                toolCall("write#1", "write", "writer", "x"),
+                toolCall("write#1", "write", "writer", "x"));
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+                .tools(new InMemoryAgentToolRegistry().register(dangerousTool(
+                        "writer", (args, context) -> {
+                            throw new IllegalStateException("response lost");
+                        })))
+                .build();
+        AgentRequest initial = request("write-exception");
+        AgentResult awaitingApproval = kernel.run(initial);
+        AgentRequest approved = request("write-exception", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#1")), null);
+
+        AgentResult unknown = kernel.resume(approved, awaitingApproval.snapshot());
+
+        assertThat(unknown.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
+        assertThat(unknown.stopDecision().stopReason())
+                .isEqualTo(AgentStopReason.RECONCILIATION_REQUIRED);
+        assertThat(unknown.snapshot().observations().getLast().errorCode())
+                .isEqualTo(AgentErrorCode.TOOL_RESULT_UNKNOWN.name());
+    }
+
+    @Test
+    void nullWriteToolResultRequiresReconciliation() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"write","tasks":[
+                          {"taskId":"write","title":"Write","dependsOn":[]}
+                        ]}
+                        """),
+                toolCall("write#1", "write", "writer", "x"),
+                toolCall("write#1", "write", "writer", "x"));
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+                .tools(new InMemoryAgentToolRegistry().register(dangerousTool(
+                        "writer", (args, context) -> null)))
+                .build();
+        AgentRequest initial = request("null-write-result");
+        AgentResult awaitingApproval = kernel.run(initial);
+        AgentRequest approved = request("null-write-result", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#1")), null);
+
+        AgentResult unknown = kernel.resume(approved, awaitingApproval.snapshot());
+
+        assertThat(unknown.stopDecision().stopReason())
+                .isEqualTo(AgentStopReason.RECONCILIATION_REQUIRED);
+        assertThat(unknown.snapshot().observations().getLast().errorCode())
+                .isEqualTo(AgentErrorCode.TOOL_RESULT_UNKNOWN.name());
+    }
+
+    @Test
+    void inFlightBatchCheckpointRequiresEveryToolResult() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"read","tasks":[
+                          {"taskId":"read","title":"Read","dependsOn":[]}
+                        ]}
+                        """),
+                envelope("""
+                        {"type":"tool_batch","plan":"read both","toolCalls":[
+                          {"callId":"read#1","taskId":"read","toolName":"first","arguments":{}},
+                          {"callId":"read#2","taskId":"read","toolName":"second","arguments":{}}
+                        ]}
+                        """),
+                "original answer");
+        AtomicReference<AgentRunSnapshot> inFlight = new AtomicReference<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+                .tools(new InMemoryAgentToolRegistry()
+                        .register(tool("first", (args, context) -> ToolExecutionResult.success("one")))
+                        .register(tool("second", (args, context) -> ToolExecutionResult.success("two"))))
+                .checkpoints((request, snapshot) -> {
+                    if (snapshot.runStatus() == AgentRunStatus.RUNNING
+                            && Boolean.TRUE.equals(snapshot.attributes().get(
+                                    StandardActionHandlers.RECONCILIATION_PENDING))) {
+                        inFlight.set(snapshot);
+                    }
+                }).build();
+        AgentRequest request = request("in-flight-batch");
+
+        assertThat(kernel.run(request).answer()).isEqualTo("original answer");
+        assertThat(inFlight.get()).isNotNull();
+        assertThatThrownBy(() -> kernel.resume(request, inFlight.get(),
+                new AgentResumeInput(List.of(AgentObservation.toolResult(
+                        "read#1", "read", "first", ToolExecutionResult.success("one"))))))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.PENDING_ACTION_MISMATCH));
+        AgentLoopKernel recovery = AgentLoopKernel.builder((modelRequest, context) ->
+                ModelResponse.text("recovered answer")).build();
+        AgentResult resumed = recovery.resume(request, inFlight.get(), new AgentResumeInput(List.of(
+                AgentObservation.toolResult("read#1", "read", "first",
+                        ToolExecutionResult.success("one")),
+                AgentObservation.toolResult("read#2", "read", "second",
+                        ToolExecutionResult.success("two")))));
+
+        assertThat(resumed.answer()).isEqualTo("recovered answer");
+        assertThat(resumed.snapshot().attributes())
+                .doesNotContainKeys(StandardActionHandlers.PENDING_ACTION,
+                        StandardActionHandlers.RECONCILIATION_PENDING);
+    }
+
+    @Test
+    void rejectedToolCallDoesNotExecute() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"write","tasks":[
+                          {"taskId":"write","title":"Write","dependsOn":[]}
+                        ]}
+                        """),
+                toolCall("write#1", "write", "writer", "x"), "write declined");
+        AtomicInteger toolCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+                .tools(new InMemoryAgentToolRegistry().register(dangerousTool(
+                        "writer", (args, context) -> {
+                            toolCalls.incrementAndGet();
+                            return ToolExecutionResult.success("saved");
+                        })))
+                .build();
+        AgentRequest initial = request("reject-tool");
+        AgentResult awaitingApproval = kernel.run(initial);
+        AgentRequest rejected = request("reject-tool", initial.options(),
+                Map.of(AgentRequest.REJECTED_TOOL_CALL_IDS, List.of("write#1")), null);
+
+        AgentResult result = kernel.resume(rejected, awaitingApproval.snapshot());
+
+        assertThat(result.answer()).isEqualTo("write declined");
+        assertThat(toolCalls).hasValue(0);
+        assertThat(result.snapshot().observations()).anyMatch(observation ->
+                AgentErrorCode.TOOL_REJECTED.name().equals(observation.errorCode()));
+    }
+
+    @Test
+    void rejectingLaterBatchApprovalClearsEarlierApprovals() {
+        String batch = envelope("""
+                {"type":"tool_batch","plan":"write both","toolCalls":[
+                  {"callId":"write#1","taskId":"write","toolName":"first","arguments":{}},
+                  {"callId":"write#2","taskId":"write","toolName":"second","arguments":{}}
+                ]}
+                """);
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"write","tasks":[
+                          {"taskId":"write","title":"Write","dependsOn":[]}
+                        ]}
+                        """), batch, batch, "batch declined");
+        AtomicInteger toolCalls = new AtomicInteger();
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(dangerousTool("first", (args, context) -> {
+                    toolCalls.incrementAndGet();
+                    return ToolExecutionResult.success("first");
+                }))
+                .register(dangerousTool("second", (args, context) -> {
+                    toolCalls.incrementAndGet();
+                    return ToolExecutionResult.success("second");
+                }));
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools).build();
+        AgentRequest initial = request("reject-batch");
+        AgentResult firstApproval = kernel.run(initial);
+        AgentRequest approveFirst = request("reject-batch", initial.options(),
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#1")), null);
+        AgentResult secondApproval = kernel.resume(approveFirst, firstApproval.snapshot());
+        AgentRequest rejectSecond = request("reject-batch", initial.options(),
+                Map.of(AgentRequest.REJECTED_TOOL_CALL_IDS, List.of("write#2")), null);
+
+        AgentResult result = kernel.resume(rejectSecond, secondApproval.snapshot());
+
+        assertThat(result.answer()).isEqualTo("batch declined");
+        assertThat(toolCalls).hasValue(0);
+        assertThat(result.snapshot().attributes())
+                .doesNotContainKeys(StandardActionHandlers.PENDING_ACTION,
+                        StandardActionHandlers.PENDING_BATCH,
+                        StandardActionHandlers.APPROVED_TOOL_OPERATIONS);
     }
 
     @Test

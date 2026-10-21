@@ -100,11 +100,15 @@
 
 `confirmationId` 和 `message` 必填。未批准时该动作将运行置为 `SUSPENDED`；宿主保存快照并在恢复请求中通过 `AgentRequest.APPROVED_CONFIRMATION_IDS` 提供 `confirmationId`。危险工具使用独立的 `AgentRequest.APPROVED_TOOL_CALL_IDS`，其中仅包含 `callId`。缺少待处理类型对应批准 ID 的恢复在调用模型前以 `INVALID_RESUME_INPUT` 拒绝。批准后模型首先必须重述与 `agent.pendingAction` 完整匹配的动作，不匹配作为可纠正协议错误 `PENDING_ACTION_MISMATCH` 处理；标准 Handler 消费批准后才继续循环。在新 run 中预置批准 ID 仍不能绕过 pending 校验。危险工具还须绑定 `callId/taskId/toolName/arguments` 的完整操作定义；批次工具保持逐项批准。
 
+恢复待确认动作时可通过 `AgentRequest.REJECTED_CONFIRMATION_IDS` 或 `AgentRequest.REJECTED_TOOL_CALL_IDS` 提交拒绝。拒绝原 ID 后，Kernel 将拒绝反馈为结构化 Observation，清理 pending 并进入下一模型轮次；同一 ID 不得同时批准和拒绝。
+
+标准工具分发前会先写入带完整调用清单的 `RUNNING` 核验快照。崩溃后恢复这类快照必须先查询原 `(agentRunId, callId)` 的权威状态，再提供每项调用的确定 Observation。批次超时后的后台工具不保证已中断。
+
 ## metadata
 
 根层 `metadata` 是协议中立的扩展数据，只能是 JSON 对象。内核将最近一次 metadata 保存到快照属性 `agent.protocolMetadata`，但不会解释业务内容。需要跨多轮保留的数据应由自定义 Strategy 显式复制到自己的非保留命名空间。
 
-`agent.*` 和 `react.*` 是内核保留属性前缀。请求侧仅公开 `agent.approvedConfirmationIds` 与 `agent.approvedToolCallIds`，两类 ID 不得混用；宿主不得写入快照中的内部工具操作或确认账本，扩展应使用自己的命名空间。`agent.pendingAction` 只在等待批准或标准工具结果核验时保留，并在批准消费、工具结束、核验恢复或最终回答时由内核删除。内部账本不会进入默认 ReAct Prompt。
+`agent.*` 和 `react.*` 是内核保留属性前缀。请求侧公开批准与拒绝确认、工具调用的四类 ID，确认与工具 ID 不得混用；宿主不得写入快照中的内部工具操作或确认账本，扩展应使用自己的命名空间。`agent.pendingAction` 在等待批准、执行前核验快照或结果未知时保留，并在审批消费、工具结束、核验恢复或最终回答时由内核删除。内部账本不会进入默认 ReAct Prompt。
 
 `agentRunId`、`invocationId`、`stepId`、`parentStepId`、`stepType` 和 `operation` 属于 Kernel 固定的执行追踪信封，不属于模型 JSON 字段。Kernel 在入口绑定调用方提供或生成的 `agentRunId`；它是一次可恢复 Agent 任务的唯一命名身份，不能用会话 `sessionId` 或计划 `taskId` 替代。Codec 不得从模型输出读取或覆盖这些身份；外部适配器应从 `AgentExecutionContext`、`AgentToolContext` 或 `AgentLifecycleContext` 获取。
 

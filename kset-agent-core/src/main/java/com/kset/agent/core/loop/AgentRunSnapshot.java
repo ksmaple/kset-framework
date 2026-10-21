@@ -134,6 +134,7 @@ public record AgentRunSnapshot(
         Object pendingValue = attributes.get(StandardActionHandlers.PENDING_ACTION);
         Object batchValue = attributes.get(StandardActionHandlers.PENDING_BATCH);
         Object reconciliationValue = attributes.get(StandardActionHandlers.RECONCILIATION_PENDING);
+        Object approvalValue = attributes.get(StandardActionHandlers.APPROVAL_PENDING_ACTION);
         if (reconciliationValue != null && !Boolean.TRUE.equals(reconciliationValue)) {
             throw invalid("reconciliation pending marker must be true when present");
         }
@@ -145,13 +146,14 @@ public record AgentRunSnapshot(
                 && reconciliationPending && !reconciliationStop)) {
             throw invalid("reconciliation marker and stop reason are inconsistent");
         }
-        if (reconciliationPending && runStatus != AgentRunStatus.SUSPENDED
+        if (reconciliationPending && runStatus != AgentRunStatus.RUNNING
+                && runStatus != AgentRunStatus.SUSPENDED
                 && (runStatus != AgentRunStatus.FAILED || stopDecision.stopReason()
                 != AgentStopReason.FATAL_ERROR)) {
-            throw invalid("reconciliation pending state must be suspended or fatally failed");
+            throw invalid("reconciliation pending state must be running, suspended or fatally failed");
         }
         if (pendingValue == null) {
-            if (batchValue != null || reconciliationPending) {
+            if (batchValue != null || reconciliationPending || approvalValue != null) {
                 throw invalid("pending batch or reconciliation requires a pending action");
             }
             return;
@@ -184,6 +186,19 @@ public record AgentRunSnapshot(
         }
         if (batchValue != null) {
             validatePendingBatch(pendingType, pendingAction, batchValue);
+        }
+        if (approvalValue != null) {
+            if (!reconciliationPending || !StandardActionTypes.TOOL_BATCH.equals(pendingType)
+                    || !(approvalValue instanceof Map<?, ?> approval)) {
+                throw invalid("approval pending action requires an in-flight tool batch");
+            }
+            validatePendingToolCall(approval, true);
+            boolean member = ((List<?>) pendingAction.get("toolCalls")).stream()
+                    .map(call -> toolCall((Map<?, ?>) call))
+                    .anyMatch(call -> call.matchesStoredPendingState(approval));
+            if (!member) {
+                throw invalid("approval pending action is not a member of the tool batch");
+            }
         }
     }
 

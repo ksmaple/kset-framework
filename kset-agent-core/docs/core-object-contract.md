@@ -35,7 +35,7 @@
 | 对象 | 字段 | 固定含义 |
 | --- | --- | --- |
 | `AgentRequest` | `agentRunId/task/protocolId` | Agent 任务身份、完整任务内容、整个 run 固定的版本化控制协议。`task` 不是计划节点。 |
-| `AgentRequest` | `options/attributes/cancellation` | 本次调用的容量与活动期限、宿主上下文、独立取消探针。`options` 缺省用默认值；`attributes` 不自动进入默认 ReAct Prompt，仅允许公开保留键 `agent.approvedConfirmationIds` 和 `agent.approvedToolCallIds`。缺少待处理类型对应的批准 ID 会在模型调用前拒绝。 |
+| `AgentRequest` | `options/attributes/cancellation` | 本次调用的容量与活动期限、宿主上下文、独立取消探针。`options` 缺省用默认值；`attributes` 不自动进入默认 ReAct Prompt；审批输入可使用 `agent.approvedConfirmationIds`、`agent.approvedToolCallIds`、`agent.rejectedConfirmationIds` 或 `agent.rejectedToolCallIds`。待处理动作必须且只能被批准或拒绝。 |
 | `AgentLoopOptions` | `maxTurns/protocolErrorLimit/noProgressLimit` | 单个 run 的轮次上限、连续可纠正协议错误上限、连续无进展动作上限。 |
 | `AgentLoopOptions` | `invocationTimeout/maxOutputTokens/maxActionsPerDecision` | 每次活动 invocation 的时限、模型本轮输出 token 提示上限（0 表示不指定）、单个决策的动作数上限。 |
 | `AgentLoopOptions` | `toolCallTimeout/toolBatchTimeout/maxToolCallsPerBatch` | 单工具时限、整个标准并发批次时限、标准批次大小上限；实际工具 deadline 不得晚于 invocation deadline。 |
@@ -79,7 +79,7 @@
 | --- | --- | --- |
 | `AgentRunState` / `AgentRunSnapshot` | `agentRunId/task/protocolId/runStatus/turn` | 当前 run 身份、完整任务、固定协议、运行状态、累计轮数；快照只由 Kernel 投影，`version = 4`。 |
 | `AgentRunState` / `AgentRunSnapshot` | `startedAt/updatedAt/observations/attributes` | run 初始时间、最近状态更新时间、累计观察、持久化运行属性。`attributes` 含 Kernel `agent.*`、ReAct `react.*` 和扩展命名空间，不等同于请求属性。 |
-| `AgentRunState` / `AgentRunSnapshot` | `agent.pendingAction/agent.pendingBatch/agent.reconciliationPending` | 分别表示待批准或待核验动作、逐项批准时不可改写的完整工具批次、未知工具结果必须核验的标记；均由 Kernel 管理。v4 快照在构造时校验待处理确认、工具调用及批次的固定字段和成员关系，并拒绝核验标记与停止原因冲突或未知工具结果缺失核验标记；损坏的内部状态返回 `INVALID_SNAPSHOT`。核验检查点失败导致状态变为 `FAILED/FATAL_ERROR` 时仍保留标记。 |
+| `AgentRunState` / `AgentRunSnapshot` | `agent.pendingAction/agent.pendingBatch/agent.reconciliationPending/agent.approvalPendingAction` | 分别表示待批准或待核验动作、逐项批准时不可改写的完整工具批次、工具结果必须核验的标记，以及批次执行前保留的原审批操作；均由 Kernel 管理。v4 快照在构造时校验待处理确认、工具调用及批次的固定字段和成员关系，并拒绝核验标记与停止原因冲突或未知工具结果缺失核验标记；损坏的内部状态返回 `INVALID_SNAPSHOT`。工具执行前可保存带核验标记的 `RUNNING` 快照，恢复时须注入权威工具结果；核验检查点失败导致 `FAILED/FATAL_ERROR` 时仍保留标记。 |
 | `AgentRunSnapshot` | `pendingToolCall()/pendingToolCalls()/pendingConfirmationId()` | 只读投影当前待批准工具、完整批准或核验批次，以及普通确认 ID；返回值不包含权限判定或权威结果。无对应待处理动作时返回空值。工具参数保留显式 null，读取旧 v4 快照时可空 `taskId` 可以缺省。 |
 | `AgentRunState` / `AgentRunSnapshot` | `consecutiveProtocolErrors/consecutiveNoProgress` | 连续协议纠错次数与连续无进展次数，成功决策或有效动作按规则清零。 |
 | `AgentRunState` / `AgentRunSnapshot` | `answer/suspensionMessage/stopDecision` | 只在 `COMPLETED` 有最终回答；只在 `SUSPENDED` 可有等待提示；非运行态有停止决定。`resume` 只接受当前 v4 快照。 |

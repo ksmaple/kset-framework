@@ -16,6 +16,7 @@ import com.kset.agent.core.api.AgentRunStatus;
 import com.kset.agent.core.protocol.AgentDecision;
 import com.kset.agent.core.protocol.AgentProtocolException;
 import com.kset.agent.core.stop.AgentStopReason;
+import com.kset.agent.core.tool.ToolExecutionResult;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -38,8 +39,8 @@ final class AgentResumeReconciler {
             if (requiresReconciliation(snapshot)) {
                 throw invalid("pending tool outcome requires reconciled observations");
             }
-            requirePendingConfirmation(request, snapshot);
-            return state;
+            AgentActionResult rejection = pendingApprovalResult(request, snapshot);
+            return rejection == null ? state : state.apply(rejection, now);
         }
         requireReconciliationSnapshot(snapshot);
         Map<String, PendingToolCall> pending = pendingCalls(snapshot);
@@ -55,7 +56,8 @@ final class AgentResumeReconciler {
                 input.reconciledObservations(), null, null, null, Map.of(),
                 Set.of(StandardActionHandlers.PENDING_ACTION,
                         StandardActionHandlers.PENDING_BATCH,
-                        StandardActionHandlers.RECONCILIATION_PENDING));
+                        StandardActionHandlers.RECONCILIATION_PENDING,
+                        StandardActionHandlers.APPROVAL_PENDING_ACTION));
         return state.apply(reconciled, now);
     }
 
@@ -96,14 +98,18 @@ final class AgentResumeReconciler {
         }
     }
 
-    private static void requirePendingConfirmation(
+    private static AgentActionResult pendingApprovalResult(
             AgentRequest request, AgentRunSnapshot snapshot) {
         Object value = snapshot.attributes().get(StandardActionHandlers.PENDING_ACTION);
         if (value == null) {
             if (snapshot.attributes().containsKey(StandardActionHandlers.PENDING_BATCH)) {
                 throw invalidSnapshot("pending batch has no pending tool call");
             }
-            return;
+            if (request.attributes().containsKey(AgentRequest.REJECTED_CONFIRMATION_IDS)
+                    || request.attributes().containsKey(AgentRequest.REJECTED_TOOL_CALL_IDS)) {
+                throw invalid("rejection requires a pending approval");
+            }
+            return null;
         }
         if (!(value instanceof Map<?, ?> pending)) {
             throw new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT,
@@ -122,17 +128,44 @@ final class AgentResumeReconciler {
         if (StandardActionTypes.CONFIRMATION.equals(type)) {
             String confirmationId = requiredText(pending.get("confirmationId"),
                     "pending confirmationId");
+            if (request.isConfirmationApproved(confirmationId)
+                    && request.isConfirmationRejected(confirmationId)) {
+                throw invalid("pending confirmation cannot be approved and rejected");
+            }
+            if (request.isConfirmationRejected(confirmationId)) {
+                return AgentActionResult.observed(AgentObservation.failure(
+                        StandardActionTypes.CONFIRMATION,
+                        AgentErrorCode.CONFIRMATION_REJECTED,
+                        "confirmation rejected: " + confirmationId),
+                        Set.of(StandardActionHandlers.PENDING_ACTION,
+                                StandardActionHandlers.PENDING_BATCH));
+            }
             if (!request.isConfirmationApproved(confirmationId)) {
                 throw invalid("pending confirmation requires approval: " + confirmationId);
             }
         } else if (StandardActionTypes.TOOL_CALL.equals(type)) {
             String callId = requiredText(pending.get("callId"), "pending callId");
+            if (request.isToolCallApproved(callId) && request.isToolCallRejected(callId)) {
+                throw invalid("pending tool call cannot be approved and rejected");
+            }
+            if (request.isToolCallRejected(callId)) {
+                String toolName = requiredText(pending.get("toolName"), "pending toolName");
+                String taskId = text(pending.get("taskId"));
+                return AgentActionResult.observed(AgentObservation.toolResult(
+                        callId, taskId, toolName,
+                        ToolExecutionResult.failure(AgentErrorCode.TOOL_REJECTED,
+                                "tool call rejected: " + callId)),
+                        Set.of(StandardActionHandlers.PENDING_ACTION,
+                                StandardActionHandlers.PENDING_BATCH,
+                                StandardActionHandlers.APPROVED_TOOL_OPERATIONS));
+            }
             if (!request.isToolCallApproved(callId)) {
                 throw invalid("pending tool call requires approval: " + callId);
             }
         } else {
             throw invalidSnapshot("unsupported pending action type: " + type);
         }
+        return null;
     }
 
     private static Map<String, Object> confirmationState(ConfirmationAction confirmation) {
@@ -169,13 +202,16 @@ final class AgentResumeReconciler {
     }
 
     private static void requireReconciliationSnapshot(AgentRunSnapshot snapshot) {
+        boolean runningWithPendingTool = snapshot.runStatus() == AgentRunStatus.RUNNING
+                && Boolean.TRUE.equals(snapshot.attributes().get(
+                        StandardActionHandlers.RECONCILIATION_PENDING));
         boolean suspendedForReconciliation = snapshot.runStatus() == AgentRunStatus.SUSPENDED
                 && snapshot.stopDecision().stopReason()
                 == AgentStopReason.RECONCILIATION_REQUIRED;
         boolean failedWhileReconciling = snapshot.runStatus() == AgentRunStatus.FAILED
                 && Boolean.TRUE.equals(snapshot.attributes().get(
                         StandardActionHandlers.RECONCILIATION_PENDING));
-        if (!suspendedForReconciliation && !failedWhileReconciling) {
+        if (!runningWithPendingTool && !suspendedForReconciliation && !failedWhileReconciling) {
             throw invalid("reconciled observations require a pending tool outcome");
         }
     }

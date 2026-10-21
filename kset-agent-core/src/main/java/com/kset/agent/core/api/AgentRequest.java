@@ -26,6 +26,8 @@ public record AgentRequest(
 
     public static final String APPROVED_CONFIRMATION_IDS = "agent.approvedConfirmationIds";
     public static final String APPROVED_TOOL_CALL_IDS = "agent.approvedToolCallIds";
+    public static final String REJECTED_CONFIRMATION_IDS = "agent.rejectedConfirmationIds";
+    public static final String REJECTED_TOOL_CALL_IDS = "agent.rejectedToolCallIds";
     private static final String CORE_ATTRIBUTE_PREFIX = "agent.";
     private static final String REACT_ATTRIBUTE_PREFIX = "react.";
 
@@ -49,7 +51,9 @@ public record AgentRequest(
         }
         for (String key : attributes.keySet()) {
             if (isReservedAttribute(key) && !APPROVED_CONFIRMATION_IDS.equals(key)
-                    && !APPROVED_TOOL_CALL_IDS.equals(key)) {
+                    && !APPROVED_TOOL_CALL_IDS.equals(key)
+                    && !REJECTED_CONFIRMATION_IDS.equals(key)
+                    && !REJECTED_TOOL_CALL_IDS.equals(key)) {
                 throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
                         "request attribute uses a reserved key: " + key);
             }
@@ -81,14 +85,22 @@ public record AgentRequest(
     }
 
     public boolean isConfirmationApproved(String confirmationId) {
-        return containsApprovedId(APPROVED_CONFIRMATION_IDS, confirmationId);
+        return containsDecisionId(APPROVED_CONFIRMATION_IDS, confirmationId);
     }
 
     public boolean isToolCallApproved(String callId) {
-        return containsApprovedId(APPROVED_TOOL_CALL_IDS, callId);
+        return containsDecisionId(APPROVED_TOOL_CALL_IDS, callId);
     }
 
-    private boolean containsApprovedId(String attributeKey, String id) {
+    public boolean isConfirmationRejected(String confirmationId) {
+        return containsDecisionId(REJECTED_CONFIRMATION_IDS, confirmationId);
+    }
+
+    public boolean isToolCallRejected(String callId) {
+        return containsDecisionId(REJECTED_TOOL_CALL_IDS, callId);
+    }
+
+    private boolean containsDecisionId(String attributeKey, String id) {
         if (id == null || id.isBlank()) {
             return false;
         }
