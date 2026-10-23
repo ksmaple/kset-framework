@@ -39,10 +39,11 @@
 | `AgentLoopOptions` | `maxTurns/protocolErrorLimit/noProgressLimit` | 单个 run 的轮次上限、连续可纠正协议错误上限、连续无进展动作上限。 |
 | `AgentLoopOptions` | `invocationTimeout/maxOutputTokens/maxActionsPerDecision` | 每次活动 invocation 的时限、模型本轮输出 token 提示上限（0 表示不指定）、单个决策的动作数上限。 |
 | `AgentLoopOptions` | `toolCallTimeout/toolBatchTimeout/maxToolCallsPerBatch` | 单工具时限、整个标准并发批次时限、标准批次大小上限；实际工具 deadline 不得晚于 invocation deadline。 |
+| `AgentLoopOptions` | `maxPromptChars/maxObservationChars` | 模型请求的 systemPrompt 与 userPrompt 合计字符上限、默认 ReAct 单条观察摘要字符上限；默认 32768/4096。字符数不是模型 Token 数，模型适配器仍须执行供应商窗口校验。旧九参数构造器沿用这两个默认值。 |
 | `AgentExecutionContext` | `agentRunId/invocationId/stepId/parentStepId/stepType/operation/turn` | Kernel 下传给扩展的只读追踪身份；`operation` 是本步骤操作名，不是工具幂等 ID。 |
 | `AgentExecutionContext` | `executionStartedAt/issuedAt/deadline/cancellation/attributes` | invocation 开始、本上下文创建、invocation 截止、取消探针、请求属性的只读副本；这些不代表任务整个生命周期。 |
 | `AgentTurn` | `protocolId/modelRequest` | 策略为本轮选定的已注册协议及模型请求；恢复期间不得切换 run 的协议。 |
-| `ModelRequest` | `systemPrompt/userPrompt/maxOutputTokens/attributes` | 发送给模型的提示、输出上限及模型适配器专用属性；不等同于 `AgentRequest.attributes`。 |
+| `ModelRequest` | `systemPrompt/userPrompt/maxOutputTokens/attributes` | 发送给模型的提示、输出上限及模型适配器专用属性；不等同于 `AgentRequest.attributes`。Kernel 在 Codec 补充提示后、调用模型前检查两段提示总字符数；取消、线程中断及活动超时优先，随后超限以 `CAPACITY_LIMIT/FAILED` 返回。不计算适配器自行拼入的属性或供应商包装内容。默认 ReAct 的 `observations` 属性只携带与 Prompt 相同的受限摘要，能容纳时保留完整 `callId`，原始观察与权威身份保存在快照。 |
 | `ModelResponse` | `text/toolCalls/finishReason/metrics/metadata` | 模型原文、供应商原生工具调用、供应商结束原因、标准指标、供应商专有响应元数据；`metadata` 不进入内核控制协议。 |
 | `ModelToolCall` | `callId/toolName/arguments` | 模型原生工具调用的规范化载体；`arguments` 不删减字段，保留显式 JSON null；Codec 决定是否映射为内核动作。 |
 | `ModelCallMetrics` | `provider/model/requestId/inputTokens/outputTokens/totalTokens/attributes` | 上报用模型身份、供应商请求 ID、非负 token 用量及供应商指标扩展值；`attributes` 仅供观测，不是决策 metadata。 |

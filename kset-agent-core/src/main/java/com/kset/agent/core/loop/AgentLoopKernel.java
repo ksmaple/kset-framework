@@ -250,6 +250,12 @@ public final class AgentLoopKernel {
                 if (beforeModel.shouldStop()) {
                     return finish(request, state, beforeModel, events);
                 }
+                if ((long) modelRequest.systemPrompt().length()
+                        + modelRequest.userPrompt().length() > request.options().maxPromptChars()) {
+                    return finish(request, state, AgentStopDecision.stop(
+                            AgentStopReason.CAPACITY_LIMIT, AgentRunStatus.FAILED,
+                            "model prompt exceeds maxPromptChars"), events);
+                }
                 Instant modelStartedAt = clock.instant();
                 LifecycleEvents.LifecycleStep modelStep = events.beginStep(
                         AgentLifecycleStepType.MODEL, "model", modelStartedAt);

@@ -15,12 +15,29 @@ public record AgentLoopOptions(
         Duration toolCallTimeout,
         Duration toolBatchTimeout,
         int maxActionsPerDecision,
-        int maxToolCallsPerBatch) {
+        int maxToolCallsPerBatch,
+        int maxPromptChars,
+        int maxObservationChars) {
+
+    public AgentLoopOptions(int maxTurns, Duration invocationTimeout,
+                            int protocolErrorLimit, int noProgressLimit,
+                            int maxOutputTokens, Duration toolCallTimeout,
+                            Duration toolBatchTimeout, int maxActionsPerDecision,
+                            int maxToolCallsPerBatch) {
+        this(maxTurns, invocationTimeout, protocolErrorLimit, noProgressLimit,
+                maxOutputTokens, toolCallTimeout, toolBatchTimeout,
+                maxActionsPerDecision, maxToolCallsPerBatch, 32768, 4096);
+    }
 
     public AgentLoopOptions {
         if (maxTurns < 1 || protocolErrorLimit < 1 || noProgressLimit < 1 || maxOutputTokens < 0
                 || maxActionsPerDecision < 1 || maxToolCallsPerBatch < 2) {
             throw invalid("agent loop numeric limits are invalid");
+        }
+        if (maxPromptChars < 4096 || maxObservationChars < 2048
+                || maxObservationChars > maxPromptChars / 2) {
+            throw invalid("prompt limits require maxPromptChars >= 4096 and "
+                    + "2048 <= maxObservationChars <= maxPromptChars / 2");
         }
         if (invocationTimeout == null || invocationTimeout.isZero()
                 || invocationTimeout.isNegative()) {
@@ -36,7 +53,7 @@ public record AgentLoopOptions(
 
     public static AgentLoopOptions defaults() {
         return new AgentLoopOptions(20, Duration.ofMinutes(5), 3, 3, 0,
-                Duration.ofMinutes(2), Duration.ofMinutes(2), 8, 8);
+                Duration.ofMinutes(2), Duration.ofMinutes(2), 8, 8, 32768, 4096);
     }
 
     private static AgentCoreException invalid(String errorMessage) {

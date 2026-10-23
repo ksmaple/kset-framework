@@ -240,6 +240,8 @@ AgentResult result = kernel.run(request);
 
 默认 ReAct 只将计划、回答分片、待处理动作和阶段等问答循环状态投影给模型；快照中的宿主业务属性与协议 metadata 不会自动进入 `ModelRequest`。需要额外业务上下文时由宿主的自定义 Strategy 明确选择字段。Core 不识别用户、角色或项目范围，也不执行工具权限判断；宿主提供本轮可见工具，并在工具执行时校验实际操作权限。`approvedToolCallIds` 与 `approvedConfirmationIds` 只表示用户对待处理动作的确认，不能替代权限校验。
 
+默认 ReAct 将观察结果作为带边界的 JSON 数据片段传给模型，转义工具内容中的边界符、换行和引号，并提示模型不得把观察内容当作指令。`AgentLoopOptions.maxObservationChars` 默认将每条模型可见摘要限制在 4096 字符；观察区总预算为 `maxPromptChars` 的一半，包含标题与省略计数，超出时保留最近的观察并标出较早观察的省略数量。摘要优先保留能容纳的完整 `callId`，过长时会标记截断；摘要不能代替快照或工具账本中的权威身份。`ModelRequest.attributes.observations` 同样只含这些摘要；原始结果仍完整保存在 `AgentRunSnapshot.observations`，由宿主决定持久化和脱敏。内核在协议补充系统提示后检查 systemPrompt 与 userPrompt 合计字符数，默认上限 32768；取消、线程中断及活动超时优先，随后超限才以 `CAPACITY_LIMIT/FAILED` 停止。该上限不等于 Token 预算，也不包含模型适配器自行拼装的属性和供应商请求，适配器仍需核对实际模型窗口。旧九参数 `AgentLoopOptions` 构造器使用两个默认上限。
+
 接入 Plan-and-Execute、Supervisor 或其他策略时，实现 `AgentReasoningStrategy` 并通过构建器替换即可，无需修改协议注册和停止控制。
 
 ## 中断与恢复
