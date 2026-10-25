@@ -7,7 +7,10 @@ import java.util.Map;
 
 /**
  * Structured result returned by an Agent tool. Use {@link AgentErrorCode#TOOL_RESULT_UNKNOWN}
- * when a side effect may have occurred but no authoritative result is available.
+ * when a side effect may have occurred but no authoritative result is available. {@code progress}
+ * reports whether a successful result resets the Agent loop's no-progress counter; it does not
+ * certify that an external side effect was committed. {@link #success(Object)} reports progress,
+ * while {@link #unchanged(Object)} does not.
  */
 public record ToolExecutionResult(
         boolean success,

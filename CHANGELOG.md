@@ -7,6 +7,8 @@
 ### 新增
 
 - **Agent 默认模型输入保护**：ReAct 观察内容改为带不可信边界的限长摘要，快照保留原始结果；提示字符数超限时在模型调用前以 `CAPACITY_LIMIT` 停止。
+- **Agent 模型输入字段**：默认 ReAct 的模型属性键改为 `observationSummaries`，单条摘要限额访问器改为 `maxObservationSummaryChars`；两项字符限额均按 UTF-16 代码单元计算。
+- **Agent 字段契约**：快照单个待处理工具访问器更名为 `pendingSingleToolCall()`；明确模型属性由策略提供、由适配器按需读取，以及 `progress` 对无进展计数的含义。
 - **kset-agent-core**：Java 21 + Jackson 的框架无关 Agent 内核。同步 `run/resume` 固定 `RunState → ModelResponse → Decision → Action → Observation → StopDecision` 循环；默认提供 ReAct 策略和不可覆盖的 `agent-json:v1`，支持注册模型、协议、策略、动作、工具、停止策略、检查点和生命周期监听器。
 - **执行与恢复契约**：集中处理取消、超时、轮次、协议错误、无进展和容量限制；模型仅对显式可重试故障进行有限重试。当前快照 v4 保存任务状态、批次批准和未知工具结果核验标记；`agentRunId` 为可恢复任务身份，标准工具使用结构化 `(agentRunId, callId)` 幂等键。确认恢复与 `RECONCILIATION_REQUIRED` 恢复须满足待处理动作和权威结果校验，会话单飞、持久化条件写及业务补偿由宿主负责。
 - **问答上下文与待处理动作**：默认 ReAct 仅向模型投影循环所需状态；v4 快照提供类型化的待处理工具调用和确认 ID 访问器，宿主无需解析 Core 内部状态 Map。权限筛选与执行时校验仍由宿主负责。

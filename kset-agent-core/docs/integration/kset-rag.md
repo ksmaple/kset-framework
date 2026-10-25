@@ -92,7 +92,7 @@ kset-rag 应在创建 Kernel 时注册 `SnowflakeAgentRunIdGenerator(datacenterI
 - 一个会话只能有一个活动实例；接入前必须补充基于 `sessionId` 的原子抢占或活动任务唯一约束，现有按 `taskId` 的租约不能替代会话单飞。
 - 不同会话可以并发调用同一个 Kernel；所有共享扩展必须线程安全。
 - core 的 `resume` 只恢复宿主传入的逻辑快照，不负责读取快照、重新抢占任务或查询未知工具结果；`RECONCILIATION_REQUIRED` 快照必须同时传入 `AgentResumeInput`。
-- 宿主读取待处理动作时使用 `AgentRunSnapshot.pendingToolCall()`、`pendingToolCalls()` 和 `pendingConfirmationId()`；完整批次保持原顺序，工具参数中的显式 null 不丢失。宿主仍须查询权威工具结果并校验参数指纹，不能把这些只读视图当作批准或执行凭据。
+- 宿主读取待处理动作时使用 `AgentRunSnapshot.pendingSingleToolCall()`、`pendingToolCalls()` 和 `pendingConfirmationId()`；批次执行中单数访问器为空，完整批次由复数访问器按原顺序返回，工具参数中的显式 null 不丢失。宿主仍须查询权威工具结果并校验参数指纹，不能把这些只读视图当作批准或执行凭据。
 - 带副作用的工具恢复前必须按原 `(agentRunId, callId)` 查询权威结果并校验参数指纹，再决定复用结果、重试或补偿。
 - 危险工具或普通确认的恢复请求必须从已持久化快照的 `agent.pendingAction` 生成：前者通过 `agent.approvedToolCallIds` 传入原 `callId`，后者通过 `agent.approvedConfirmationIds` 传入原 `confirmationId`；禁止在新 run 中预置批准 ID，也禁止批准后替换工具名、任务或参数。
 - 标准工具返回 `TOOL_RESULT_UNKNOWN` 时，结果固定为 `RECONCILIATION_REQUIRED + SUSPENDED`；必须逐项完成权威结果核验，使用 `AgentObservation.toolResult` 为 pending 中每个调用构造携带原 `callId/taskId/toolName` 的最终 Observation，再通过三参数 `resume` 恢复。空输入、缺项或身份不匹配会被 core 拒绝，不得让仍可能运行的旧批次与新一轮动作并行。

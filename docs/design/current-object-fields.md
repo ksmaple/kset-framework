@@ -1,6 +1,6 @@
 # 当前代码对象与字段定义
 
-> 基线：`main` 已提交源码 `cd925c9`，整理日期：2026-10-25；不包含工作区尚未提交的字段重命名。
+> 基线：当前 `main` 源码，整理日期：2026-10-25。
 > 范围：所有模块的公开 record、配置属性类及命名为 Request/Response/Result/Context/Options/Spec/Snapshot 等的公开数据类；包含配置类的嵌套属性对象。
 > 下表记录源码声明的字段类型、初始化表达式与就近注释，并链接所属源码文件。`—` 表示源码未声明初始化值或注释，不代表运行时一定为 null。配置绑定、构造器校验与派生方法可能改变最终值，须以链接源码为准。
 
@@ -290,7 +290,7 @@
 | [`maxActionsPerDecision`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
 | [`maxToolCallsPerBatch`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
 | [`maxPromptChars`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
-| [`maxObservationChars`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
+| [`maxObservationSummaryChars`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
 
 ### `AgentRunSnapshot`
 

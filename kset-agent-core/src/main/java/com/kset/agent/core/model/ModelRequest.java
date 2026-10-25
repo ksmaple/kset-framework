@@ -4,7 +4,11 @@ import com.kset.agent.core.value.AgentValueSnapshot;
 
 import java.util.Map;
 
-/** Provider-neutral model request. */
+/**
+ * Provider-neutral model request. The strategy supplies {@code attributes} as context for the
+ * model adapter to interpret; the adapter must select provider fields explicitly instead of
+ * forwarding the entire map. Prompt character limits do not replace provider token-window checks.
+ */
 public record ModelRequest(
         String systemPrompt,
         String userPrompt,

@@ -189,7 +189,7 @@ Model 和 Tool 是同步边界，内核不会为它们创建线程。适配器�
 
 标准 `tool_batch` 将调用提交给宿主配置的 Executor；默认 Executor 同步执行，只有宿主提供并行 Executor 时工具才会并发。已有任务提交后，若批次等待超时、线程中断或提交/汇总异常导致结果无法确认，Kernel 会将结果标记为 `TOOL_RESULT_UNKNOWN`、保留完整 `agent.pendingAction`，并以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止本次调用。默认同步 Executor 不会强制中断尚未返回的工具调用。工具适配器主动返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)` 时采用相同出口：单工具保存原调用，批次任一调用未知则保存完整批次及全部 Observation。该核验停止优先于同一批次等待期间发生的通用超时或线程中断；线程中断标志仍会保留。宿主恢复前必须按每个 `AgentToolIdempotencyKey` 查询权威结果；带依赖关系的批次仍应使用自定义 Action/Handler。
 
-`RECONCILIATION_REQUIRED` 快照禁止空输入恢复。若核验终态的检查点写入失败，返回的 `FAILED` 快照也保留 `agent.reconciliationPending`，同样必须先核验，不能作为普通失败直接续跑。宿主必须为 pending 中每个调用提供一条权威 `tool_call` Observation，并通过 `AgentResumeInput` 调用三参数 `resume`；`callId/taskId/toolName` 必须是与 pending 完整匹配的字符串身份，不能依赖数字等值的隐式转换。空输入、非工具动作或仍为 `TOOL_RESULT_UNKNOWN` 的结果返回 `INVALID_RESUME_INPUT`；缺项、重复项和身份不匹配返回 `PENDING_ACTION_MISMATCH`。校验成功后 Kernel 清理 pending 与核验标记、保存新快照并进入下一模型轮次。
+`RECONCILIATION_REQUIRED` 快照禁止空输入恢复。若核验终态的检查点写入失败，返回的 `FAILED` 快照也保留 `agent.reconciliationPending`，同样必须先核验，不能作为普通失败直接续跑。宿主必须为 pending 中每个调用提供一条权威 `tool_call` Observation，并通过 `AgentResumeInput` 调用三参数 `resume`；`callId/taskId/toolName` 必须是与 pending 完整匹配的字符串身份，不能依赖数字等值的隐式转换。空输入、非工具动作或仍为 `TOOL_RESULT_UNKNOWN` 的结果返回 `INVALID_RESUME_INPUT`；缺项、重复项和身份不匹配返回 `PENDING_ACTION_MISMATCH`。校验成功后 Kernel 清理 pending 与核验标记、保存新快照并进入下一模型轮次。工具结果的 `progress` 会进入 Observation 并影响连续无进展计数：`success(output)` 默认有进展，成功但状态未推进时用 `unchanged(output)`；该标记不证明外部副作用已提交。
 
 工具适配器必须区分“明确执行失败”和“可能已产生副作用但响应未知”。前者返回具体失败码并允许 Strategy 决定下一步；后者应返回 `TOOL_RESULT_UNKNOWN`。有副作用工具的普通运行时异常或空结果会由标准 Handler 保守地转为未知结果，不应把远端响应丢失报告为确定失败。
 
@@ -238,9 +238,9 @@ AgentResult result = kernel.run(request);
 
 `AgentReasoningStrategy` 只负责生成本轮模型请求和校验语义动作。默认 `ReactReasoningStrategy` 的 planning、acting、evaluating、answering 阶段不会进入循环内核。
 
-默认 ReAct 只将计划、回答分片、待处理动作和阶段等问答循环状态投影给模型；快照中的宿主业务属性与协议 metadata 不会自动进入 `ModelRequest`。需要额外业务上下文时由宿主的自定义 Strategy 明确选择字段。Core 不识别用户、角色或项目范围，也不执行工具权限判断；宿主提供本轮可见工具，并在工具执行时校验实际操作权限。`approvedToolCallIds` 与 `approvedConfirmationIds` 只表示用户对待处理动作的确认，不能替代权限校验。
+默认 ReAct 只将计划、回答分片、待处理动作和阶段等问答循环状态投影给模型；快照中的宿主业务属性与协议 metadata 不会自动进入 `ModelRequest`。`ModelRequest.attributes` 由策略提供给模型适配器按需读取，不能整张 Map 直接转发给供应商。需要额外业务上下文时由宿主的自定义 Strategy 明确选择字段。Core 不识别用户、角色或项目范围，也不执行工具权限判断；宿主提供本轮可见工具，并在工具执行时校验实际操作权限。`approvedToolCallIds` 与 `approvedConfirmationIds` 只表示用户对待处理动作的确认，不能替代权限校验。
 
-默认 ReAct 将观察结果作为带边界的 JSON 数据片段传给模型，转义工具内容中的边界符、换行和引号，并提示模型不得把观察内容当作指令。`AgentLoopOptions.maxObservationChars` 默认将每条模型可见摘要限制在 4096 字符；观察区总预算为 `maxPromptChars` 的一半，包含标题与省略计数，超出时保留最近的观察并标出较早观察的省略数量。摘要优先保留能容纳的完整 `callId`，过长时会标记截断；摘要不能代替快照或工具账本中的权威身份。`ModelRequest.attributes.observations` 同样只含这些摘要；原始结果仍完整保存在 `AgentRunSnapshot.observations`，由宿主决定持久化和脱敏。内核在协议补充系统提示后检查 systemPrompt 与 userPrompt 合计字符数，默认上限 32768；取消、线程中断及活动超时优先，随后超限才以 `CAPACITY_LIMIT/FAILED` 停止。该上限不等于 Token 预算，也不包含模型适配器自行拼装的属性和供应商请求，适配器仍需核对实际模型窗口。旧九参数 `AgentLoopOptions` 构造器使用两个默认上限。
+默认 ReAct 将观察结果作为带边界的 JSON 数据片段传给模型，转义工具内容中的边界符、换行和引号，并提示模型不得把观察内容当作指令。`AgentLoopOptions.maxObservationSummaryChars` 默认将每条模型可见摘要限制在 4096 个 UTF-16 代码单元；观察区总预算为 `maxPromptChars` 的一半，包含标题与省略计数，超出时保留最近的观察并标出较早观察的省略数量。摘要优先保留能容纳的完整 `callId`，过长时会标记截断；摘要不能代替快照或工具账本中的权威身份。`ModelRequest.attributes.observationSummaries` 只含这些摘要；原始结果仍完整保存在 `AgentRunSnapshot.observations`，由宿主决定持久化和脱敏。内核在协议补充系统提示后按 Java `String.length()` 检查 systemPrompt 与 userPrompt 合计长度，默认上限 32768 个 UTF-16 代码单元；取消、线程中断及活动超时优先，随后超限才以 `CAPACITY_LIMIT/FAILED` 停止。该上限不等于 Token 预算，也不包含模型适配器自行拼装的属性和供应商请求，适配器仍需核对实际模型窗口。旧九参数 `AgentLoopOptions` 构造器使用两个默认上限。
 
 接入 Plan-and-Execute、Supervisor 或其他策略时，实现 `AgentReasoningStrategy` 并通过构建器替换即可，无需修改协议注册和停止控制。
 
@@ -248,7 +248,7 @@ AgentResult result = kernel.run(request);
 
 `AgentRunSnapshot` v4 不保存模型原始思维链，只保存轮次、标准观察、扩展属性、错误计数、最终回答或暂停提示以及停止结果。宿主负责读取快照，再显式恢复：
 
-读取待处理动作可用 `snapshot.pendingToolCall()`、`snapshot.pendingToolCalls()` 和 `snapshot.pendingConfirmationId()`；工具调用返回 Core 类型，批次保持保存顺序。宿主仍须自行核验结果和业务权限。
+读取待处理动作可用 `snapshot.pendingSingleToolCall()`、`snapshot.pendingToolCalls()` 和 `snapshot.pendingConfirmationId()`；批次执行中单数访问器为空，复数访问器仍返回完整批次并保持保存顺序。工具调用返回 Core 类型，宿主仍须自行核验结果和业务权限。
 
 ```java
 String agentRunId = request.agentRunId();

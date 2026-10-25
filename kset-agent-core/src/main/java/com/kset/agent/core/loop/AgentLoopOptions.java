@@ -5,7 +5,12 @@ import com.kset.agent.core.AgentErrorCode;
 
 import java.time.Duration;
 
-/** Immutable run limits and per-invocation execution deadlines. */
+/**
+ * Immutable run limits and per-invocation execution deadlines.
+ * {@code maxPromptChars} counts UTF-16 code units in the prepared system and user prompts only.
+ * {@code maxObservationSummaryChars} bounds one default ReAct model-visible summary, not the
+ * original observation retained in the snapshot.
+ */
 public record AgentLoopOptions(
         int maxTurns,
         Duration invocationTimeout,
@@ -17,7 +22,7 @@ public record AgentLoopOptions(
         int maxActionsPerDecision,
         int maxToolCallsPerBatch,
         int maxPromptChars,
-        int maxObservationChars) {
+        int maxObservationSummaryChars) {
 
     public AgentLoopOptions(int maxTurns, Duration invocationTimeout,
                             int protocolErrorLimit, int noProgressLimit,
@@ -34,10 +39,10 @@ public record AgentLoopOptions(
                 || maxActionsPerDecision < 1 || maxToolCallsPerBatch < 2) {
             throw invalid("agent loop numeric limits are invalid");
         }
-        if (maxPromptChars < 4096 || maxObservationChars < 2048
-                || maxObservationChars > maxPromptChars / 2) {
+        if (maxPromptChars < 4096 || maxObservationSummaryChars < 2048
+                || maxObservationSummaryChars > maxPromptChars / 2) {
             throw invalid("prompt limits require maxPromptChars >= 4096 and "
-                    + "2048 <= maxObservationChars <= maxPromptChars / 2");
+                    + "2048 <= maxObservationSummaryChars <= maxPromptChars / 2");
         }
         if (invocationTimeout == null || invocationTimeout.isZero()
                 || invocationTimeout.isNegative()) {

@@ -8,7 +8,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Structured result fed back to the next reasoning turn. */
+/**
+ * Structured result fed back to the next reasoning turn. {@code progress} contributes to
+ * {@link AgentActionResult#madeProgress()} and the consecutive no-progress count; it does not
+ * certify an external side effect.
+ */
 public record AgentObservation(
         String actionType,
         boolean success,

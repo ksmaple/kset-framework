@@ -39,11 +39,11 @@
 | `AgentLoopOptions` | `maxTurns/protocolErrorLimit/noProgressLimit` | 单个 run 的轮次上限、连续可纠正协议错误上限、连续无进展动作上限。 |
 | `AgentLoopOptions` | `invocationTimeout/maxOutputTokens/maxActionsPerDecision` | 每次活动 invocation 的时限、模型本轮输出 token 提示上限（0 表示不指定）、单个决策的动作数上限。 |
 | `AgentLoopOptions` | `toolCallTimeout/toolBatchTimeout/maxToolCallsPerBatch` | 单工具时限、整个标准并发批次时限、标准批次大小上限；实际工具 deadline 不得晚于 invocation deadline。 |
-| `AgentLoopOptions` | `maxPromptChars/maxObservationChars` | 模型请求的 systemPrompt 与 userPrompt 合计字符上限、默认 ReAct 单条观察摘要字符上限；默认 32768/4096。字符数不是模型 Token 数，模型适配器仍须执行供应商窗口校验。旧九参数构造器沿用这两个默认值。 |
+| `AgentLoopOptions` | `maxPromptChars/maxObservationSummaryChars` | Codec 准备后的 systemPrompt 与 userPrompt 合计上限、默认 ReAct 单条模型可见观察摘要上限；默认 32768/4096。两者均按 Java `String.length()` 计算 UTF-16 代码单元，不限制快照中的原始观察；模型适配器仍须校验实际 Token 窗口。旧九参数构造器沿用这两个默认值。 |
 | `AgentExecutionContext` | `agentRunId/invocationId/stepId/parentStepId/stepType/operation/turn` | Kernel 下传给扩展的只读追踪身份；`operation` 是本步骤操作名，不是工具幂等 ID。 |
 | `AgentExecutionContext` | `executionStartedAt/issuedAt/deadline/cancellation/attributes` | invocation 开始、本上下文创建、invocation 截止、取消探针、请求属性的只读副本；这些不代表任务整个生命周期。 |
 | `AgentTurn` | `protocolId/modelRequest` | 策略为本轮选定的已注册协议及模型请求；恢复期间不得切换 run 的协议。 |
-| `ModelRequest` | `systemPrompt/userPrompt/maxOutputTokens/attributes` | 发送给模型的提示、输出上限及模型适配器专用属性；不等同于 `AgentRequest.attributes`。Kernel 在 Codec 补充提示后、调用模型前检查两段提示总字符数；取消、线程中断及活动超时优先，随后超限以 `CAPACITY_LIMIT/FAILED` 返回。不计算适配器自行拼入的属性或供应商包装内容。默认 ReAct 的 `observations` 属性只携带与 Prompt 相同的受限摘要，能容纳时保留完整 `callId`，原始观察与权威身份保存在快照。 |
+| `ModelRequest` | `systemPrompt/userPrompt/maxOutputTokens/attributes` | 策略提供的模型提示、输出上限及供模型适配器按需读取的上下文；`attributes` 不等同于 `AgentRequest.attributes`，也不能整张 Map 直接转发给供应商。Kernel 在 Codec 补充提示后、调用模型前按 UTF-16 代码单元检查两段提示总长度；取消、线程中断及活动超时优先，随后超限以 `CAPACITY_LIMIT/FAILED` 返回。此检查不计算适配器自行拼入的属性或供应商包装内容，适配器组装实际请求后仍须校验 Token 窗口。默认 ReAct 的 `observationSummaries` 属性只携带与 Prompt 相同的受限摘要，能容纳时保留完整 `callId`，原始观察与权威身份保存在快照。 |
 | `ModelResponse` | `text/toolCalls/finishReason/metrics/metadata` | 模型原文、供应商原生工具调用、供应商结束原因、标准指标、供应商专有响应元数据；`metadata` 不进入内核控制协议。 |
 | `ModelToolCall` | `callId/toolName/arguments` | 模型原生工具调用的规范化载体；`arguments` 不删减字段，保留显式 JSON null；Codec 决定是否映射为内核动作。 |
 | `ModelCallMetrics` | `provider/model/requestId/inputTokens/outputTokens/totalTokens/attributes` | 上报用模型身份、供应商请求 ID、非负 token 用量及供应商指标扩展值；`attributes` 仅供观测，不是决策 metadata。 |
@@ -71,8 +71,8 @@
 | `AgentToolIdempotencyKey` | `agentRunId/callId` | 工具持久化幂等键的两个结构化分量；不可只保存 `callId`。`ToolCallAction.operationDefinition()` 是包含工具名、关联任务和参数的操作定义，不可充当幂等键。 |
 | `AgentToolDescriptor` | `toolName/description/inputSchema` | 策略可见的工具名、说明和输入结构定义；`inputSchema` 不是一次调用的参数。 |
 | `AgentToolDescriptor` | `readOnly/requiresConfirmation/metadata` | 是否只读、是否要求执行前确认、工具目录附属信息；`metadata` 不等于模型或协议 metadata。 |
-| `ToolExecutionResult` | `success/progress/output/errorCode/errorMessage/attributes` | 工具权威结果；`progress` 表示动作推进循环状态，不代表外部副作用提交；失败必须有稳定错误码，属性进入标准工具 Observation，显式 null 值不被删减。 |
-| `AgentObservation` | `actionType/success/progress/output/errorCode/errorMessage/attributes` | 下轮策略可见且进入快照的动作反馈；标准工具的属性固定含 `callId/taskId/toolName`，无计划关联时 `taskId` 为 null，工具自定义值不得覆盖这些身份。普通动作属性仍拒绝顶层 null 值。 |
+| `ToolExecutionResult` | `success/progress/output/errorCode/errorMessage/attributes` | 工具权威结果；`progress` 经标准工具 Observation 参与 `AgentActionResult.madeProgress()` 和连续无进展计数，不代表外部副作用提交。`success(output)` 默认 `progress=true`，结果虽成功但未推进时用 `unchanged(output)`；失败必须有稳定错误码。属性进入标准工具 Observation，显式 null 值不被删减。 |
+| `AgentObservation` | `actionType/success/progress/output/errorCode/errorMessage/attributes` | 下轮策略可见且进入快照的动作反馈；`progress` 表示本动作对循环的进展，不代表外部副作用提交，任一观察有进展即可使该动作的无进展计数清零。标准工具的属性固定含 `callId/taskId/toolName`，无计划关联时 `taskId` 为 null，工具自定义值不得覆盖这些身份。普通动作属性仍拒绝顶层 null 值。 |
 
 ## 状态、停止、恢复与观测
 
@@ -81,7 +81,7 @@
 | `AgentRunState` / `AgentRunSnapshot` | `agentRunId/task/protocolId/runStatus/turn` | 当前 run 身份、完整任务、固定协议、运行状态、累计轮数；快照只由 Kernel 投影，`version = 4`。 |
 | `AgentRunState` / `AgentRunSnapshot` | `startedAt/updatedAt/observations/attributes` | run 初始时间、最近状态更新时间、累计观察、持久化运行属性。`attributes` 含 Kernel `agent.*`、ReAct `react.*` 和扩展命名空间，不等同于请求属性。 |
 | `AgentRunState` / `AgentRunSnapshot` | `agent.pendingAction/agent.pendingBatch/agent.reconciliationPending/agent.approvalPendingAction` | 分别表示待批准或待核验动作、逐项批准时不可改写的完整工具批次、工具结果必须核验的标记，以及批次执行前保留的原审批操作；均由 Kernel 管理。v4 快照在构造时校验待处理确认、工具调用及批次的固定字段和成员关系，并拒绝核验标记与停止原因冲突或未知工具结果缺失核验标记；损坏的内部状态返回 `INVALID_SNAPSHOT`。工具执行前可保存带核验标记的 `RUNNING` 快照，恢复时须注入权威工具结果；核验检查点失败导致 `FAILED/FATAL_ERROR` 时仍保留标记。 |
-| `AgentRunSnapshot` | `pendingToolCall()/pendingToolCalls()/pendingConfirmationId()` | 只读投影当前待批准工具、完整批准或核验批次，以及普通确认 ID；返回值不包含权限判定或权威结果。无对应待处理动作时返回空值。工具参数保留显式 null，读取旧 v4 快照时可空 `taskId` 可以缺省。 |
+| `AgentRunSnapshot` | `pendingSingleToolCall()/pendingToolCalls()/pendingConfirmationId()` | 只读投影当前单个待处理工具动作、完整批准或核验批次，以及普通确认 ID。批次执行中单数访问器返回空值，宿主应读取复数访问器；返回值不包含权限判定或权威结果。无对应待处理动作时返回空值。工具参数保留显式 null，读取旧 v4 快照时可空 `taskId` 可以缺省。 |
 | `AgentRunState` / `AgentRunSnapshot` | `consecutiveProtocolErrors/consecutiveNoProgress` | 连续协议纠错次数与连续无进展次数，成功决策或有效动作按规则清零。 |
 | `AgentRunState` / `AgentRunSnapshot` | `answer/suspensionMessage/stopDecision` | 只在 `COMPLETED` 有最终回答；只在 `SUSPENDED` 可有等待提示；非运行态有停止决定。`resume` 只接受当前 v4 快照。 |
 | `AgentResult` | `agentRunId/runStatus/answer/stopDecision/snapshot/failure` | 单次同步调用结果；只有完成态可有 `answer`。`snapshot` 是返回时状态投影，不代表宿主已成功持久化；技术故障通过可空 `failure` 表达。 |

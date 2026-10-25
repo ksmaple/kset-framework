@@ -86,8 +86,8 @@ public record AgentRunSnapshot(
         validatePendingState(runStatus, stopDecision, observations, attributes);
     }
 
-    /** Returns the current pending single tool call, whether awaiting approval or reconciliation. */
-    public Optional<ToolCallAction> pendingToolCall() {
+    /** Returns a pending single tool action; an in-flight tool batch has no single action. */
+    public Optional<ToolCallAction> pendingSingleToolCall() {
         Object value = attributes.get(StandardActionHandlers.PENDING_ACTION);
         if (value instanceof Map<?, ?> pending
                 && StandardActionTypes.TOOL_CALL.equals(pending.get("type"))) {
@@ -108,7 +108,7 @@ public record AgentRunSnapshot(
             return ((List<?>) pending.get("toolCalls")).stream()
                     .map(call -> toolCall((Map<?, ?>) call)).toList();
         }
-        return pendingToolCall().map(call -> List.of(call)).orElse(List.of());
+        return pendingSingleToolCall().map(call -> List.of(call)).orElse(List.of());
     }
 
     public Optional<String> pendingConfirmationId() {

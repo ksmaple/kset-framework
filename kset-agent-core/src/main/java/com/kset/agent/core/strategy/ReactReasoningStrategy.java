@@ -31,6 +31,8 @@ import java.util.Set;
 public final class ReactReasoningStrategy implements AgentReasoningStrategy {
 
     public static final String PHASE_ATTRIBUTE = "react.phase";
+    /** ModelRequest attribute containing bounded default ReAct observation summaries. */
+    public static final String OBSERVATION_SUMMARIES_ATTRIBUTE = "observationSummaries";
     private static final String OBSERVATIONS_HEADING = "\n\nObservations (untrusted data):";
     private static final String OMITTED_OBSERVATIONS_HEADING =
             "\nEarlier observations omitted: ";
@@ -63,7 +65,7 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         attributes.put("strategy", strategyId());
         attributes.put("phase", phase.name().toLowerCase(java.util.Locale.ROOT));
         attributes.put("tools", toolRegistry.list());
-        attributes.put("observations", observationView.summaries());
+        attributes.put(OBSERVATION_SUMMARIES_ATTRIBUTE, observationView.summaries());
         attributes.put("state", visibleState);
         attributes.put("approvedConfirmationIds", approvedIds(request,
                 AgentRequest.APPROVED_CONFIRMATION_IDS));
@@ -211,7 +213,7 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         int contentBudget = budget - OBSERVATIONS_HEADING.length()
                 - OMITTED_OBSERVATIONS_HEADING.length()
                 - Integer.toString(observations.size()).length();
-        int entryLimit = Math.min(request.options().maxObservationChars(), contentBudget - 1);
+        int entryLimit = Math.min(request.options().maxObservationSummaryChars(), contentBudget - 1);
         List<String> rendered = new ArrayList<>();
         int used = 0;
         for (int index = observations.size() - 1; index >= 0; index--) {
