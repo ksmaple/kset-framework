@@ -1,6 +1,6 @@
 # 当前代码对象与字段定义
 
-> 基线：当前主工作树源码（含本地未提交修改），整理日期：2026-10-25。
+> 基线：`main` 已提交源码 `cd925c9`，整理日期：2026-10-25；不包含工作区尚未提交的字段重命名。
 > 范围：所有模块的公开 record、配置属性类及命名为 Request/Response/Result/Context/Options/Spec/Snapshot 等的公开数据类；包含配置类的嵌套属性对象。
 > 下表记录源码声明的字段类型、初始化表达式与就近注释，并链接所属源码文件。`—` 表示源码未声明初始化值或注释，不代表运行时一定为 null。配置绑定、构造器校验与派生方法可能改变最终值，须以链接源码为准。
 
@@ -276,7 +276,7 @@
 
 类型：record；[源码](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java)。
 
-职责：Immutable run limits and per-invocation execution deadlines. maxPromptChars counts UTF-16 code units in the prepared system and user prompts only. maxObservationSummaryChars bounds one default ReAct model-visible summary, not the original observation retained in the snapshot.
+职责：单次 Agent 运行的轮次、容量与活动调用时限配置。
 
 | 字段 | Java 类型 | 声明初始化值 | 源码说明 |
 | --- | --- | --- | --- |
@@ -290,7 +290,7 @@
 | [`maxActionsPerDecision`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
 | [`maxToolCallsPerBatch`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
 | [`maxPromptChars`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
-| [`maxObservationSummaryChars`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
+| [`maxObservationChars`](../../kset-agent-core/src/main/java/com/kset/agent/core/loop/AgentLoopOptions.java) | `int` | — | — |
 
 ### `AgentRunSnapshot`
 
