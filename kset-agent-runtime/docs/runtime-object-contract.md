@@ -17,7 +17,12 @@
 | `AgentSkill` | `skillId` | `String` | 必填、非空白；Builder 内唯一 | 可复用工具集合身份，由调用方显式选择 |
 | `AgentSkill` | `toolSource` | `AgentToolSource` | 必填 | 选中时按本次业务上下文生成工具 |
 | `AgentToolSource` | `tools(context)` | `List<AgentTool>` | 非 null；元素非 null | 组装本次可见工具；跨源工具名必须唯一 |
+| `AgentRuntime.Builder` | `tool(tool)` | `AgentTool` | 必填、非 null；工具描述和名称遵循 Core 契约 | 将已有工具加入基础工具源；调用前参与跨源重名校验 |
+| `AgentRuntime.Builder` | `tool(descriptor, handler)` | `AgentToolDescriptor`、`BiFunction<Map<String,Object>, AgentToolContext, ToolExecutionResult>` | 均必填、非 null | 将描述与业务执行函数组合成工具；执行时仍由业务处理真实权限与幂等 |
+| `AgentRuntime.Builder` | `skill(skillId, source)` | `String`、`AgentToolSource` | ID 非空白且唯一；源非 null | 简写 `skill(new AgentSkill(skillId, source))`；按次生成选中工具 |
 | `AgentRuntime.Builder` | `tools(registry)` | `AgentToolRegistry` | 必填、非 null | 适配宿主现有的 Core 工具注册表 |
+| `AgentRuntime.Builder` | `onEvent(callback)` | `Consumer<AgentLifecycleContext>` | 必填、非 null | 同步接收全部 Core 生命周期事件；普通非关键 Listener 语义 |
+| `AgentRuntime.Builder` | `onModelMetrics(callback)` | `BiConsumer<AgentLifecycleContext, ModelCallMetrics>` | 必填、非 null；仅非空指标触发 | 在 `MODEL_COMPLETED` 回调中取得事件身份及模型指标；普通非关键 Listener 语义 |
 | `McpAgentClient` | `listTools(context)` | `List<AgentToolDescriptor>` | 非 null；元素非 null | 业务侧返回本次 MCP 可见目录 |
 | `McpAgentClient` | `call(toolName, arguments, toolContext, businessContext)` | `ToolExecutionResult` | 遵循 Core 工具结果契约 | 业务侧执行远端调用并传递身份、deadline、取消与幂等身份 |
 | `AgentRuntimeContexts` | `require(request/executionContext/toolContext)` | `AgentBusinessContext` | 缺失即抛错 | 从本次 Core 请求或执行上下文读取业务事实 |

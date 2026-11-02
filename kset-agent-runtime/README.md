@@ -17,12 +17,15 @@
 
 ```java
 AgentRuntime runtime = AgentRuntime.builder(model)
-        .tools(context -> businessToolsFor(context))
-        .skill(new AgentSkill("code-search", context -> codeSearchToolsFor(context)))
+        .tool(readDocumentTool)
+        .tool(writeDescriptor, (arguments, toolContext) ->
+                writeDocument(arguments, AgentRuntimeContexts.require(toolContext)))
+        .skill("code-search", context -> codeSearchToolsFor(context))
         .protocol(ragCodeV7Codec)
         .strategy(ragStrategy)
         .checkpoints(checkpointPort)
-        .listener(lifecycleListener)
+        .onEvent(event -> publishEvent(event))
+        .onModelMetrics((event, metrics) -> recordModelUsage(event, metrics))
         .build();
 
 AgentBusinessContext businessContext = new AgentBusinessContext(
@@ -31,9 +34,11 @@ AgentBusinessContext businessContext = new AgentBusinessContext(
 AgentResult result = runtime.run(coreRequest, businessContext, List.of("code-search"));
 ```
 
-`businessToolsFor` 与 `codeSearchToolsFor` 是业务侧实现的工具源。相同工具名不能出现在多个选中的工具源中。`AgentSkill` 是可复用的具名工具集合；策略和协议仍由 Core SPI 提供。默认 ReAct 只看到选中工具的描述，不会自动读取 `submittedContent` 或角色。需要让模型看到某些业务内容时，由业务策略明确选择和脱敏后放入 Prompt。
+`readDocumentTool`、`writeDocument` 与 `codeSearchToolsFor` 由业务侧实现。`.tool(AgentTool)` 直接注册已有工具；`.tool(descriptor, handler)` 将工具描述和执行函数组合成工具。`.skill(id, source)` 按本次上下文生成具名工具集合，调用时按 ID 选择。相同工具名不能出现在多个选中的工具源中。策略和协议仍由 Core SPI 提供。默认 ReAct 只看到选中工具的描述，不会自动读取 `submittedContent` 或角色。需要让模型看到某些业务内容时，由业务策略明确选择和脱敏后放入 Prompt。
 
-已有按次构建的 Core `AgentToolRegistry` 可直接传入 `.tools(registry)`，便于现有宿主迁移；Runtime 会在每次调用时读取并固定其工具目录。
+原有 `.tools(source/registry)`、`.skill(AgentSkill)`、`.listener(AgentLifecycleListener)` 继续可用。已有按次构建的 Core `AgentToolRegistry` 可直接传入 `.tools(registry)`；Runtime 会在每次调用时读取并固定其工具目录。
+
+`.onEvent(callback)` 接收 Core 的生命周期事件上下文；`.onModelMetrics(callback)` 只在模型响应提供非空 `ModelCallMetrics` 时调用，参数为该次 `MODEL_COMPLETED` 上下文和指标。回调同步执行，遵循普通非关键 Listener 的失败处理；终态通知为 best-effort，可靠状态仍须使用 CheckpointPort。回调应保持轻量、线程安全，不能直接记录未脱敏的请求内容。
 
 需要按身份、租户或业务配置为每次调用选择模型时，可配置 `.modelFactory(context -> selectModel(context))`；未配置时使用 `builder(model)` 的默认模型。需要按工具目录构建策略时，可配置 `.strategyFactory(tools -> createStrategy(tools))`。共享的模型、策略、Codec、工具、检查点和监听器必须符合 Core 的线程安全要求；持有可变单次状态的组件应为每次调用创建独立 Runtime。
 

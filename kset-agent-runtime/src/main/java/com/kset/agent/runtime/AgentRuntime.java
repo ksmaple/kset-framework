@@ -5,20 +5,27 @@ import com.kset.agent.core.api.AgentRequest;
 import com.kset.agent.core.api.AgentResult;
 import com.kset.agent.core.api.AgentResumeInput;
 import com.kset.agent.core.checkpoint.AgentCheckpointPort;
+import com.kset.agent.core.event.AgentLifecycleContext;
 import com.kset.agent.core.event.AgentLifecycleListener;
 import com.kset.agent.core.id.AgentRunIdGenerator;
 import com.kset.agent.core.loop.AgentKernelBuilder;
 import com.kset.agent.core.loop.AgentLoopKernel;
 import com.kset.agent.core.loop.AgentRunSnapshot;
+import com.kset.agent.core.loop.AgentRunState;
 import com.kset.agent.core.model.AgentModel;
 import com.kset.agent.core.model.AgentModelRetryOptions;
+import com.kset.agent.core.model.ModelCallMetrics;
+import com.kset.agent.core.model.ModelResponse;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
 import com.kset.agent.core.stop.AgentStopPolicy;
 import com.kset.agent.core.strategy.AgentReasoningStrategy;
 import com.kset.agent.core.tool.AgentTool;
+import com.kset.agent.core.tool.AgentToolContext;
+import com.kset.agent.core.tool.AgentToolDescriptor;
 import com.kset.agent.core.tool.AgentToolRegistry;
 import com.kset.agent.core.tool.FixedAgentToolRegistry;
 import com.kset.agent.core.tool.InMemoryAgentToolRegistry;
+import com.kset.agent.core.tool.ToolExecutionResult;
 import com.kset.agent.runtime.mcp.McpAgentClient;
 import com.kset.agent.runtime.mcp.McpAgentToolSource;
 
@@ -31,6 +38,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /** Per-invocation assembly around Core; Core remains the only execution loop. */
@@ -175,6 +185,31 @@ public final class AgentRuntime {
             return this;
         }
 
+        public Builder tool(AgentTool tool) {
+            AgentTool registeredTool = Objects.requireNonNull(tool, "tool");
+            return tools(context -> List.of(registeredTool));
+        }
+
+        public Builder tool(AgentToolDescriptor descriptor,
+                            BiFunction<Map<String, Object>, AgentToolContext,
+                                    ToolExecutionResult> handler) {
+            AgentToolDescriptor registeredDescriptor = Objects.requireNonNull(descriptor, "descriptor");
+            BiFunction<Map<String, Object>, AgentToolContext, ToolExecutionResult> registeredHandler =
+                    Objects.requireNonNull(handler, "handler");
+            return tool(new AgentTool() {
+                @Override
+                public AgentToolDescriptor descriptor() {
+                    return registeredDescriptor;
+                }
+
+                @Override
+                public ToolExecutionResult execute(Map<String, Object> arguments,
+                                                   AgentToolContext context) {
+                    return registeredHandler.apply(arguments, context);
+                }
+            });
+        }
+
         /** Adapts an existing Core registry when the host already builds one per run. */
         public Builder tools(AgentToolRegistry registry) {
             Objects.requireNonNull(registry, "registry");
@@ -193,6 +228,10 @@ public final class AgentRuntime {
                 throw new IllegalArgumentException("duplicate skill: " + skill.skillId());
             }
             return this;
+        }
+
+        public Builder skill(String skillId, AgentToolSource source) {
+            return skill(new AgentSkill(skillId, source));
         }
 
         public Builder strategy(AgentReasoningStrategy strategy) {
@@ -225,6 +264,33 @@ public final class AgentRuntime {
         public Builder listener(AgentLifecycleListener listener) {
             listeners.add(Objects.requireNonNull(listener, "listener"));
             return this;
+        }
+
+        public Builder onEvent(Consumer<AgentLifecycleContext> callback) {
+            Consumer<AgentLifecycleContext> registeredCallback =
+                    Objects.requireNonNull(callback, "callback");
+            return listener(new AgentLifecycleListener() {
+                @Override
+                public void onEvent(AgentLifecycleContext context) {
+                    registeredCallback.accept(context);
+                }
+            });
+        }
+
+        public Builder onModelMetrics(
+                BiConsumer<AgentLifecycleContext, ModelCallMetrics> callback) {
+            BiConsumer<AgentLifecycleContext, ModelCallMetrics> registeredCallback =
+                    Objects.requireNonNull(callback, "callback");
+            return listener(new AgentLifecycleListener() {
+                @Override
+                public void afterModel(AgentLifecycleContext context, AgentRequest request,
+                                       AgentRunState state,
+                                       ModelResponse response) {
+                    if (!response.metrics().isEmpty()) {
+                        registeredCallback.accept(context, response.metrics());
+                    }
+                }
+            });
         }
 
         public Builder checkpoints(AgentCheckpointPort port) {
