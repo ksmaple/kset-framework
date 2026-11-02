@@ -161,6 +161,11 @@
                 <artifactId>kset-agent-core</artifactId>
                 <version>${kset-framework.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.kset</groupId>
+                <artifactId>kset-agent-runtime</artifactId>
+                <version>${kset-framework.version}</version>
+            </dependency>
 
             <!-- Spring Cloud BOM -->
             <dependency>

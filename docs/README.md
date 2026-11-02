@@ -9,6 +9,7 @@
 | 文档 | 说明 |
 |------|------|
 | [资源权限](design/resource-permission.md) | 功能码与资源 ACL 两平面、判定顺序、授权条目形状。本仓暂无实现 |
+| [Agent Runtime 对象与字段契约](../kset-agent-runtime/docs/runtime-object-contract.md) | 运行时组件、业务上下文与工具适配字段 |
 | [当前代码对象与字段](design/current-object-fields.md) | 各模块公开数据对象、配置对象的字段类型、初始值和源码文件 |
 
 ## 怎么选文档
@@ -28,6 +29,7 @@
 | MyBatis-Plus 数据源 | [datasource.md](usage/datasource.md) |
 | Nacos / Sentinel / Dubbo | [cloud.md](usage/cloud.md) |
 | 独立 Gateway 鉴权、CORS、灰度 | [gateway.md](usage/gateway.md) |
+| Agent 按次组装与 MCP 工具 | [Agent Runtime](../kset-agent-runtime/README.md) |
 
 ## 模块参考
 
@@ -47,3 +49,4 @@
 | Dubbo | [kset-starter-dubbo/README.md](../kset-starter-dubbo/README.md) |
 | Gateway | [kset-starter-gateway/README.md](../kset-starter-gateway/README.md) |
 | MQ | [kset-starter-mq/README.md](../kset-starter-mq/README.md) |
+| Agent Runtime | [kset-agent-runtime/README.md](../kset-agent-runtime/README.md) |

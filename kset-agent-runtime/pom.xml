@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.kset</groupId>
+        <artifactId>kset-boot-parent</artifactId>
+        <version>1.0.17-SNAPSHOT</version>
+        <relativePath>../kset-boot-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>kset-agent-runtime</artifactId>
+    <packaging>jar</packaging>
+
+    <name>kset-agent-runtime</name>
+    <description>KSet Agent Runtime - per-invocation assembly and business tool adapters</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.kset</groupId>
+            <artifactId>kset-agent-core</artifactId>
+        </dependency>
+    </dependencies>
+</project>

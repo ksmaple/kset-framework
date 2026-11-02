@@ -6,6 +6,7 @@
 
 ### 新增
 
+- **kset-agent-runtime**：新增按调用组装的 Agent Runtime，提供业务上下文透传、显式 Skill 工具集合和 MCP 客户端适配接口。工具可见性与确认不作为授权；业务工具或 MCP 服务在每次真实调用时校验权限。
 - **Agent 默认模型输入保护**：ReAct 观察内容改为带不可信边界的限长摘要，快照保留原始结果；提示字符数超限时在模型调用前以 `CAPACITY_LIMIT` 停止。
 - **Agent 模型输入字段**：默认 ReAct 的模型属性键改为 `observationSummaries`，单条摘要限额访问器改为 `maxObservationSummaryChars`；两项字符限额均按 UTF-16 代码单元计算。
 - **Agent 字段契约**：快照单个待处理工具访问器更名为 `pendingSingleToolCall()`；明确模型属性由策略提供、由适配器按需读取，以及 `progress` 对无进展计数的含义。
