@@ -762,10 +762,26 @@ public final class AgentLoopKernel {
                 > request.options().maxPromptChars()) {
             return null;
         }
-        ModelCapacity selectedCapacity = modelCapacities.find(model.modelName(prompt)).orElse(null);
-        ModelRequest bounded = limitModelRequest(prompt, selectedCapacity);
-        if (bounded == null) {
-            return null;
+        ModelRequest bounded = prompt;
+        ModelCapacity selectedCapacity = null;
+        boolean stable = false;
+        // A routing adapter may select another model after the output limit is reduced.
+        for (int index = 0; index <= modelCapacities.list().size(); index++) {
+            selectedCapacity = modelCapacities.find(model.modelName(bounded)).orElse(null);
+            ModelRequest limited = limitModelRequest(bounded, selectedCapacity);
+            if (limited == null) {
+                return null;
+            }
+            if (limited.maxOutputTokens() == bounded.maxOutputTokens()) {
+                bounded = limited;
+                stable = true;
+                break;
+            }
+            bounded = limited;
+        }
+        if (!stable) {
+            throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
+                    "model selection did not stabilize after applying capacity limits");
         }
         if (model instanceof AgentModelCapacity capacityModel) {
             var capacity = capacityModel.promptCapacity(bounded);

@@ -109,6 +109,34 @@ class AgentLoopKernelFlowTest {
     }
 
     @Test
+    void routingModelUsesCapacityOfModelSelectedForBoundedRequest() {
+        AtomicReference<ModelRequest> received = new AtomicReference<>();
+        AgentModel routingModel = new AgentModel() {
+            @Override
+            public String modelName(ModelRequest request) {
+                return request.maxOutputTokens() > 150_000 ? "gpt-6-sol" : "gpt-4.1";
+            }
+
+            @Override
+            public ModelResponse generate(ModelRequest request,
+                    com.kset.agent.core.execution.AgentExecutionContext context) {
+                received.set(request);
+                return ModelResponse.text("done");
+            }
+        };
+        AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofSeconds(10),
+                3, 3, 200_000, Duration.ofSeconds(3), Duration.ofSeconds(3), 8, 8);
+
+        AgentResult result = AgentLoopKernel.builder(routingModel).build().run(
+                request("routing-capacity", options, Map.of(),
+                        com.kset.agent.core.stop.AgentCancellation.none()));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(routingModel.modelName(received.get())).isEqualTo("gpt-4.1");
+        assertThat(received.get().maxOutputTokens()).isEqualTo(32_768);
+    }
+
+    @Test
     void namedModelRetainsPromptCapacityCapability() {
         AgentModelCapacity delegate = new AgentModelCapacity() {
             @Override

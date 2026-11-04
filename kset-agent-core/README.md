@@ -250,6 +250,8 @@ AgentResult result = kernel.run(request);
 
 业务方可在 `AgentLoopKernel.builder(model)` 或 `AgentRuntime.builder(modelName, model)` 上调用 `modelCapacity(new ModelCapacity(provider, modelName, contextTokens, maxOutputTokens))`，登记私有模型或覆盖同名内置模型的容量。例如 `AgentRuntime.builder("private-model", model).modelCapacity(new ModelCapacity("Private", "private-model", 32_000, 4_096)).build()`。容量配置在构建时固定到当前实例；重复登记同一 ID（忽略大小写）会报配置错误，不影响其他实例或 `BuiltInModels`。`ModelCapacityCatalog.withOverrides(customModels).list()/find(modelName)` 可查询合并后的只读目录。未登记的 ID 回退内置容量，输出上限为 0 时仍保持不指定；业务容量不能代替适配器对完整供应商请求的 Token 校验。
 
+动态选模适配器的 `modelName(request)` 必须与同一请求传给 `generate(request, context)` 时实际使用的模型一致。正数输出上限被收紧后，Kernel 会以更新后的请求重新查询模型 ID，并继续按最终模型容量收紧；`maxOutputTokens=0` 仍保持未指定。
+
 目录同时收录已核实的旧版 ID：OpenAI `gpt-6-sol`、GPT-5.6 系列、`gpt-4.1`，Claude 4.5 系列（含 Opus、Sonnet、Haiku 的日期快照 ID），以及 Gemini 3.6、3.5、2.5 系列。`gpt-5.6` 是指向 GPT-5.6 Sol 的官方别名。`gpt-4.1` 和 Gemini 2.5 已标记弃用；Google 文档说明 Gemini 2.5 API 目前仅向既有用户开放，并将于 2026-12-01 起自动路由到新模型。目录表达 Token 容量，不保证某个账号仍可调用这些旧版 ID。
 
 提示投影只输出非空观察字段；回答分片已在状态中累积时，不再把对应观察重复放入模型提示。计划创建标记和阶段仍可由策略与适配器读取，但不在用户提示中重复列出。工具结果的错误码、可用的完整 `callId`、待处理动作以及快照原始观察保持不变。

@@ -2,11 +2,7 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
-## [Unreleased] - v1.0.18-SNAPSHOT
-
-## [v1.0.17] - 2026-11-04
-
-本次构件仅安装到本地 Maven 仓库，未上传 Nexus。
+## [Unreleased] - v1.0.17-SNAPSHOT
 
 ### 新增
 
