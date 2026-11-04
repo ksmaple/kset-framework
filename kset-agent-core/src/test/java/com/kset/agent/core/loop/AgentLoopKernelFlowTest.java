@@ -137,6 +137,39 @@ class AgentLoopKernelFlowTest {
     }
 
     @Test
+    void customStrategyCannotExceedRequestedOutputLimit() {
+        AtomicInteger strategyLimit = new AtomicInteger(20_000);
+        AgentReasoningStrategy strategy = new AgentReasoningStrategy() {
+            @Override
+            public String strategyId() {
+                return "custom";
+            }
+
+            @Override
+            public AgentTurn nextTurn(AgentRequest request, AgentRunState state) {
+                return new AgentTurn(request.protocolId(), new ModelRequest(
+                        "Custom strategy", request.task(), strategyLimit.get(), Map.of()));
+            }
+        };
+        AtomicReference<ModelRequest> received = new AtomicReference<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((modelRequest, context) -> {
+            received.set(modelRequest);
+            return ModelResponse.text("done");
+        }).strategy(strategy).build();
+        AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofSeconds(10),
+                3, 3, 4_096, Duration.ofSeconds(3), Duration.ofSeconds(3), 8, 8);
+
+        kernel.run(request("custom-large-output", options, Map.of(),
+                com.kset.agent.core.stop.AgentCancellation.none()));
+        assertThat(received.get().maxOutputTokens()).isEqualTo(4_096);
+
+        strategyLimit.set(0);
+        kernel.run(request("custom-unspecified-output", options, Map.of(),
+                com.kset.agent.core.stop.AgentCancellation.none()));
+        assertThat(received.get().maxOutputTokens()).isEqualTo(4_096);
+    }
+
+    @Test
     void namedModelRetainsPromptCapacityCapability() {
         AgentModelCapacity delegate = new AgentModelCapacity() {
             @Override

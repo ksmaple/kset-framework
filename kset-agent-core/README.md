@@ -252,6 +252,8 @@ AgentResult result = kernel.run(request);
 
 动态选模适配器的 `modelName(request)` 必须与同一请求传给 `generate(request, context)` 时实际使用的模型一致。正数输出上限被收紧后，Kernel 会以更新后的请求重新查询模型 ID，并继续按最终模型容量收紧；`maxOutputTokens=0` 仍保持未指定。
 
+`AgentLoopOptions.maxOutputTokens` 为正数时，是本次调用对所有推理策略的输出上限：自定义策略提供更大的值或 0 时，Kernel 均先收紧到该上限，再按实际模型容量收紧。选项值为 0 时不增加调用方上限，策略请求中的 0 仍表示未指定。模型适配器须把最终正数上限映射到供应商请求。
+
 目录同时收录已核实的旧版 ID：OpenAI `gpt-6-sol`、GPT-5.6 系列、`gpt-4.1`，Claude 4.5 系列（含 Opus、Sonnet、Haiku 的日期快照 ID），以及 Gemini 3.6、3.5、2.5 系列。`gpt-5.6` 是指向 GPT-5.6 Sol 的官方别名。`gpt-4.1` 和 Gemini 2.5 已标记弃用；Google 文档说明 Gemini 2.5 API 目前仅向既有用户开放，并将于 2026-12-01 起自动路由到新模型。目录表达 Token 容量，不保证某个账号仍可调用这些旧版 ID。
 
 提示投影只输出非空观察字段；回答分片已在状态中累积时，不再把对应观察重复放入模型提示。计划创建标记和阶段仍可由策略与适配器读取，但不在用户提示中重复列出。工具结果的错误码、可用的完整 `callId`、待处理动作以及快照原始观察保持不变。

@@ -762,7 +762,7 @@ public final class AgentLoopKernel {
                 > request.options().maxPromptChars()) {
             return null;
         }
-        ModelRequest bounded = prompt;
+        ModelRequest bounded = applyRequestedOutputLimit(prompt, request.options());
         ModelCapacity selectedCapacity = null;
         boolean stable = false;
         // A routing adapter may select another model after the output limit is reduced.
@@ -796,6 +796,15 @@ public final class AgentLoopKernel {
             }
         }
         return bounded;
+    }
+
+    private ModelRequest applyRequestedOutputLimit(ModelRequest prompt, AgentLoopOptions options) {
+        int requestedLimit = options.maxOutputTokens();
+        if (requestedLimit == 0 || prompt.maxOutputTokens() > 0
+                && prompt.maxOutputTokens() <= requestedLimit) {
+            return prompt;
+        }
+        return prompt.withMaxOutputTokens(requestedLimit);
     }
 
     private ModelCallOutcome generateModelWithRetry(
