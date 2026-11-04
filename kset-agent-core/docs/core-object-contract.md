@@ -6,7 +6,7 @@
 
 | 对象 | 唯一职责 |
 | --- | --- |
-| `AgentKernelBuilder` / `AgentLoopKernel` | 启动期组装固定扩展 / 并发执行相互隔离的同步 `run/resume` 循环。 |
+| `AgentKernelBuilder` / `AgentLoopKernel` | 启动期组装固定扩展与实例级模型容量 / 并发执行相互隔离的同步 `run/resume` 循环。 |
 | `AgentReasoningStrategy` / `AgentTurn` | 决定本轮模型输入、动作语义和策略私有状态 / 承载本轮协议与模型请求。 |
 | `AgentProtocolCodec` / `AgentProtocolRegistry` | 解析一种版本化模型输出 / 管理不可覆盖的协议 ID。 |
 | `AgentActionHandler` / `AgentActionRegistry` | 执行一种动作类型 / 按 `actionType` 分发；Handler 通过结果声明状态变化。 |
@@ -35,7 +35,7 @@
 | 对象 | 字段 | 固定含义 |
 | --- | --- | --- |
 | `AgentRequest` | `agentRunId/task/protocolId` | Agent 任务身份、完整任务内容、整个 run 固定的版本化控制协议。`task` 不是计划节点。 |
-| `AgentRequest` | `options/attributes/cancellation` | 本次调用的容量与活动期限、宿主上下文、独立取消探针。`options` 缺省用默认值；`attributes` 不自动进入默认 ReAct Prompt；审批输入可使用 `agent.approvedConfirmationIds`、`agent.approvedToolCallIds`、`agent.rejectedConfirmationIds` 或 `agent.rejectedToolCallIds`。待处理动作必须且只能被批准或拒绝。 |
+| `AgentRequest` | `options/attributes/cancellation` | 本次调用的容量与活动期限、宿主上下文、独立取消探针。`options` 缺省用默认值；除显式提示前缀和审批 ID 外，`attributes` 不自动进入默认 ReAct Prompt。审批输入可使用 `agent.approvedConfirmationIds`、`agent.approvedToolCallIds`、`agent.rejectedConfirmationIds` 或 `agent.rejectedToolCallIds`。可信调用方可用 `agent.systemPromptPrefix` 传入非空字符串，由 Kernel 放在每轮策略系统提示最前；恢复时须再次提供，快照不保存。待处理动作必须且只能被批准或拒绝。 |
 | `AgentLoopOptions` | `maxTurns/protocolErrorLimit/noProgressLimit` | 单个 run 的轮次上限、连续可纠正协议错误上限、连续无进展动作上限。 |
 | `AgentLoopOptions` | `invocationTimeout/maxOutputTokens/maxActionsPerDecision` | 每次活动 invocation 的时限、模型本轮输出 token 提示上限（0 表示不指定）、单个决策的动作数上限。 |
 | `AgentLoopOptions` | `toolCallTimeout/toolBatchTimeout/maxToolCallsPerBatch` | 单工具时限、整个标准并发批次时限、标准批次大小上限；实际工具 deadline 不得晚于 invocation deadline。 |
@@ -43,7 +43,10 @@
 | `AgentExecutionContext` | `agentRunId/invocationId/stepId/parentStepId/stepType/operation/turn` | Kernel 下传给扩展的只读追踪身份；`operation` 是本步骤操作名，不是工具幂等 ID。 |
 | `AgentExecutionContext` | `executionStartedAt/issuedAt/deadline/cancellation/attributes` | invocation 开始、本上下文创建、invocation 截止、取消探针、请求属性的只读副本；这些不代表任务整个生命周期。 |
 | `AgentTurn` | `protocolId/modelRequest` | 策略为本轮选定的已注册协议及模型请求；恢复期间不得切换 run 的协议。 |
-| `ModelRequest` | `systemPrompt/userPrompt/maxOutputTokens/attributes` | 策略提供的模型提示、输出上限及供模型适配器按需读取的上下文；`attributes` 不等同于 `AgentRequest.attributes`，也不能整张 Map 直接转发给供应商。Kernel 在 Codec 补充提示后、调用模型前按 UTF-16 代码单元检查两段提示总长度；取消、线程中断及活动超时优先，随后超限以 `CAPACITY_LIMIT/FAILED` 返回。此检查不计算适配器自行拼入的属性或供应商包装内容，适配器组装实际请求后仍须校验 Token 窗口。默认 ReAct 的 `observationSummaries` 属性只携带与 Prompt 相同的受限摘要，能容纳时保留完整 `callId`，原始观察与权威身份保存在快照。 |
+| `AgentModel` | `modelName(request)`、`named(modelName, delegate)` | 可选返回本轮实际供应商模型 ID；默认 null，保持既有函数式适配器兼容。固定模型可用 `named` 绑定 ID，且保留委托适配器的 `AgentModelCapacity` 能力；动态选模须为每个返回的适配器绑定实际 ID。已配置或内置收录的完整 ID 触发容量检查，未配置且未知的 ID 保留原请求。 |
+| `AgentModelCapacity` / `ModelPromptCapacity` | `promptCapacity(request)`、`inputTokens/maxInputTokens` | 可选适配器能力：对完整供应商请求计数，`maxInputTokens` 为预留输出后的可用输入窗口。Core 在模型调用前据此压缩默认 ReAct 的观察摘要；未实现时不推断真实 Token 用量。 |
+| `BuiltInModels` / `ModelCapacityCatalog` / `ModelCapacity` | `list()/find(modelName)`、`withOverrides(customModels)`、`provider/modelName/contextTokens/maxOutputTokens` | 内置目录只读，包含 Claude 4.5 日期快照 ID；业务方可在 Core 或 Runtime 构建器逐个登记容量。自定义 ID 覆盖同名内置容量，未登记时回退内置值；合并目录为实例级不可变快照，重复自定义 ID 报配置错误。 |
+| `ModelRequest` | `systemPrompt/userPrompt/maxOutputTokens/attributes` | 策略提供的模型提示、输出上限及供模型适配器按需读取的上下文；`maxOutputTokens=0` 保持未指定，正值才按所选容量及剩余文本预算收紧。`attributes` 不等同于 `AgentRequest.attributes`，也不能整张 Map 直接转发给供应商。Kernel 在 Codec 补充提示后检查两段提示的 UTF-16 总长度，再应用可选的模型目录容量与供应商 Token 容量检查。超限时默认 ReAct 逐级缩减观察摘要并重新准备提示；必要上下文不裁剪，仍超限以 `CAPACITY_LIMIT/FAILED` 返回。取消、线程中断及活动超时优先。默认 ReAct 的 `observationSummaries` 只携带与 Prompt 相同的受限摘要，`allowedStandardActionTypes` 只列当轮可用的内置动作并供 Codec 缩减提示；能容纳时摘要保留完整 `callId`，原始观察与权威身份保存在快照。 |
 | `ModelResponse` | `text/toolCalls/finishReason/metrics/metadata` | 模型原文、供应商原生工具调用、供应商结束原因、标准指标、供应商专有响应元数据；`metadata` 不进入内核控制协议。 |
 | `ModelToolCall` | `callId/toolName/arguments` | 模型原生工具调用的规范化载体；`arguments` 不删减字段，保留显式 JSON null；Codec 决定是否映射为内核动作。 |
 | `ModelCallMetrics` | `provider/model/requestId/inputTokens/outputTokens/totalTokens/attributes` | 上报用模型身份、供应商请求 ID、非负 token 用量及供应商指标扩展值；`attributes` 仅供观测，不是决策 metadata。 |

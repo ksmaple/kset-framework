@@ -195,25 +195,6 @@ public final class Parallel {
         }
     }
 
-    /**
-     * 保留原因：remain<=0 不看 latch，已完成任务仍报超时，且丢掉已发生的业务异常。
-     */
-    @SuppressWarnings("unused")
-    private static boolean awaitDoneForRollback(CountDownLatch done, long deadlineNanos, List<Future<?>> futures) {
-        try {
-            long remain = remainNanos(deadlineNanos);
-            if (remain <= 0L || !done.await(remain, TimeUnit.NANOSECONDS)) {
-                cancelAll(futures);
-                return true;
-            }
-            return false;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            cancelAll(futures);
-            throw new UncheckedInterruptedException(e);
-        }
-    }
-
     private static boolean waitForDoneOrTimeout(CountDownLatch done, long deadlineNanos, List<Future<?>> futures)
             throws InterruptedException {
         if (done.getCount() == 0L) {
@@ -284,20 +265,6 @@ public final class Parallel {
         }
         if (error instanceof TimeoutException timeout) {
             return new UncheckedTimeoutException(timeout);
-        }
-        if (error instanceof RuntimeException runtime) {
-            return runtime;
-        }
-        return new RuntimeException(error);
-    }
-
-    /**
-     * 保留原因：TimeoutException / InterruptedException 被包成普通 RuntimeException，调用方接不住语义。
-     */
-    @SuppressWarnings("unused")
-    private static RuntimeException asUncheckedForRollback(Throwable error) {
-        if (error instanceof Error fatal) {
-            throw fatal;
         }
         if (error instanceof RuntimeException runtime) {
             return runtime;

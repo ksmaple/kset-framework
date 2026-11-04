@@ -122,41 +122,6 @@ public final class KsetHttp {
         return builder.build();
     }
 
-    @SuppressWarnings("unused")
-    private static HttpRequest withTraceHeaders(HttpRequest request) {
-        return copyWithTraceHeaders(request, resolveOutboundTrace());
-    }
-
-    /**
-     * 保留原因：无 inbound trace 时 setTraceId/setSpanId 污染调用线程。
-     */
-    @SuppressWarnings("unused")
-    private static HttpRequest withTraceHeadersForRollback(HttpRequest request) {
-        String traceId = Monitor.currentTraceId().orElseGet(() -> {
-            String value = UUID.randomUUID().toString().replace("-", "");
-            Monitor.setTraceId(value);
-            return value;
-        });
-        String spanId = Monitor.currentSpanId().orElseGet(() -> {
-            String value = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-            Monitor.setSpanId(value);
-            return value;
-        });
-        HttpRequest.Builder builder = HttpRequest.newBuilder(request.uri())
-                .timeout(request.timeout().orElse(Duration.ofSeconds(10)))
-                .version(request.version().orElse(HttpClient.Version.HTTP_2))
-                .method(request.method(), request.bodyPublisher().orElse(HttpRequest.BodyPublishers.noBody()));
-        request.headers().map().forEach((name, values) -> {
-            if (!MANAGED_HEADERS.contains(name.toLowerCase())) {
-                values.forEach(value -> builder.header(name, value));
-            }
-        });
-        builder.header(TraceHeaders.TRACE_ID_HEADER, traceId)
-                .header(TraceHeaders.SPAN_ID_HEADER, spanId);
-        Monitor.currentGrayTag().ifPresent(value -> builder.header(TraceHeaders.GRAY_TAG_HEADER, value));
-        return builder.build();
-    }
-
     private static OutboundTrace resolveOutboundTrace() {
         String traceId = firstNonBlank(Monitor.currentTraceId().orElse(null), Monitor.generateTraceId());
         if (traceId == null || traceId.isBlank()) {
@@ -242,26 +207,6 @@ public final class KsetHttp {
             transaction.addData("method", request.method());
             transaction.addData("host", request.uri().getHost());
             transaction.addData("path", request.uri().getPath());
-        }
-
-        /**
-         * 保留原因：newTransaction 后立刻 restore，出站 header 与监控事务对不上。
-         */
-        @SuppressWarnings("unused")
-        private MonitorScope(HttpRequest request) {
-            if (!monitorEnabled) {
-                this.previous = Monitor.capture();
-                this.transaction = null;
-                return;
-            }
-            this.previous = Monitor.capture();
-            String name = request.method() + " " + request.uri().getPath();
-            this.transaction = Monitor.newTransaction(MonitorTypes.HTTP_CLIENT, name);
-            transaction.addData("component", "http-client");
-            transaction.addData("method", request.method());
-            transaction.addData("host", request.uri().getHost());
-            transaction.addData("path", request.uri().getPath());
-            Monitor.restore(previous);
         }
 
         private void success(HttpResponse<String> response) {

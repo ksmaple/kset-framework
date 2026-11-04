@@ -2,9 +2,12 @@ package com.kset.common.utils.thread;
 
 import com.kset.common.exception.UncheckedInterruptedException;
 
+import java.util.Collection;
+import java.util.Iterator;
 import java.util.Objects;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -28,17 +31,6 @@ public class BoundedPriorityBlockingQueue<E> extends PriorityBlockingQueue<E> {
         return offerIfCapacity(e);
     }
 
-    /**
-     * 保留原因：size 判断与 super.offer 非原子，并发入队可超过 capacity。
-     */
-    @SuppressWarnings("unused")
-    private boolean offerForRollback(E e) {
-        if (size() >= capacity) {
-            return false;
-        }
-        return super.offer(e);
-    }
-
     private boolean offerIfCapacity(E e) {
         Objects.requireNonNull(e);
         capacityLock.lock();
@@ -60,14 +52,6 @@ public class BoundedPriorityBlockingQueue<E> extends PriorityBlockingQueue<E> {
             Thread.currentThread().interrupt();
             return false;
         }
-    }
-
-    /**
-     * 保留原因：带超时的 offer 直接当普通 offer，满队列时不会等待。
-     */
-    @SuppressWarnings("unused")
-    private boolean offerWaitForRollback(E e, long timeout, TimeUnit unit) {
-        return offer(e);
     }
 
     private boolean offerWait(E e, long timeout, TimeUnit unit) throws InterruptedException {
@@ -148,6 +132,82 @@ public class BoundedPriorityBlockingQueue<E> extends PriorityBlockingQueue<E> {
     }
 
     @Override
+    public void clear() {
+        try {
+            super.clear();
+        } finally {
+            signalAllNotFull();
+        }
+    }
+
+    @Override
+    public int drainTo(Collection<? super E> target) {
+        try {
+            return super.drainTo(target);
+        } finally {
+            signalAllNotFull();
+        }
+    }
+
+    @Override
+    public int drainTo(Collection<? super E> target, int maxElements) {
+        try {
+            return super.drainTo(target, maxElements);
+        } finally {
+            signalAllNotFull();
+        }
+    }
+
+    @Override
+    public boolean removeIf(Predicate<? super E> filter) {
+        try {
+            return super.removeIf(filter);
+        } finally {
+            signalAllNotFull();
+        }
+    }
+
+    @Override
+    public boolean removeAll(Collection<?> values) {
+        try {
+            return super.removeAll(values);
+        } finally {
+            signalAllNotFull();
+        }
+    }
+
+    @Override
+    public boolean retainAll(Collection<?> values) {
+        try {
+            return super.retainAll(values);
+        } finally {
+            signalAllNotFull();
+        }
+    }
+
+    @Override
+    public Iterator<E> iterator() {
+        Iterator<E> iterator = super.iterator();
+        return new Iterator<>() {
+            @Override
+            public boolean hasNext() {
+                return iterator.hasNext();
+            }
+
+            @Override
+            public E next() {
+                return iterator.next();
+            }
+
+            @Override
+            public void remove() {
+                iterator.remove();
+                signalNotFull(true);
+            }
+        };
+    }
+
+    @Override
     public int remainingCapacity() {
         capacityLock.lock();
         try {
@@ -164,6 +224,15 @@ public class BoundedPriorityBlockingQueue<E> extends PriorityBlockingQueue<E> {
         capacityLock.lock();
         try {
             notFull.signal();
+        } finally {
+            capacityLock.unlock();
+        }
+    }
+
+    private void signalAllNotFull() {
+        capacityLock.lock();
+        try {
+            notFull.signalAll();
         } finally {
             capacityLock.unlock();
         }

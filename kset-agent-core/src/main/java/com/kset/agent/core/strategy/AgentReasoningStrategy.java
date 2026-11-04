@@ -20,6 +20,12 @@ public interface AgentReasoningStrategy {
 
     AgentTurn nextTurn(AgentRequest request, AgentRunState state);
 
+    /** Returns a shorter turn, or null when no model-visible context can be removed. */
+    default AgentTurn compactPrompt(AgentRequest request, AgentRunState state,
+                                    AgentTurn current) {
+        return null;
+    }
+
     default void validate(AgentRequest request, AgentRunState state, AgentDecision decision) {
     }
 

@@ -1,5 +1,6 @@
 package com.kset.agent.core.value;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.agent.core.action.AgentObservation;
 import com.kset.agent.core.action.ToolCallAction;
 import com.kset.agent.core.model.ModelToolCall;
@@ -79,6 +80,37 @@ class AgentValueSnapshotTest {
         assertThatThrownBy(() -> AgentValueSnapshot.value(cyclicList))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("cyclic structured values");
+    }
+
+    @Test
+    void reusesOwnFrozenMapsWithoutTrustingExternalContainers() throws Exception {
+        Map<String, Object> nested = new LinkedHashMap<>(Map.of("value", "first"));
+        Map<String, Object> frozen = AgentValueSnapshot.map(Map.of("nested", nested));
+        Map<String, Object> external = new LinkedHashMap<>(frozen);
+
+        assertThat(AgentValueSnapshot.map(frozen)).isSameAs(frozen);
+        assertThat(AgentValueSnapshot.value(frozen.get("nested"))).isSameAs(frozen.get("nested"));
+        Map<String, Object> copied = AgentValueSnapshot.map(external);
+        assertThat(copied).isNotSameAs(external);
+        assertThat(copied.get("nested")).isSameAs(frozen.get("nested"));
+
+        nested.put("value", "changed");
+        external.put("late", "value");
+        assertThat(copied).containsOnlyKeys("nested");
+        assertThat(((Map<?, ?>) copied.get("nested")).get("value")).isEqualTo("first");
+        assertThatThrownBy(() -> copied.entrySet().iterator().next().setValue("changed"))
+                .isInstanceOf(UnsupportedOperationException.class);
+        ObjectMapper mapper = new ObjectMapper();
+        assertThat(mapper.readTree(mapper.writeValueAsString(copied))
+                .get("nested").get("value").asText()).isEqualTo("first");
+
+        Map<String, Object> nullable = new LinkedHashMap<>();
+        nullable.put("optional", null);
+        Map<String, Object> frozenNullable = AgentValueSnapshot.toolFields(nullable);
+        assertThat(AgentValueSnapshot.toolFields(frozenNullable)).isSameAs(frozenNullable);
+        assertThatThrownBy(() -> AgentValueSnapshot.map(frozenNullable))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("structured map values must not be null");
     }
 
     @Test

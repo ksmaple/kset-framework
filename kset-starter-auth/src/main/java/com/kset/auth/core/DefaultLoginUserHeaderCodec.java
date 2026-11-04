@@ -139,40 +139,6 @@ public class DefaultLoginUserHeaderCodec implements LoginUserHeaderCodec {
         return decodeLegacyIdentity(reader);
     }
 
-    /**
-     * 保留原因：默认接受 X-User-Id 等分头，并可带上 roles/permissions，公网直连可伪造登录。
-     */
-    @SuppressWarnings("unused")
-    private Optional<LoginUser> decodeLegacyHeadersForRollback(HeaderReader reader) {
-        if (!hasText(reader.get(AuthHeaders.USER_ID))) {
-            return Optional.empty();
-        }
-        return Optional.of(LoginUser.builder()
-                .userId(reader.get(AuthHeaders.USER_ID))
-                .subjectType(reader.get(AuthHeaders.AUTH_SUBJECT))
-                .userName(reader.get(AuthHeaders.USER_NAME))
-                .realName(reader.get(AuthHeaders.REAL_NAME))
-                .nickName(reader.get(AuthHeaders.NICK_NAME))
-                .avatar(reader.get(AuthHeaders.AVATAR))
-                .mobile(reader.get(AuthHeaders.MOBILE))
-                .email(reader.get(AuthHeaders.EMAIL))
-                .tenantId(reader.get(AuthHeaders.TENANT_ID))
-                .orgId(reader.get(AuthHeaders.ORG_ID))
-                .deptId(reader.get(AuthHeaders.DEPT_ID))
-                .roles(split(reader.get(AuthHeaders.ROLES)))
-                .permissions(split(reader.get(AuthHeaders.PERMISSIONS)))
-                .deviceId(reader.get(AuthHeaders.DEVICE_ID))
-                .deviceType(reader.get(AuthHeaders.DEVICE_TYPE))
-                .clientType(reader.get(AuthHeaders.CLIENT_TYPE))
-                .clientVersion(reader.get(AuthHeaders.CLIENT_VERSION))
-                .ip(reader.get(AuthHeaders.IP))
-                .language(reader.get(AuthHeaders.LANGUAGE))
-                .timeZone(reader.get(AuthHeaders.TIME_ZONE))
-                .loginTime(parseLong(reader.get(AuthHeaders.LOGIN_TIME)))
-                .token(reader.get(AuthHeaders.SESSION_TOKEN))
-                .build());
-    }
-
     private Optional<LoginUser> decodeLegacyIdentity(HeaderReader reader) {
         if (!hasText(reader.get(AuthHeaders.USER_ID))) {
             return Optional.empty();

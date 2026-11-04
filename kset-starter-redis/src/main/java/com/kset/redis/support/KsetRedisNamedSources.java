@@ -54,12 +54,4 @@ public class KsetRedisNamedSources extends AbstractKsetLifecycleComponent implem
         shutdownLifecycle();
     }
 
-    /**
-     * 保留原因（feature-key=graceful-lifecycle, change-id=graceful-lifecycle-v1）：原 DisposableBean 硬关实现，
-     * 未接入统一启停时用于恢复原行为。
-     */
-    @SuppressWarnings("unused")
-    public void destroyForRollback() {
-        connectionFactories.forEach(LettuceConnectionFactory::destroy);
-    }
 }

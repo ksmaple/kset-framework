@@ -66,27 +66,6 @@ public class KsetRedisLockAspect {
         return toFixedLeaseOptions(locked);
     }
 
-    /**
-     * 保留原因：lease=0s 走 rejectNow(Duration.ZERO)，误传 0 会拿到 watchdog 锁。
-     */
-    @SuppressWarnings("unused")
-    private KsetRedisLockOptions toOptionsForRollback(KsetLocked locked) {
-        Duration lease = parseDuration(locked.lease(), provider.defaultLeaseTime());
-        return switch (locked.strategy()) {
-            case REJECT_IF_BUSY -> KsetRedisLockOptions.rejectNow(lease);
-            case WAIT_THEN_FAIL -> {
-                Duration wait = parseDuration(locked.waitTime(), provider.defaultWaitTime());
-                yield KsetRedisLockOptions.waitThenFail(wait, lease);
-            }
-            case OPTIONAL -> KsetRedisLockOptions.builder()
-                    .strategy(KsetRedisLockStrategy.OPTIONAL)
-                    .waitTime(Duration.ZERO)
-                    .leaseTime(lease)
-                    .build();
-            case BLOCK_UNTIL_ACQUIRED -> KsetRedisLockOptions.blockUntil(lease);
-        };
-    }
-
     private KsetRedisLockOptions toWatchdogOptions(KsetLocked locked) {
         return switch (locked.strategy()) {
             case REJECT_IF_BUSY -> KsetRedisLockOptions.rejectNowWatchdog();

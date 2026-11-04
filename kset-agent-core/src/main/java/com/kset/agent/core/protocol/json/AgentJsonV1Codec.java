@@ -34,7 +34,7 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
     public static final String END_MARKER = "<<<END_AGENT_JSON>>>";
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() { };
-    private static final Set<String> STANDARD_TYPES = Set.of(
+    private static final List<String> STANDARD_TYPES = List.of(
             StandardActionTypes.TASK_PLAN,
             StandardActionTypes.TOOL_CALL,
             StandardActionTypes.TOOL_BATCH,
@@ -42,23 +42,11 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
             StandardActionTypes.FINAL_ANSWER,
             StandardActionTypes.CONFIRMATION);
 
-    private static final String INSTRUCTIONS = """
-            Return exactly one decision per turn. Control decisions must be wrapped by
-            <<<AGENT_JSON>>> and <<<END_AGENT_JSON>>> and contain one JSON object.
-            Supported type values: task_plan, tool_call, tool_batch, answer_chunk,
-            final_answer, confirmation. Plain text without markers is treated as final_answer.
-            Never place Markdown or another JSON object inside the markers.
+    private static final String COMMON_INSTRUCTIONS = """
+            One decision per turn. Plain text without markers is final_answer.
+            For JSON control, wrap one JSON object with <<<AGENT_JSON>>> and <<<END_AGENT_JSON>>>.
+            No Markdown or text outside markers. Optional root metadata must be an object.
             Shapes:
-            {"type":"task_plan","plan":"...","tasks":[{"taskId":"...","title":"...","dependsOn":[]}]}
-            {"type":"tool_call","toolCall":{"callId":"...","taskId":"...","toolName":"...","arguments":{}}}
-            {"type":"tool_batch","plan":"...","toolCalls":[...]}
-            {"type":"answer_chunk","answer":"..."}
-            {"type":"final_answer","answer":"..."}
-            {"type":"confirmation","confirmation":{"confirmationId":"...","message":"...","options":{}}}
-            callId is required and must identify one operation within the run. Use a new callId for
-            each distinct operation, including later turns, and reuse it only for confirmation,
-            retry, reconciliation, or resume of that same operation.
-            An optional root metadata object may carry protocol-neutral extension data.
             """;
 
     private final ObjectMapper objectMapper;
@@ -86,9 +74,61 @@ public final class AgentJsonV1Codec implements AgentProtocolCodec {
 
     @Override
     public ModelRequest prepare(ModelRequest request, AgentProtocolContext context) {
+        String instructions = instructions(request);
         String system = request.systemPrompt().isBlank()
-                ? INSTRUCTIONS : request.systemPrompt() + "\n\n" + INSTRUCTIONS;
+                ? instructions : request.systemPrompt() + "\n\n" + instructions;
         return request.withSystemPrompt(system);
+    }
+
+    private String instructions(ModelRequest request) {
+        Set<String> allowed = promptedTypes(request);
+        StringBuilder instructions = new StringBuilder(COMMON_INSTRUCTIONS);
+        for (String type : STANDARD_TYPES) {
+            if (allowed.contains(type)) {
+                instructions.append(shape(type)).append('\n');
+            }
+        }
+        if (allowed.contains(StandardActionTypes.TOOL_CALL)
+                || allowed.contains(StandardActionTypes.TOOL_BATCH)) {
+            instructions.append("New callId for each operation across turns; reuse only for "
+                    + "confirmation, retry, reconciliation or resume. "
+                    + "With a plan, tool calls must reference its taskId.\n");
+        }
+        return instructions.toString();
+    }
+
+    private Set<String> promptedTypes(ModelRequest request) {
+        Object hint = request.attributes().get(
+                ModelRequest.ALLOWED_STANDARD_ACTION_TYPES_ATTRIBUTE);
+        if (hint instanceof List<?> names && !names.isEmpty()
+                && names.stream().allMatch(name -> name instanceof String type
+                        && STANDARD_TYPES.contains(type))) {
+            return Set.copyOf(names.stream().map(String.class::cast).toList());
+        }
+        return Set.copyOf(STANDARD_TYPES);
+    }
+
+    private String shape(String type) {
+        return switch (type) {
+            case StandardActionTypes.TASK_PLAN ->
+                    "{\"type\":\"task_plan\",\"plan\":\"...\",\"tasks\":[{\"taskId\":\"...\",\"title\":\"...\"}]} "
+                            + "(optional task dependsOn array)";
+            case StandardActionTypes.TOOL_CALL ->
+                    "{\"type\":\"tool_call\",\"toolCall\":{\"callId\":\"...\",\"taskId\":\"...\","
+                            + "\"toolName\":\"...\",\"arguments\":{}}} "
+                            + "(taskId optional without a plan)";
+            case StandardActionTypes.TOOL_BATCH ->
+                    "type=tool_batch: plan string; toolCalls has 2+ independent "
+                            + "{callId,taskId?,toolName,arguments:{}} objects";
+            case StandardActionTypes.ANSWER_CHUNK ->
+                    "{\"type\":\"answer_chunk\",\"answer\":\"...\"}";
+            case StandardActionTypes.FINAL_ANSWER ->
+                    "{\"type\":\"final_answer\",\"answer\":\"...\"}";
+            case StandardActionTypes.CONFIRMATION ->
+                    "{\"type\":\"confirmation\",\"confirmation\":{\"confirmationId\":\"...\","
+                            + "\"message\":\"...\"}} (optional confirmation options object)";
+            default -> throw new IllegalArgumentException("unsupported action type: " + type);
+        };
     }
 
     @Override

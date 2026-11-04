@@ -116,7 +116,7 @@ class LoginAuthGatewayFilterTest {
 
         new DefaultGatewayAuthFailureHandler().handle(exchange, 401, "未登录").block();
 
-        assertThat(exchange.getAttribute(TraceHeaders.HTTP_FAILURE_ATTRIBUTE)).isEqualTo(true);
+        assertThat((Boolean) exchange.getAttribute(TraceHeaders.HTTP_FAILURE_ATTRIBUTE)).isTrue();
         assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"traceId\":\"gateway-trace\"");
     }
 

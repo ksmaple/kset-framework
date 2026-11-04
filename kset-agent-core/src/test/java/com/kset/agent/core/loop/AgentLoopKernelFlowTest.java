@@ -1,5 +1,6 @@
 package com.kset.agent.core.loop;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.agent.core.AgentCoreException;
 import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.action.AgentActionResult;
@@ -17,12 +18,19 @@ import com.kset.agent.core.event.AgentLifecycleContext;
 import com.kset.agent.core.event.AgentLifecycleEventType;
 import com.kset.agent.core.event.AgentLifecycleListener;
 import com.kset.agent.core.event.AgentInvocationType;
+import com.kset.agent.core.model.AgentModel;
+import com.kset.agent.core.model.AgentModelCapacity;
 import com.kset.agent.core.model.AgentModelRetryOptions;
+import com.kset.agent.core.model.BuiltInModels;
+import com.kset.agent.core.model.ModelCapacity;
+import com.kset.agent.core.model.ModelCapacityCatalog;
 import com.kset.agent.core.model.ModelRequest;
+import com.kset.agent.core.model.ModelPromptCapacity;
 import com.kset.agent.core.model.ModelResponse;
 import com.kset.agent.core.protocol.AgentDecision;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
 import com.kset.agent.core.protocol.AgentProtocolContext;
+import com.kset.agent.core.protocol.AgentProtocolException;
 import com.kset.agent.core.protocol.AgentProtocolId;
 import com.kset.agent.core.protocol.json.AgentJsonV1Codec;
 import com.kset.agent.core.protocol.json.AgentJsonV1ErrorCode;
@@ -63,6 +71,151 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AgentLoopKernelFlowTest {
 
     @Test
+    void knownModelPreservesUnspecifiedOutputAndClampsExplicitLimit() {
+        AtomicReference<ModelRequest> knownRequest = new AtomicReference<>();
+        AgentModel knownModel = AgentModel.named("gpt-6.1-sol", (request, context) -> {
+            knownRequest.set(request);
+            return ModelResponse.text("done");
+        });
+        AgentResult knownResult = AgentLoopKernel.builder(knownModel)
+                .build().run(request("known-model"));
+
+        assertThat(knownResult.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(knownRequest.get().maxOutputTokens()).isZero();
+        AgentLoopOptions requestedLimit = new AgentLoopOptions(20, Duration.ofSeconds(10),
+                3, 3, 200_000, Duration.ofSeconds(3), Duration.ofSeconds(3), 8, 8);
+        AgentLoopKernel.builder(knownModel).build().run(request("bounded-model",
+                requestedLimit, Map.of(), com.kset.agent.core.stop.AgentCancellation.none()));
+        assertThat(knownRequest.get().maxOutputTokens()).isEqualTo(128_000);
+        assertThat(BuiltInModels.find(" GPT-6.1-SOL ")).isPresent();
+        assertThat(BuiltInModels.list()).hasSize(25)
+                .extracting(model -> model.modelName())
+                .contains("gpt-6-sol", "claude-sonnet-4-5", "gemini-2.5-pro",
+                        "claude-opus-4-5-20251101", "claude-sonnet-4-5-20250929",
+                        "claude-haiku-4-5-20251001");
+        assertThat(BuiltInModels.find("gpt-5.6").orElseThrow().contextTokens())
+                .isEqualTo(1_050_000);
+        assertThat(BuiltInModels.find("gpt-4.1").orElseThrow().maxOutputTokens())
+                .isEqualTo(32_768);
+        assertThat(BuiltInModels.find("claude-sonnet-4-5").orElseThrow().contextTokens())
+                .isEqualTo(200_000);
+
+        AtomicReference<ModelRequest> anonymousRequest = new AtomicReference<>();
+        AgentLoopKernel.builder((modelRequest, context) -> {
+            anonymousRequest.set(modelRequest);
+            return ModelResponse.text("done");
+        }).build().run(request("anonymous-model"));
+        assertThat(anonymousRequest.get().maxOutputTokens()).isZero();
+    }
+
+    @Test
+    void namedModelRetainsPromptCapacityCapability() {
+        AgentModelCapacity delegate = new AgentModelCapacity() {
+            @Override
+            public ModelPromptCapacity promptCapacity(ModelRequest request) {
+                return new ModelPromptCapacity(120, 180);
+            }
+
+            @Override
+            public ModelResponse generate(ModelRequest request,
+                    com.kset.agent.core.execution.AgentExecutionContext context) {
+                return ModelResponse.text("done");
+            }
+        };
+        AgentModel named = AgentModel.named("claude-sonnet-4-5-20250929", delegate);
+
+        assertThat(named).isInstanceOf(AgentModelCapacity.class);
+        assertThat(named.modelName(new ModelRequest("", "", 0, Map.of())))
+                .isEqualTo("claude-sonnet-4-5-20250929");
+        assertThat(((AgentModelCapacity) named).promptCapacity(
+                new ModelRequest("", "", 0, Map.of())))
+                .isEqualTo(new ModelPromptCapacity(120, 180));
+    }
+
+    @Test
+    void customModelCapacitiesOverrideBuiltInsWithoutAffectingOtherKernels() {
+        AtomicReference<ModelRequest> observed = new AtomicReference<>();
+        AgentModel model = AgentModel.named("gpt-4.1", (modelRequest, context) -> {
+            observed.set(modelRequest);
+            return ModelResponse.text("done");
+        });
+        AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofSeconds(10),
+                3, 3, 100_000, Duration.ofSeconds(3), Duration.ofSeconds(3), 8, 8);
+        ModelCapacity override = new ModelCapacity("Private", "GPT-4.1", 50_000, 2_000);
+        AgentRequest input = request("default-capacity", options, Map.of(),
+                com.kset.agent.core.stop.AgentCancellation.none());
+
+        AgentLoopKernel.builder(model).build().run(input);
+        assertThat(observed.get().maxOutputTokens()).isEqualTo(32_768);
+
+        AgentLoopKernel.builder(model).modelCapacity(override).build()
+                .run(input.withAgentRunId("custom-capacity"));
+        assertThat(observed.get().maxOutputTokens()).isEqualTo(2_000);
+        assertThat(BuiltInModels.find("gpt-4.1").orElseThrow().maxOutputTokens())
+                .isEqualTo(32_768);
+
+        ModelCapacityCatalog catalog = ModelCapacityCatalog.withOverrides(List.of(override));
+        assertThat(catalog.find(" gPt-4.1 ")).contains(override);
+        assertThat(catalog.list()).contains(override)
+                .doesNotContain(BuiltInModels.find("gpt-4.1").orElseThrow());
+    }
+
+    @Test
+    void customCapacitySupportsUnknownModelsAndRejectsDuplicateIds() {
+        AtomicReference<ModelRequest> observed = new AtomicReference<>();
+        AgentModel model = AgentModel.named("private-model", (modelRequest, context) -> {
+            observed.set(modelRequest);
+            return ModelResponse.text("done");
+        });
+        ModelCapacity capacity = new ModelCapacity("Private", "private-model", 16_000, 1_024);
+        AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofSeconds(10),
+                3, 3, 10_000, Duration.ofSeconds(3), Duration.ofSeconds(3), 8, 8);
+
+        AgentLoopKernel.builder(model).modelCapacity(capacity).build().run(
+                request("private-capacity", options, Map.of(),
+                        com.kset.agent.core.stop.AgentCancellation.none()));
+        assertThat(observed.get().maxOutputTokens()).isEqualTo(1_024);
+        assertThat(BuiltInModels.find("private-model")).isEmpty();
+        assertThatThrownBy(() -> AgentLoopKernel.builder(model)
+                .modelCapacity(capacity)
+                .modelCapacity(new ModelCapacity("Private", "PRIVATE-MODEL", 8_000, 512))
+                .build()).isInstanceOf(AgentCoreException.class)
+                .hasMessageContaining("duplicate model capacity");
+    }
+
+    @Test
+    void customContextWindowChecksAdapterTokenCountBeforeModelCall() {
+        AtomicBoolean checked = new AtomicBoolean();
+        AtomicBoolean called = new AtomicBoolean();
+        AgentModel model = AgentModel.named("private-model", new AgentModelCapacity() {
+            @Override
+            public ModelPromptCapacity promptCapacity(ModelRequest request) {
+                checked.set(true);
+                return new ModelPromptCapacity(99_500, 200_000);
+            }
+
+            @Override
+            public ModelResponse generate(ModelRequest request,
+                    com.kset.agent.core.execution.AgentExecutionContext context) {
+                called.set(true);
+                return ModelResponse.text("done");
+            }
+        });
+        AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofSeconds(10),
+                3, 3, 1_000, Duration.ofSeconds(3), Duration.ofSeconds(3), 8, 8);
+
+        AgentResult result = AgentLoopKernel.builder(model)
+                .modelCapacity(new ModelCapacity("Private", "private-model", 100_000, 1_000))
+                .build().run(request("private-context", options, Map.of(),
+                        com.kset.agent.core.stop.AgentCancellation.none()));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.FAILED);
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.CAPACITY_LIMIT);
+        assertThat(checked).isTrue();
+        assertThat(called).isFalse();
+    }
+
+    @Test
     void defaultStrategyOnlyShowsConversationStateToModel() {
         AgentRequest request = request("model-state-boundary");
         Instant now = Instant.parse("2026-10-21T00:00:00Z");
@@ -75,6 +228,7 @@ class AgentLoopKernelFlowTest {
                 StandardActionHandlers.PLAN_CREATED, true,
                 StandardActionHandlers.PLAN_TASKS, tasks,
                 StandardActionHandlers.PENDING_ACTION, pending,
+                ReactReasoningStrategy.PHASE_ATTRIBUTE, "acting",
                 AgentRunState.PROTOCOL_METADATA_ATTRIBUTE, Map.of("tenant", "private-tenant"),
                 "business.permissionScope", "private-scope"), now);
         ReactReasoningStrategy strategy =
@@ -85,11 +239,128 @@ class AgentLoopKernelFlowTest {
         assertThat(modelRequest.attributes().get("state")).isEqualTo(Map.of(
                 StandardActionHandlers.PLAN_CREATED, true,
                 StandardActionHandlers.PLAN_TASKS, tasks,
-                StandardActionHandlers.PENDING_ACTION, pending));
+                StandardActionHandlers.PENDING_ACTION, pending,
+                ReactReasoningStrategy.PHASE_ATTRIBUTE, "acting"));
         assertThat(modelRequest.userPrompt()).contains("inspect")
-                .doesNotContain("private-scope", "private-tenant");
+                .doesNotContain("private-scope", "private-tenant",
+                        StandardActionHandlers.PLAN_CREATED, ReactReasoningStrategy.PHASE_ATTRIBUTE);
         assertThat(state.attributes()).containsKeys(
                 "business.permissionScope", AgentRunState.PROTOCOL_METADATA_ATTRIBUTE);
+    }
+
+    @Test
+    void requestPrefixPrecedesSystemPromptOnEveryTurn() {
+        List<ModelRequest> prompts = new CopyOnWriteArrayList<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((modelRequest, context) -> {
+            prompts.add(modelRequest);
+            return ModelResponse.text(prompts.size() == 1
+                    ? envelope("{\"type\":\"answer_chunk\",\"answer\":\"first\"}")
+                    : "done");
+        }).build();
+        AgentRequest input = request("prefix-run")
+                .withSystemPromptPrefix("Fixed trusted prefix");
+
+        AgentResult result = kernel.run(input);
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.answer()).isEqualTo("first\n\ndone");
+        assertThat(prompts).hasSize(2);
+        assertThat(prompts).allSatisfy(prompt ->
+                assertThat(prompt.systemPrompt())
+                        .startsWith("Fixed trusted prefix\n\n")
+                        .contains(AgentJsonV1Codec.START_MARKER));
+        assertThat(input.withAgentRunId("another-run").systemPromptPrefix())
+                .isEqualTo("Fixed trusted prefix");
+    }
+
+    @Test
+    void requestPrefixAlsoAppliesToCustomStrategies() {
+        AgentReasoningStrategy strategy = new AgentReasoningStrategy() {
+            @Override
+            public String strategyId() {
+                return "custom";
+            }
+
+            @Override
+            public AgentTurn nextTurn(AgentRequest request, AgentRunState state) {
+                return new AgentTurn(request.protocolId(),
+                        new ModelRequest("Custom strategy", request.task(), 0, Map.of()));
+            }
+        };
+        AtomicReference<ModelRequest> captured = new AtomicReference<>();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((modelRequest, context) -> {
+            captured.set(modelRequest);
+            return ModelResponse.text("done");
+        }).strategy(strategy).build();
+
+        AgentResult result = kernel.run(request("custom-prefix")
+                .withSystemPromptPrefix("Fixed trusted prefix"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(captured.get().systemPrompt())
+                .startsWith("Fixed trusted prefix\n\nCustom strategy\n\n")
+                .contains(AgentJsonV1Codec.START_MARKER);
+    }
+
+    @Test
+    void rejectsInvalidRequestPrefixesBeforeModelCall() {
+        AgentRequest input = request("invalid-prefix");
+
+        assertThatThrownBy(() -> input.withSystemPromptPrefix(" "))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_REQUEST));
+        assertThatThrownBy(() -> new AgentRequest(input.agentRunId(), input.task(),
+                input.protocolId(), input.options(),
+                Map.of(AgentRequest.SYSTEM_PROMPT_PREFIX, 1), input.cancellation()))
+                .isInstanceOfSatisfying(AgentCoreException.class,
+                        error -> assertThat(error.errorCode())
+                                .isEqualTo(AgentErrorCode.INVALID_REQUEST));
+    }
+
+    @Test
+    void defaultStrategyNarrowsToolDetailsAndAllowedActionsByPhase() {
+        AgentRequest request = request("phase-prompts");
+        Instant now = Instant.parse("2026-11-04T00:00:00Z");
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(tool("search", (arguments, context) ->
+                        ToolExecutionResult.success("found")));
+        ReactReasoningStrategy strategy = new ReactReasoningStrategy(tools);
+        AgentRunState planningState = AgentRunState.start(request, now);
+
+        ModelRequest planning = strategy.nextTurn(request, planningState).modelRequest();
+        assertThat(planning.userPrompt()).contains("search: search test tool")
+                .doesNotContain("schema=");
+        assertThat(planning.attributes().get("tools")).isEqualTo(tools.list());
+        assertThat(planning.attributes().get(
+                ModelRequest.ALLOWED_STANDARD_ACTION_TYPES_ATTRIBUTE))
+                .isEqualTo(List.of(StandardActionTypes.TASK_PLAN,
+                        StandardActionTypes.ANSWER_CHUNK, StandardActionTypes.FINAL_ANSWER,
+                        StandardActionTypes.CONFIRMATION));
+
+        AgentRunState actingState = planningState.withAttributes(Map.of(
+                StandardActionHandlers.PLAN_CREATED, true), now);
+        ModelRequest acting = strategy.nextTurn(request, actingState).modelRequest();
+        assertThat(acting.userPrompt()).contains("search: search test tool schema={}");
+        assertThat(acting.attributes().get(
+                ModelRequest.ALLOWED_STANDARD_ACTION_TYPES_ATTRIBUTE))
+                .isEqualTo(List.of(StandardActionTypes.TOOL_CALL, StandardActionTypes.TOOL_BATCH,
+                        StandardActionTypes.ANSWER_CHUNK, StandardActionTypes.FINAL_ANSWER,
+                        StandardActionTypes.CONFIRMATION));
+
+        AgentRunState answeringState = actingState.withAttributes(Map.of(
+                StandardActionHandlers.ANSWER_CHUNKS, List.of("first part")), now);
+        ModelRequest answering = strategy.nextTurn(request, answeringState).modelRequest();
+        assertThat(answering.userPrompt()).doesNotContain("Tools:", "schema=");
+        assertThat(answering.attributes().get(
+                ModelRequest.ALLOWED_STANDARD_ACTION_TYPES_ATTRIBUTE))
+                .isEqualTo(List.of(StandardActionTypes.ANSWER_CHUNK,
+                        StandardActionTypes.FINAL_ANSWER));
+        assertThatThrownBy(() -> strategy.validate(request, answeringState,
+                AgentDecision.of(new ToolCallAction("call-1", null, "search", Map.of()))))
+                .isInstanceOfSatisfying(AgentProtocolException.class,
+                        error -> assertThat(error.protocolErrorCode())
+                                .isEqualTo("ACTION_NOT_ALLOWED"));
     }
 
     @Test
@@ -120,6 +391,47 @@ class AgentLoopKernelFlowTest {
         AgentRunState restored = AgentRunState.restore(state.snapshot(), now);
         assertThat(strategy.nextTurn(request, restored).modelRequest().userPrompt())
                 .isEqualTo(modelRequest.userPrompt());
+    }
+
+    @Test
+    void defaultStrategyOmitsEmptyObservationFieldsAndDuplicateAnswerChunks() {
+        AgentRequest request = request("compact-observations");
+        Instant now = Instant.parse("2026-11-04T00:00:00Z");
+        ReactReasoningStrategy strategy =
+                new ReactReasoningStrategy(new InMemoryAgentToolRegistry());
+        AgentObservation success = AgentObservation.toolResult(
+                "call-1", null, "search", ToolExecutionResult.success("found"));
+        AgentRunState successState = AgentRunState.start(request, now).apply(
+                AgentActionResult.observed(success), now);
+        String successSummary = (String) ((List<?>) strategy.nextTurn(request, successState)
+                .modelRequest().attributes().get(
+                        ReactReasoningStrategy.OBSERVATION_SUMMARIES_ATTRIBUTE)).getFirst();
+        assertThat(successSummary).contains("\"callId\":\"call-1\"", "found")
+                .doesNotContain("errorCode", "errorMessage");
+
+        String failedCallId = "call-" + "x".repeat(80);
+        AgentObservation failure = AgentObservation.toolResult(
+                failedCallId, null, "search", ToolExecutionResult.failure(
+                        AgentErrorCode.TOOL_EXECUTION_FAILED, "failed"));
+        AgentRunState failureState = AgentRunState.start(request, now).apply(
+                AgentActionResult.observed(failure), now);
+        String failureSummary = (String) ((List<?>) strategy.nextTurn(request, failureState)
+                .modelRequest().attributes().get(
+                        ReactReasoningStrategy.OBSERVATION_SUMMARIES_ATTRIBUTE)).getFirst();
+        assertThat(failureSummary).contains("\"callId\":\"" + failedCallId + "\"",
+                "\"errorCode\":\"TOOL_EXECUTION_FAILED\"",
+                "\"errorMessage\":\"failed\"").doesNotContain("\"output\"");
+
+        AgentObservation chunk = AgentObservation.success(
+                StandardActionTypes.ANSWER_CHUNK, "first", true);
+        AgentRunState answeringState = AgentRunState.start(request, now).apply(
+                AgentActionResult.observed(chunk), now).withAttributes(Map.of(
+                        StandardActionHandlers.ANSWER_CHUNKS, List.of("first")), now);
+        ModelRequest answering = strategy.nextTurn(request, answeringState).modelRequest();
+        assertThat(answering.userPrompt()).contains("first").doesNotContain("<observation>");
+        assertThat(answering.attributes().get(
+                ReactReasoningStrategy.OBSERVATION_SUMMARIES_ATTRIBUTE)).isEqualTo(List.of());
+        assertThat(answeringState.snapshot().observations()).hasSize(1);
     }
 
     @Test
@@ -208,6 +520,57 @@ class AgentLoopKernelFlowTest {
                 .nextTurn(request, state).modelRequest().userPrompt();
 
         assertThat(prompt).contains("\"errorCode\":\"TOOL_IDEMPOTENCY_CONFLICT\"");
+    }
+
+    @Test
+    void compressedPromptKeepsLatestToolIdentityAndErrorCode() {
+        AgentRequest request = request("compressed-error");
+        Instant now = Instant.parse("2026-11-04T00:00:00Z");
+        AgentObservation observation = new AgentObservation(
+                StandardActionTypes.TOOL_CALL, false, false, "x".repeat(3500),
+                AgentErrorCode.TOOL_IDEMPOTENCY_CONFLICT.name(), "conflict",
+                Map.of(AgentObservation.TOOL_CALL_ID, "call-1",
+                        AgentObservation.TOOL_NAME, "search"));
+        AgentRunState state = AgentRunState.start(request, now).apply(
+                AgentActionResult.observed(observation), now);
+        ReactReasoningStrategy strategy =
+                new ReactReasoningStrategy(new InMemoryAgentToolRegistry());
+        AgentTurn turn = strategy.nextTurn(request, state);
+        AgentTurn next;
+        while ((next = strategy.compactPrompt(request, state, turn)) != null) {
+            turn = next;
+        }
+
+        assertThat(turn.modelRequest().userPrompt()).contains(
+                "\"callId\":\"call-1\"",
+                "\"errorCode\":\"TOOL_IDEMPOTENCY_CONFLICT\"")
+                .doesNotContain("x".repeat(3500));
+        assertThat(state.snapshot().observations()).containsExactly(observation);
+    }
+
+    @Test
+    void compactPromptCanDropOldShortObservationsAfterShrinkingSummaries() {
+        AgentRequest request = request("compact-old-observations");
+        Instant now = Instant.parse("2026-11-04T00:00:00Z");
+        AgentRunState state = AgentRunState.start(request, now);
+        for (int index = 0; index < 8; index++) {
+            state = state.apply(AgentActionResult.observed(AgentObservation.toolResult(
+                    "call-" + index, null, "search",
+                    ToolExecutionResult.success("ok"))), now);
+        }
+        ReactReasoningStrategy strategy =
+                new ReactReasoningStrategy(new InMemoryAgentToolRegistry());
+        AgentTurn turn = strategy.nextTurn(request, state);
+        AgentTurn next;
+        while ((next = strategy.compactPrompt(request, state, turn)) != null) {
+            turn = next;
+        }
+
+        assertThat(turn.modelRequest().userPrompt()).contains("call-7")
+                .doesNotContain("call-0");
+        assertThat((List<?>) turn.modelRequest().attributes().get(
+                ReactReasoningStrategy.OBSERVATION_SUMMARIES_ATTRIBUTE)).hasSize(1);
+        assertThat(state.snapshot().observations()).hasSize(8);
     }
 
     @Test
@@ -317,9 +680,17 @@ class AgentLoopKernelFlowTest {
         }).build();
         AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofMinutes(5), 3, 3,
                 0, Duration.ofMinutes(2), Duration.ofMinutes(2), 8, 8, 4096, 2048);
-        AgentRequest request = new AgentRequest("oversized-prompt", "x".repeat(3300),
-                AgentJsonV1Codec.ID,
-                options, Map.of(), null);
+        AgentRequest probe = new AgentRequest("oversized-prompt", "x",
+                AgentJsonV1Codec.ID, options, Map.of(), null);
+        AgentRunState probeState = AgentRunState.start(probe, Instant.EPOCH);
+        ModelRequest probePrompt = new ReactReasoningStrategy(new InMemoryAgentToolRegistry())
+                .nextTurn(probe, probeState).modelRequest();
+        ModelRequest preparedProbe = new AgentJsonV1Codec(new ObjectMapper())
+                .prepare(probePrompt, new AgentProtocolContext(probe, probeState));
+        int taskLength = options.maxPromptChars()
+                - preparedProbe.systemPrompt().length() - preparedProbe.userPrompt().length() + 2;
+        AgentRequest request = new AgentRequest("oversized-prompt", "x".repeat(taskLength),
+                AgentJsonV1Codec.ID, options, Map.of(), null);
         ModelRequest beforeProtocol = new ReactReasoningStrategy(new InMemoryAgentToolRegistry())
                 .nextTurn(request, AgentRunState.start(request, Instant.EPOCH)).modelRequest();
 
@@ -332,6 +703,123 @@ class AgentLoopKernelFlowTest {
         assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.CAPACITY_LIMIT);
         assertThat(result.failure()).isNull();
         assertThat(modelCalls).hasValue(0);
+    }
+
+    @Test
+    void oversizedRequestPrefixStopsBeforeCallingModel() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentLoopKernel kernel = AgentLoopKernel.builder((modelRequest, context) -> {
+            modelCalls.incrementAndGet();
+            return ModelResponse.text("unused");
+        }).build();
+        AgentRequest input = request("oversized-prefix")
+                .withSystemPromptPrefix("x".repeat(AgentLoopOptions.defaults().maxPromptChars()));
+
+        AgentResult result = kernel.run(input);
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.FAILED);
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.CAPACITY_LIMIT);
+        assertThat(modelCalls).hasValue(0);
+    }
+
+    @Test
+    void providerTokenLimitCompactsObservationsBeforeModelCall() {
+        List<ModelRequest> sent = new CopyOnWriteArrayList<>();
+        AtomicInteger capacityChecks = new AtomicInteger();
+        AgentModelCapacity model = new AgentModelCapacity() {
+            @Override
+            public ModelPromptCapacity promptCapacity(ModelRequest prompt) {
+                capacityChecks.incrementAndGet();
+                long inputTokens = (long) prompt.systemPrompt().length()
+                        + prompt.userPrompt().length();
+                return new ModelPromptCapacity(inputTokens, 2200);
+            }
+
+            @Override
+            public ModelResponse generate(ModelRequest prompt,
+                                          com.kset.agent.core.execution.AgentExecutionContext context) {
+                sent.add(prompt);
+                return ModelResponse.text(switch (sent.size()) {
+                    case 1 -> envelope("""
+                            {"type":"task_plan","plan":"inspect","tasks":[
+                              {"taskId":"inspect","title":"Inspect","dependsOn":[]}
+                            ]}
+                            """);
+                    case 2 -> envelope("""
+                            {"type":"tool_call","toolCall":{
+                              "callId":"inspect#1","taskId":"inspect",
+                              "toolName":"search","arguments":{}
+                            }}
+                            """);
+                    default -> envelope("{\"type\":\"final_answer\",\"answer\":\"done\"}");
+                });
+            }
+        };
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(tool("search", (arguments, context) ->
+                        ToolExecutionResult.success("x".repeat(3500))));
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools).build();
+
+        AgentResult result = kernel.run(request("token-capacity")
+                .withSystemPromptPrefix("Trusted prefix"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(sent).hasSize(3);
+        assertThat(capacityChecks.get()).isGreaterThan(sent.size());
+        assertThat(sent.getLast().systemPrompt()).startsWith("Trusted prefix\n\n");
+        assertThat(sent.getLast().userPrompt()).contains("inspect#1", "...[truncated]")
+                .doesNotContain("x".repeat(3500));
+        assertThat(result.snapshot().observations().getLast().output())
+                .isEqualTo("x".repeat(3500));
+    }
+
+    @Test
+    void providerTokenLimitStopsWhenNoObservationCanBeCompacted() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentModelCapacity model = new AgentModelCapacity() {
+            @Override
+            public ModelPromptCapacity promptCapacity(ModelRequest prompt) {
+                return new ModelPromptCapacity(1000, 100);
+            }
+
+            @Override
+            public ModelResponse generate(ModelRequest prompt,
+                                          com.kset.agent.core.execution.AgentExecutionContext context) {
+                modelCalls.incrementAndGet();
+                return ModelResponse.text("unused");
+            }
+        };
+
+        AgentResult result = AgentLoopKernel.builder(model).build().run(request("no-token-room"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.FAILED);
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.CAPACITY_LIMIT);
+        assertThat(modelCalls).hasValue(0);
+    }
+
+    @Test
+    void cancellationDuringTokenCapacityCheckWinsOverCapacityLimit() {
+        AtomicBoolean cancelled = new AtomicBoolean();
+        AgentModelCapacity model = new AgentModelCapacity() {
+            @Override
+            public ModelPromptCapacity promptCapacity(ModelRequest prompt) {
+                cancelled.set(true);
+                return new ModelPromptCapacity(1000, 100);
+            }
+
+            @Override
+            public ModelResponse generate(ModelRequest prompt,
+                                          com.kset.agent.core.execution.AgentExecutionContext context) {
+                throw new AssertionError("model must not be called");
+            }
+        };
+
+        AgentResult result = AgentLoopKernel.builder(model).build().run(
+                request("cancel-token-capacity", AgentLoopOptions.defaults(),
+                        Map.of(), cancelled::get));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.CANCELLED);
+        assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.USER_CANCELLED);
     }
 
     @Test
@@ -614,6 +1102,38 @@ class AgentLoopKernelFlowTest {
                 AgentLifecycleEventType.CHECKPOINT_SAVED,
                 AgentLifecycleEventType.RUN_STOPPED);
         assertLifecycleTrace(listener.events(), "flow-run");
+    }
+
+    @Test
+    void acceptsFirstAnswerChunkAndFinishesWithoutAPlan() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("{\"type\":\"answer_chunk\",\"answer\":\"first\"}"),
+                envelope("{\"type\":\"answer_chunk\",\"answer\":\"second\"}"),
+                envelope("{\"type\":\"final_answer\",\"answer\":\"done\"}"));
+        AgentResult result = AgentLoopKernel.builder(model).build()
+                .run(request("chunk-first"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.answer()).isEqualTo("first\n\nsecond\n\ndone");
+        assertThat(model.calls()).isEqualTo(3);
+    }
+
+    @Test
+    void acceptsFirstAnswerChunkAfterPlanning() {
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"inspect","tasks":[
+                          {"taskId":"inspect","title":"Inspect source"}
+                        ]}
+                        """),
+                envelope("{\"type\":\"answer_chunk\",\"answer\":\"first\"}"),
+                envelope("{\"type\":\"final_answer\",\"answer\":\"done\"}"));
+        AgentResult result = AgentLoopKernel.builder(model).build()
+                .run(request("chunk-after-plan"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.answer()).isEqualTo("first\n\ndone");
+        assertThat(model.calls()).isEqualTo(3);
     }
 
     @Test

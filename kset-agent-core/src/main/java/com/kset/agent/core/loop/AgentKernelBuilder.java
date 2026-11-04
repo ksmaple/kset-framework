@@ -11,6 +11,8 @@ import com.kset.agent.core.event.AgentLifecycleListener;
 import com.kset.agent.core.id.AgentRunIdGenerator;
 import com.kset.agent.core.model.AgentModel;
 import com.kset.agent.core.model.AgentModelRetryOptions;
+import com.kset.agent.core.model.ModelCapacity;
+import com.kset.agent.core.model.ModelCapacityCatalog;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
 import com.kset.agent.core.protocol.AgentProtocolRegistry;
 import com.kset.agent.core.protocol.json.AgentJsonV1Codec;
@@ -43,6 +45,7 @@ public final class AgentKernelBuilder {
     private final List<AgentActionHandler> actionHandlers = new ArrayList<>();
     private final List<AgentStopPolicy> stopPolicies = new ArrayList<>();
     private final List<AgentLifecycleListener> listeners = new ArrayList<>();
+    private final List<ModelCapacity> modelCapacities = new ArrayList<>();
 
     AgentKernelBuilder(AgentModel model) {
         this.model = requireConfiguration(model, "model");
@@ -76,6 +79,12 @@ public final class AgentKernelBuilder {
     /** Configures bounded retries for explicitly retryable model-call failures. */
     public AgentKernelBuilder modelRetry(AgentModelRetryOptions modelRetryOptions) {
         this.modelRetryOptions = requireConfiguration(modelRetryOptions, "modelRetryOptions");
+        return this;
+    }
+
+    /** Registers a model capacity for this Kernel; custom IDs override built-in entries. */
+    public AgentKernelBuilder modelCapacity(ModelCapacity capacity) {
+        modelCapacities.add(requireConfiguration(capacity, "modelCapacity"));
         return this;
     }
 
@@ -124,7 +133,8 @@ public final class AgentKernelBuilder {
             AgentReasoningStrategy selectedReasoningStrategy = reasoningStrategy == null
                     ? new ReactReasoningStrategy(fixedToolRegistry) : reasoningStrategy;
             String strategyId = requireStrategyId(selectedReasoningStrategy);
-            return new AgentLoopKernel(model, modelRetryOptions,
+            ModelCapacityCatalog capacities = ModelCapacityCatalog.withOverrides(modelCapacities);
+            return new AgentLoopKernel(model, modelRetryOptions, capacities,
                     selectedReasoningStrategy, strategyId,
                     new AgentProtocolRegistry(registeredProtocolCodecs),
                     new AgentActionRegistry(registeredActionHandlers),

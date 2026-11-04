@@ -151,23 +151,6 @@ public final class RetryPolicy {
         return shouldRetryByCause(error);
     }
 
-    /**
-     * 保留原因：只匹配最外层异常，ExecutionException 包装 BusinessException 仍会重试。
-     */
-    @SuppressWarnings("unused")
-    private boolean shouldRetryForRollback(Throwable error) {
-        if (error == null || error instanceof Error) {
-            return false;
-        }
-        if (matches(notRetryOn, error)) {
-            return false;
-        }
-        if (retryOn.isEmpty()) {
-            return true;
-        }
-        return matches(retryOn, error);
-    }
-
     private boolean shouldRetryByCause(Throwable error) {
         if (error == null || error instanceof Error) {
             return false;

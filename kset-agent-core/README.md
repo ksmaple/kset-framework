@@ -238,9 +238,21 @@ AgentResult result = kernel.run(request);
 
 `AgentReasoningStrategy` 只负责生成本轮模型请求和校验语义动作。默认 `ReactReasoningStrategy` 的 planning、acting、evaluating、answering 阶段不会进入循环内核。
 
+默认 ReAct 在每轮提供允许的内置动作列表，内置 JSON Codec 仅提示这些动作的格式；未提供列表的自定义策略仍获得完整 v1 协议提示。规划阶段的工具目录只列名称与用途，执行和评估阶段包含参数结构，回答分片开始后不再列工具目录。完整工具描述仍保留在 `ModelRequest.attributes.tools`，由模型适配器按需选择。首个 `answer_chunk` 可在规划、执行或评估阶段开始回答；之后只能继续分片或给出最终回答。
+
+可信调用方可用 `request.withSystemPromptPrefix("固定规则")` 提供本次调用的系统提示前缀；Kernel 在每轮把它放在策略系统提示前，Codec 随后补充协议格式，自定义策略也适用。恢复调用须再次提供同一前缀；它不写入运行快照，也不自动跨调用缓存。空白或非字符串前缀以 `INVALID_REQUEST` 拒绝，过长前缀仍受 `maxPromptChars` 限制。模型适配器不得从请求属性再次拼接该前缀。
+
 默认 ReAct 只将计划、回答分片、待处理动作和阶段等问答循环状态投影给模型；快照中的宿主业务属性与协议 metadata 不会自动进入 `ModelRequest`。`ModelRequest.attributes` 由策略提供给模型适配器按需读取，不能整张 Map 直接转发给供应商。需要额外业务上下文时由宿主的自定义 Strategy 明确选择字段。Core 不识别用户、角色或项目范围，也不执行工具权限判断；宿主提供本轮可见工具，并在工具执行时校验实际操作权限。`approvedToolCallIds` 与 `approvedConfirmationIds` 只表示用户对待处理动作的确认，不能替代权限校验。
 
-默认 ReAct 将观察结果作为带边界的 JSON 数据片段传给模型，转义工具内容中的边界符、换行和引号，并提示模型不得把观察内容当作指令。`AgentLoopOptions.maxObservationSummaryChars` 默认将每条模型可见摘要限制在 4096 个 UTF-16 代码单元；观察区总预算为 `maxPromptChars` 的一半，包含标题与省略计数，超出时保留最近的观察并标出较早观察的省略数量。摘要优先保留能容纳的完整 `callId`，过长时会标记截断；摘要不能代替快照或工具账本中的权威身份。`ModelRequest.attributes.observationSummaries` 只含这些摘要；原始结果仍完整保存在 `AgentRunSnapshot.observations`，由宿主决定持久化和脱敏。内核在协议补充系统提示后按 Java `String.length()` 检查 systemPrompt 与 userPrompt 合计长度，默认上限 32768 个 UTF-16 代码单元；取消、线程中断及活动超时优先，随后超限才以 `CAPACITY_LIMIT/FAILED` 停止。该上限不等于 Token 预算，也不包含模型适配器自行拼装的属性和供应商请求，适配器仍需核对实际模型窗口。旧九参数 `AgentLoopOptions` 构造器使用两个默认上限。
+默认 ReAct 将观察结果作为带边界的 JSON 数据片段传给模型，转义工具内容中的边界符、换行和引号，并提示模型不得把观察内容当作指令。`AgentLoopOptions.maxObservationSummaryChars` 默认将每条模型可见摘要限制在 4096 个 UTF-16 代码单元；观察区总预算为 `maxPromptChars` 的一半，包含标题与省略计数，超出时保留最近的观察并标出较早观察的省略数量。摘要优先保留能容纳的完整 `callId`，过长时会标记截断；摘要不能代替快照或工具账本中的权威身份。`ModelRequest.attributes.observationSummaries` 只含这些摘要；原始结果仍完整保存在 `AgentRunSnapshot.observations`，由宿主决定持久化和脱敏。内核在协议补充系统提示后按 Java `String.length()` 检查 systemPrompt 与 userPrompt 合计长度，默认上限 32768 个 UTF-16 代码单元；超限时默认 ReAct 逐级缩减观察区并重新准备协议提示，最多尝试 16 次。任务、固定前缀、协议要求、工具目录和待处理状态不参与压缩；仍超限则以 `CAPACITY_LIMIT/FAILED` 停止，取消、线程中断及活动超时优先。该字符上限不等于 Token 预算。旧九参数 `AgentLoopOptions` 构造器使用两个默认上限。
+
+内置容量通过 `BuiltInModels.list()` 对外提供不可变模型列表，`BuiltInModels.find(modelName)` 按完整模型 ID 查询。固定模型的 lambda 适配器可用 `AgentModel.named(modelName, delegate)` 绑定 ID；Runtime 可直接使用 `AgentRuntime.builder(modelName, model)`，按请求选模型的工厂则为每个返回的适配器分别绑定 ID。已有适配器也可实现 `AgentModel.modelName(request)` 返回本轮实际 ID。Core 在调用前按实例配置优先、内置目录回退的顺序检查文本上下文预算；`ModelRequest.maxOutputTokens` 为正时，按所选容量的最大输出数与剩余文本预算收紧，原值为 0 时保持 0（不指定输出上限）。Core 对两段 Prompt 的 UTF-8 字节数作保守的文本预算估算。模型名未配置且内置目录未收录，或适配器未报告模型名时，沿用现有行为。具名包装会保留委托适配器的 `AgentModelCapacity` 能力。适配器可实现 `AgentModelCapacity.promptCapacity(request)`，对完整供应商请求计数并返回实际输入 Token 数与扣除输出预留后的可用输入上限。Core 在调用模型前按该结果自动压缩 ReAct 观察区，重新计数直到满足窗口；不可压缩时返回 `CAPACITY_LIMIT`。未实现此接口时，Core 无法判断工具、多模态内容和供应商包装字段的真实 Token 用量；输出上限未指定时，适配器还须按供应商实际采用的输出预留检查窗口，并在发送前自行校验。
+
+业务方可在 `AgentLoopKernel.builder(model)` 或 `AgentRuntime.builder(modelName, model)` 上调用 `modelCapacity(new ModelCapacity(provider, modelName, contextTokens, maxOutputTokens))`，登记私有模型或覆盖同名内置模型的容量。例如 `AgentRuntime.builder("private-model", model).modelCapacity(new ModelCapacity("Private", "private-model", 32_000, 4_096)).build()`。容量配置在构建时固定到当前实例；重复登记同一 ID（忽略大小写）会报配置错误，不影响其他实例或 `BuiltInModels`。`ModelCapacityCatalog.withOverrides(customModels).list()/find(modelName)` 可查询合并后的只读目录。未登记的 ID 回退内置容量，输出上限为 0 时仍保持不指定；业务容量不能代替适配器对完整供应商请求的 Token 校验。
+
+目录同时收录已核实的旧版 ID：OpenAI `gpt-6-sol`、GPT-5.6 系列、`gpt-4.1`，Claude 4.5 系列（含 Opus、Sonnet、Haiku 的日期快照 ID），以及 Gemini 3.6、3.5、2.5 系列。`gpt-5.6` 是指向 GPT-5.6 Sol 的官方别名。`gpt-4.1` 和 Gemini 2.5 已标记弃用；Google 文档说明 Gemini 2.5 API 目前仅向既有用户开放，并将于 2026-12-01 起自动路由到新模型。目录表达 Token 容量，不保证某个账号仍可调用这些旧版 ID。
+
+提示投影只输出非空观察字段；回答分片已在状态中累积时，不再把对应观察重复放入模型提示。计划创建标记和阶段仍可由策略与适配器读取，但不在用户提示中重复列出。工具结果的错误码、可用的完整 `callId`、待处理动作以及快照原始观察保持不变。
 
 接入 Plan-and-Execute、Supervisor 或其他策略时，实现 `AgentReasoningStrategy` 并通过构建器替换即可，无需修改协议注册和停止控制。
 

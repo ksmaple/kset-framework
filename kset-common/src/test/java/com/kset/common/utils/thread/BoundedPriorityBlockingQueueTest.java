@@ -2,6 +2,8 @@ package com.kset.common.utils.thread;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -70,6 +72,40 @@ class BoundedPriorityBlockingQueueTest {
             Thread.sleep(50);
             assertThat(queue.poll()).isEqualTo(1);
             assertThat(future.get(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(queue.poll()).isEqualTo(2);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void drainToWakesBlockedProducer() throws Exception {
+        BoundedPriorityBlockingQueue<Integer> queue = new BoundedPriorityBlockingQueue<>(1);
+        queue.put(1);
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            var future = pool.submit(() -> queue.put(2));
+            Thread.sleep(50);
+            List<Integer> drained = new ArrayList<>();
+            assertThat(queue.drainTo(drained)).isEqualTo(1);
+            future.get(1, TimeUnit.SECONDS);
+            assertThat(drained).containsExactly(1);
+            assertThat(queue.poll()).isEqualTo(2);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void clearWakesBlockedProducer() throws Exception {
+        BoundedPriorityBlockingQueue<Integer> queue = new BoundedPriorityBlockingQueue<>(1);
+        queue.put(1);
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            var future = pool.submit(() -> queue.put(2));
+            Thread.sleep(50);
+            queue.clear();
+            future.get(1, TimeUnit.SECONDS);
             assertThat(queue.poll()).isEqualTo(2);
         } finally {
             pool.shutdownNow();

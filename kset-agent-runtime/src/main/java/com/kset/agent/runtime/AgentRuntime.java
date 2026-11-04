@@ -15,6 +15,8 @@ import com.kset.agent.core.loop.AgentRunState;
 import com.kset.agent.core.model.AgentModel;
 import com.kset.agent.core.model.AgentModelRetryOptions;
 import com.kset.agent.core.model.ModelCallMetrics;
+import com.kset.agent.core.model.ModelCapacity;
+import com.kset.agent.core.model.ModelCapacityCatalog;
 import com.kset.agent.core.model.ModelResponse;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
 import com.kset.agent.core.stop.AgentStopPolicy;
@@ -60,6 +62,7 @@ public final class AgentRuntime {
     private final Clock clock;
     private final AgentRunIdGenerator agentRunIdGenerator;
     private final AgentModelRetryOptions modelRetryOptions;
+    private final List<ModelCapacity> modelCapacities;
 
     private AgentRuntime(Builder builder) {
         model = builder.model;
@@ -76,10 +79,16 @@ public final class AgentRuntime {
         clock = builder.clock;
         agentRunIdGenerator = builder.agentRunIdGenerator;
         modelRetryOptions = builder.modelRetryOptions;
+        modelCapacities = List.copyOf(builder.modelCapacities);
+        ModelCapacityCatalog.withOverrides(modelCapacities);
     }
 
     public static Builder builder(AgentModel model) {
         return new Builder(model);
+    }
+
+    public static Builder builder(String modelName, AgentModel model) {
+        return new Builder(AgentModel.named(modelName, model));
     }
 
     public AgentResult run(AgentRequest request, AgentBusinessContext context) {
@@ -130,6 +139,7 @@ public final class AgentRuntime {
                 .checkpoints(checkpointPort)
                 .clock(clock)
                 .modelRetry(modelRetryOptions);
+        modelCapacities.forEach(builder::modelCapacity);
         if (agentRunIdGenerator != null) {
             builder.agentRunIdGenerator(agentRunIdGenerator);
         }
@@ -170,6 +180,7 @@ public final class AgentRuntime {
         private Clock clock = Clock.systemUTC();
         private AgentRunIdGenerator agentRunIdGenerator;
         private AgentModelRetryOptions modelRetryOptions = AgentModelRetryOptions.defaults();
+        private final List<ModelCapacity> modelCapacities = new ArrayList<>();
 
         private Builder(AgentModel model) {
             this.model = Objects.requireNonNull(model, "model");
@@ -177,6 +188,12 @@ public final class AgentRuntime {
 
         public Builder modelFactory(Function<AgentBusinessContext, AgentModel> factory) {
             modelFactory = Objects.requireNonNull(factory, "factory");
+            return this;
+        }
+
+        /** Registers a model capacity for this Runtime; custom IDs override built-in entries. */
+        public Builder modelCapacity(ModelCapacity capacity) {
+            modelCapacities.add(Objects.requireNonNull(capacity, "capacity"));
             return this;
         }
 

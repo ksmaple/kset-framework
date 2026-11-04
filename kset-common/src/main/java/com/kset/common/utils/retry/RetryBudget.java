@@ -5,6 +5,8 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.LongSupplier;
 
 /**
  * 进程内重试预算：限制「重试次数 / 首次调用」比例，避免下游故障时重试把本机和下游打满。
@@ -23,16 +25,21 @@ public final class RetryBudget {
     private final int minRetriesPerWindow;
     private final long windowMs;
 
-    private final Object lock = new Object();
-    private final AtomicLong windowStart = new AtomicLong(System.currentTimeMillis());
-    private final AtomicLong primaries = new AtomicLong();
-    private final AtomicLong retries = new AtomicLong();
+    private final LongSupplier clock;
+    private final AtomicReference<Window> current;
 
     private RetryBudget(String name, double maxRetryRatio, int minRetriesPerWindow, long windowMs) {
+        this(name, maxRetryRatio, minRetriesPerWindow, windowMs, System::currentTimeMillis);
+    }
+
+    RetryBudget(String name, double maxRetryRatio, int minRetriesPerWindow,
+                long windowMs, LongSupplier clock) {
         this.name = name;
         this.maxRetryRatio = maxRetryRatio;
         this.minRetriesPerWindow = minRetriesPerWindow;
         this.windowMs = windowMs;
+        this.clock = clock;
+        this.current = new AtomicReference<>(new Window(clock.getAsLong()));
     }
 
     /**
@@ -92,17 +99,8 @@ public final class RetryBudget {
         NAMED.clear();
     }
 
-    /**
-     * 保留原因：同名第二次 of 忽略比例/窗口，测试与生产会静默用错预算。
-     */
-    @SuppressWarnings("unused")
-    private static RetryBudget ofForRollback(String name, double maxRetryRatio, int minRetriesPerWindow, Duration window) {
-        return NAMED.computeIfAbsent(name, ignored ->
-                new RetryBudget(name, maxRetryRatio, minRetriesPerWindow, window.toMillis()));
-    }
-
     private static RetryBudget namedBudget(String name, double maxRetryRatio, int minRetriesPerWindow, Duration window) {
-        long windowMs = window.toMillis();
+        long windowMs = Math.max(1L, window.toMillis());
         return NAMED.compute(name, (key, existing) -> {
             if (existing == null) {
                 return new RetryBudget(name, maxRetryRatio, minRetriesPerWindow, windowMs);
@@ -145,70 +143,55 @@ public final class RetryBudget {
     }
 
     private void recordPrimaryAtomic() {
-        rotateWindow();
-        primaries.incrementAndGet();
+        while (true) {
+            Window window = currentWindow();
+            window.primaries.incrementAndGet();
+            if (current.get() == window) {
+                return;
+            }
+        }
     }
 
     private boolean tryRetryAtomic() {
-        rotateWindow();
         while (true) {
-            long primaryCount = primaries.get();
-            long retryCount = retries.get();
+            Window window = currentWindow();
+            long primaryCount = window.primaries.get();
+            long retryCount = window.retries.get();
             long allowed = Math.max(minRetriesPerWindow, (long) Math.floor(primaryCount * maxRetryRatio));
             if (retryCount >= allowed) {
-                return false;
+                if (current.get() == window) {
+                    return false;
+                }
+                continue;
             }
-            if (retries.compareAndSet(retryCount, retryCount + 1L)) {
+            if (window.retries.compareAndSet(retryCount, retryCount + 1L)
+                    && current.get() == window) {
                 return true;
             }
         }
     }
 
-    private void rotateWindow() {
-        long start = windowStart.get();
-        long now = System.currentTimeMillis();
-        if (now - start < windowMs) {
-            return;
-        }
-        if (windowStart.compareAndSet(start, now)) {
-            primaries.set(0L);
-            retries.set(0L);
-        }
-    }
-
-    /**
-     * 保留原因：全实例一把 synchronized，热路径争用高。
-     */
-    @SuppressWarnings("unused")
-    private void recordPrimaryForRollback() {
-        synchronized (lock) {
-            rotateWindowForRollback();
-            primaries.incrementAndGet();
-        }
-    }
-
-    /**
-     * 保留原因：全实例一把 synchronized，热路径争用高。
-     */
-    @SuppressWarnings("unused")
-    private boolean tryRetryForRollback() {
-        synchronized (lock) {
-            rotateWindowForRollback();
-            long allowed = Math.max(minRetriesPerWindow, (long) Math.floor(primaries.get() * maxRetryRatio));
-            if (retries.get() >= allowed) {
-                return false;
+    private Window currentWindow() {
+        while (true) {
+            Window window = current.get();
+            long now = clock.getAsLong();
+            if (now - window.startedAt < windowMs) {
+                return window;
             }
-            retries.incrementAndGet();
-            return true;
+            Window next = new Window(now);
+            if (current.compareAndSet(window, next)) {
+                return next;
+            }
         }
     }
 
-    private void rotateWindowForRollback() {
-        long now = System.currentTimeMillis();
-        if (now - windowStart.get() >= windowMs) {
-            windowStart.set(now);
-            primaries.set(0L);
-            retries.set(0L);
+    private static final class Window {
+        private final long startedAt;
+        private final AtomicLong primaries = new AtomicLong();
+        private final AtomicLong retries = new AtomicLong();
+
+        private Window(long startedAt) {
+            this.startedAt = startedAt;
         }
     }
 }

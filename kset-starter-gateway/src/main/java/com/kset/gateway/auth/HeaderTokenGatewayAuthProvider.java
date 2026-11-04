@@ -39,19 +39,6 @@ public class HeaderTokenGatewayAuthProvider implements GatewayAuthProvider {
         return authenticateConfiguredToken(exchange);
     }
 
-    /**
-     * 保留原因：请求头任意非空即放行，打开 auth-enabled 后形同虚设。
-     */
-    @SuppressWarnings("unused")
-    private Mono<Void> authenticateForRollback(ServerWebExchange exchange) {
-        String header = properties.getGateway().getAuthTokenHeader();
-        String token = exchange.getRequest().getHeaders().getFirst(header);
-        if (StringUtils.hasText(token)) {
-            return Mono.empty();
-        }
-        return unauthorized(exchange);
-    }
-
     private Mono<Void> authenticateConfiguredToken(ServerWebExchange exchange) {
         String expected = properties.getGateway().getAuthToken();
         if (!StringUtils.hasText(expected)) {

@@ -39,13 +39,6 @@ import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
 import org.springframework.core.annotation.Order;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
-
-import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -114,22 +107,6 @@ public class KsetGatewayAutoConfiguration {
     @Order(-2)
     public ErrorWebExceptionHandler ksetGatewayErrorWebExceptionHandler(Environment environment) {
         return new KsetGatewayErrorHandler(GatewayErrorResponse.configuredTraceHeader(environment));
-    }
-
-    /**
-     * 保留原因（feature-key=dubbo-error-response, change-id=dubbo-error-response-v1）：
-     * 原网关兜底响应只用于回滚对照，不再承接生产请求。
-     */
-    @SuppressWarnings("unused")
-    private ErrorWebExceptionHandler gatewayErrorHandlerForRollback() {
-        return (ServerWebExchange exchange, Throwable ex) -> {
-            exchange.getResponse().setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR);
-            exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-            String body = "{\"code\":-1,\"message\":\"Gateway error\",\"data\":null}";
-            DataBuffer buffer = exchange.getResponse().bufferFactory()
-                    .wrap(body.getBytes(StandardCharsets.UTF_8));
-            return exchange.getResponse().writeWith(Mono.just(buffer));
-        };
     }
 
     @Bean

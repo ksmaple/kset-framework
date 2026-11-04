@@ -25,21 +25,6 @@ public class AuthGatewayFilter implements GlobalFilter, Ordered {
         return authenticateThenContinue(exchange, chain);
     }
 
-    /**
-     * 保留原因：1.0.11 把 provider 返回的任意 Mono 直接结束过滤链，empty 无法放行。
-     * 对应变更：empty 放行并继续 chain，已提交/错误状态才短路。
-     */
-    @SuppressWarnings("unused")
-    private Mono<Void> filterForRollback(ServerWebExchange exchange, GatewayFilterChain chain) {
-        for (GatewayAuthProvider provider : authProviders) {
-            Mono<Void> result = provider.authenticate(exchange);
-            if (result != null) {
-                return result;
-            }
-        }
-        return chain.filter(exchange);
-    }
-
     private Mono<Void> authenticateThenContinue(ServerWebExchange exchange, GatewayFilterChain chain) {
         for (GatewayAuthProvider provider : authProviders) {
             Mono<Void> result = provider.authenticate(exchange);

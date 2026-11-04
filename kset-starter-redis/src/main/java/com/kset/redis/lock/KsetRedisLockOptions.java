@@ -79,14 +79,6 @@ public final class KsetRedisLockOptions {
         return watchdog;
     }
 
-    /**
-     * 保留原因：lease=0 被当成 watchdog，误传 Duration.ZERO 会拿到直到 unlock 才放的锁。
-     */
-    @SuppressWarnings("unused")
-    private boolean watchdogForRollback() {
-        return leaseTime != null && leaseTime.isZero();
-    }
-
     public Duration waitTime() {
         return waitTime;
     }

@@ -2,6 +2,7 @@ package com.kset.schedule;
 
 import com.kset.schedule.lock.JdbcTaskLockProvider;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -11,6 +12,9 @@ import java.sql.DatabaseMetaData;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -18,6 +22,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class JdbcTaskLockProviderTest {
@@ -28,7 +34,7 @@ class JdbcTaskLockProviderTest {
     @Test
     void acquiresLockWhenExistingLockExpired() {
         mockDbNow();
-        when(jdbcTemplate.update(contains("UPDATE"), any(), any(), any(), eq("taskA"), any()))
+        when(jdbcTemplate.update(contains("lock_until <= ?"), any(), any(), any(), eq("taskA"), any()))
                 .thenReturn(1);
 
         assertThat(provider.tryLock("taskA", Duration.ofMinutes(10))).isTrue();
@@ -59,13 +65,63 @@ class JdbcTaskLockProviderTest {
     @Test
     void unlockShortensLockUntilWithAtLeastFor() {
         mockDbNow();
-        when(jdbcTemplate.update(contains("SET lock_until"), any(), eq("taskA"), anyString()))
+        when(jdbcTemplate.update(contains("fencing_token = fencing_token + 1"),
+                any(), any(), anyString(), eq("taskA"), any()))
                 .thenReturn(1);
 
+        assertThat(provider.tryLock("taskA", Duration.ofMinutes(10))).isTrue();
         provider.unlock("taskA", Duration.ofSeconds(30));
 
-        org.mockito.Mockito.verify(jdbcTemplate)
-                .update(contains("SET lock_until"), any(), eq("taskA"), anyString());
+        ArgumentCaptor<String> acquiredOwner = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate).update(contains("fencing_token = fencing_token + 1"),
+                any(), any(), acquiredOwner.capture(), eq("taskA"), any());
+        verify(jdbcTemplate).update(contains("WHERE name = ? AND locked_by = ?"),
+                any(), eq("taskA"), eq(acquiredOwner.getValue()));
+    }
+
+    @Test
+    void staleExecutionCannotReleaseNewLockOnSameInstance() throws Exception {
+        mockDbNow();
+        when(jdbcTemplate.update(contains("fencing_token = fencing_token + 1"),
+                any(), any(), anyString(), eq("taskA"), any()))
+                .thenReturn(1);
+
+        CountDownLatch firstAcquired = new CountDownLatch(1);
+        CountDownLatch secondAcquired = new CountDownLatch(1);
+        CountDownLatch oldReleased = new CountDownLatch(1);
+        var pool = Executors.newFixedThreadPool(2);
+        try {
+            var oldExecution = pool.submit(() -> {
+                boolean acquired = provider.tryLock("taskA", Duration.ofSeconds(1));
+                firstAcquired.countDown();
+                secondAcquired.await();
+                provider.unlock("taskA", Duration.ZERO);
+                oldReleased.countDown();
+                return acquired;
+            });
+            var newExecution = pool.submit(() -> {
+                firstAcquired.await();
+                boolean acquired = provider.tryLock("taskA", Duration.ofSeconds(1));
+                secondAcquired.countDown();
+                oldReleased.await();
+                provider.unlock("taskA", Duration.ZERO);
+                return acquired;
+            });
+            assertThat(oldExecution.get(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(newExecution.get(2, TimeUnit.SECONDS)).isTrue();
+        } finally {
+            pool.shutdownNow();
+        }
+
+        ArgumentCaptor<String> acquiredOwners = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> releasedOwners = ArgumentCaptor.forClass(String.class);
+        verify(jdbcTemplate, times(2)).update(contains("fencing_token = fencing_token + 1"),
+                any(), any(), acquiredOwners.capture(), eq("taskA"), any());
+        verify(jdbcTemplate, times(2)).update(contains("WHERE name = ? AND locked_by = ?"),
+                any(), eq("taskA"), releasedOwners.capture());
+        assertThat(acquiredOwners.getAllValues().get(0)).isNotEqualTo(acquiredOwners.getAllValues().get(1));
+        assertThat(releasedOwners.getAllValues()).containsExactly(
+                acquiredOwners.getAllValues().get(0), acquiredOwners.getAllValues().get(1));
     }
 
     @Test

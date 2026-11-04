@@ -119,14 +119,6 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
         delayExecutor.schedule(withCapturedContext(() -> publishDelayNow(payload, callback)), delayMillis, TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * 保留原因：延迟/异步线程不恢复 KsetContext 与 Trace，监听器读不到登录用户和 trace。
-     */
-    @SuppressWarnings("unused")
-    private Runnable withCapturedContextForRollback(Runnable task) {
-        return task;
-    }
-
     private Runnable withCapturedContext(Runnable task) {
         KsetContextSnapshot context = KsetContext.capture();
         TraceSnapshot trace = Monitor.capture();
@@ -178,29 +170,6 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
         }
     }
 
-    /**
-     * 保留原因：延迟发布失败只记监控，调用方无感知。
-     */
-    @SuppressWarnings("unused")
-    private void publishDelayForRollback(Object event, long delayMillis) {
-        if (delayMillis < 0) {
-            throw new IllegalArgumentException("delayMillis must not be negative");
-        }
-        Object payload = requireEvent(event);
-        EventMonitorSupport.logScheduled(payload, delayMillis);
-        delayExecutor.schedule(() -> {
-            MonitorTransaction transaction = EventMonitorSupport.beginPublish("delay", payload);
-            try {
-                publisher.publishEvent(new SpringEventWrapper(payload));
-                EventMonitorSupport.success(transaction);
-            } catch (Throwable throwable) {
-                EventMonitorSupport.fail(transaction, throwable, "publishDelay", payload);
-            } finally {
-                EventMonitorSupport.close(transaction);
-            }
-        }, delayMillis, TimeUnit.MILLISECONDS);
-    }
-
     @Override
     public void publishOrderly(Object event, String hashKey) {
         publishOrderlySerialized(event, hashKey);
@@ -213,25 +182,6 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
     }
 
     private void doPublishOrderly(Object event, String hashKey) {
-        Object payload = requireEvent(event);
-        MonitorTransaction transaction = EventMonitorSupport.beginPublish("orderly", payload);
-        EventMonitorSupport.addData(transaction, "hashKey", hashKey);
-        try {
-            publisher.publishEvent(new OrderlyEventWrapper(payload, hashKey));
-            EventMonitorSupport.success(transaction);
-        } catch (RuntimeException | Error e) {
-            EventMonitorSupport.fail(transaction, e, "publishOrderly", payload);
-            throw e;
-        } finally {
-            EventMonitorSupport.close(transaction);
-        }
-    }
-
-    /**
-     * 保留原因：同 hashKey 并发发布不串行，无法保证本地顺序。
-     */
-    @SuppressWarnings("unused")
-    private void publishOrderlyForRollback(Object event, String hashKey) {
         Object payload = requireEvent(event);
         MonitorTransaction transaction = EventMonitorSupport.beginPublish("orderly", payload);
         EventMonitorSupport.addData(transaction, "hashKey", hashKey);
@@ -297,18 +247,6 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
     @Override
     public void destroy() {
         shutdownLifecycle();
-    }
-
-    /**
-     * 保留原因（feature-key=graceful-lifecycle, change-id=graceful-lifecycle-v1）：停机硬关实现，
-     * 优雅停机异常或未接入统一启停时用于恢复原行为。
-     */
-    @SuppressWarnings("unused")
-    public void destroyForRollback() {
-        delayExecutor.shutdownNow();
-        if (ownedAsyncExecutor != null) {
-            ownedAsyncExecutor.shutdownNow();
-        }
     }
 
     private Object requireEvent(Object event) {

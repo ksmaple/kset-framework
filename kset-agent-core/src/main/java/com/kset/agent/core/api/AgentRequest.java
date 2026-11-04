@@ -8,6 +8,7 @@ import com.kset.agent.core.stop.AgentCancellation;
 import com.kset.agent.core.value.AgentValueSnapshot;
 
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -28,6 +29,7 @@ public record AgentRequest(
     public static final String APPROVED_TOOL_CALL_IDS = "agent.approvedToolCallIds";
     public static final String REJECTED_CONFIRMATION_IDS = "agent.rejectedConfirmationIds";
     public static final String REJECTED_TOOL_CALL_IDS = "agent.rejectedToolCallIds";
+    public static final String SYSTEM_PROMPT_PREFIX = "agent.systemPromptPrefix";
     private static final String CORE_ATTRIBUTE_PREFIX = "agent.";
     private static final String REACT_ATTRIBUTE_PREFIX = "react.";
 
@@ -53,10 +55,17 @@ public record AgentRequest(
             if (isReservedAttribute(key) && !APPROVED_CONFIRMATION_IDS.equals(key)
                     && !APPROVED_TOOL_CALL_IDS.equals(key)
                     && !REJECTED_CONFIRMATION_IDS.equals(key)
-                    && !REJECTED_TOOL_CALL_IDS.equals(key)) {
+                    && !REJECTED_TOOL_CALL_IDS.equals(key)
+                    && !SYSTEM_PROMPT_PREFIX.equals(key)) {
                 throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
                         "request attribute uses a reserved key: " + key);
             }
+        }
+        if (attributes.containsKey(SYSTEM_PROMPT_PREFIX)
+                && (!(attributes.get(SYSTEM_PROMPT_PREFIX) instanceof String prefix)
+                || prefix.isBlank())) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
+                    "system prompt prefix must be a non-blank string");
         }
         cancellation = cancellation == null ? AgentCancellation.none() : cancellation;
     }
@@ -82,6 +91,20 @@ public record AgentRequest(
                     "agentRunId must not be blank");
         }
         return new AgentRequest(agentRunId, task, protocolId, options, attributes, cancellation);
+    }
+
+    public String systemPromptPrefix() {
+        return (String) attributes.get(SYSTEM_PROMPT_PREFIX);
+    }
+
+    public AgentRequest withSystemPromptPrefix(String prefix) {
+        if (prefix == null || prefix.isBlank()) {
+            throw new AgentCoreException(AgentErrorCode.INVALID_REQUEST,
+                    "system prompt prefix must be a non-blank string");
+        }
+        Map<String, Object> updated = new LinkedHashMap<>(attributes);
+        updated.put(SYSTEM_PROMPT_PREFIX, prefix);
+        return new AgentRequest(agentRunId, task, protocolId, options, updated, cancellation);
     }
 
     public boolean isConfirmationApproved(String confirmationId) {

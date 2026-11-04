@@ -15,6 +15,10 @@ public record ModelRequest(
         int maxOutputTokens,
         Map<String, Object> attributes) {
 
+    /** Optional built-in action names used by protocol codecs to narrow model instructions. */
+    public static final String ALLOWED_STANDARD_ACTION_TYPES_ATTRIBUTE =
+            "allowedStandardActionTypes";
+
     public ModelRequest {
         systemPrompt = systemPrompt == null ? "" : systemPrompt;
         userPrompt = userPrompt == null ? "" : userPrompt;
@@ -25,6 +29,10 @@ public record ModelRequest(
     }
 
     public ModelRequest withSystemPrompt(String systemPrompt) {
+        return new ModelRequest(systemPrompt, userPrompt, maxOutputTokens, attributes);
+    }
+
+    public ModelRequest withMaxOutputTokens(int maxOutputTokens) {
         return new ModelRequest(systemPrompt, userPrompt, maxOutputTokens, attributes);
     }
 }

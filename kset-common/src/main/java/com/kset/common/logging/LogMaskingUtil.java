@@ -61,34 +61,6 @@ public class LogMaskingUtil {
         maskNodeByField(node, null);
     }
 
-    /**
-     * 保留原因：字段名用 contains 子串匹配，且只处理文本节点，数值与数组标量会漏脱敏。
-     * （deprecation：内部使用的 ObjectNode.fields() 已过时，回滚恢复时可改为 properties()）
-     */
-    @SuppressWarnings({"unused", "deprecation"})
-    private static void maskNodeForRollback(JsonNode node) {
-        if (node.isObject()) {
-            ObjectNode obj = (ObjectNode) node;
-            obj.fields().forEachRemaining(entry -> {
-                String key = entry.getKey().toLowerCase();
-                JsonNode value = entry.getValue();
-                if (value.isTextual()) {
-                    obj.set(entry.getKey(), TextNode.valueOf(maskValue(key, value.asText())));
-                } else if (value.isObject() || value.isArray()) {
-                    maskNodeForRollback(value);
-                }
-            });
-        } else if (node.isArray()) {
-            ArrayNode arr = (ArrayNode) node;
-            for (int i = 0; i < arr.size(); i++) {
-                JsonNode elem = arr.get(i);
-                if (elem.isObject() || elem.isArray()) {
-                    maskNodeForRollback(elem);
-                }
-            }
-        }
-    }
-
     private static void maskNodeByField(JsonNode node, String parentField) {
         if (node.isObject()) {
             ObjectNode obj = (ObjectNode) node;
@@ -151,19 +123,6 @@ public class LogMaskingUtil {
         return keyMatchesToken(key, patterns);
     }
 
-    /**
-     * 保留原因：key.contains 会把 monkey、author 等非子段名误判为敏感字段。
-     */
-    @SuppressWarnings("unused")
-    private static boolean keyMatchesForRollback(String key, Set<String> patterns) {
-        for (String p : patterns) {
-            if (key.contains(p)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static boolean keyMatchesToken(String fieldName, Set<String> patterns) {
         if (fieldName == null || fieldName.isBlank()) {
             return false;
@@ -214,18 +173,6 @@ public class LogMaskingUtil {
 
     private static String maskEmail(String email) {
         return maskEmailOrPlain(email);
-    }
-
-    /**
-     * 保留原因：无 @ 时 substring(-1) 抛 StringIndexOutOfBoundsException。
-     */
-    @SuppressWarnings("unused")
-    private static String maskEmailForRollback(String email) {
-        int at = email.indexOf('@');
-        if (at <= 1) {
-            return "****" + email.substring(at);
-        }
-        return email.charAt(0) + "***" + email.substring(at);
     }
 
     private static String maskEmailOrPlain(String email) {

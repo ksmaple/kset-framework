@@ -1,6 +1,7 @@
 package com.kset.agent.core.value;
 
 import java.lang.reflect.Array;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -82,9 +83,16 @@ public final class AgentValueSnapshot {
     private static Map<String, Object> snapshotMap(
             Map<?, ?> values, IdentityHashMap<Object, Boolean> visiting,
             boolean rejectNullTopLevelValues) {
+        if (values instanceof SnapshotMap frozen) {
+            if (rejectNullTopLevelValues && frozen.hasNullValues) {
+                throw new IllegalArgumentException("structured map values must not be null");
+            }
+            return frozen;
+        }
         enter(values, visiting);
         try {
             Map<String, Object> result = new LinkedHashMap<>();
+            boolean hasNullValues = false;
             for (Map.Entry<?, ?> entry : values.entrySet()) {
                 if (!(entry.getKey() instanceof String key)) {
                     throw new IllegalArgumentException("structured map keys must be strings");
@@ -92,11 +100,46 @@ public final class AgentValueSnapshot {
                 if (rejectNullTopLevelValues && entry.getValue() == null) {
                     throw new IllegalArgumentException("structured map values must not be null");
                 }
+                hasNullValues |= entry.getValue() == null;
                 result.put(key, snapshot(entry.getValue(), visiting));
             }
-            return Collections.unmodifiableMap(result);
+            return new SnapshotMap(result, hasNullValues);
         } finally {
             visiting.remove(values);
+        }
+    }
+
+    private static final class SnapshotMap extends AbstractMap<String, Object>
+            implements java.io.Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        private final Map<String, Object> values;
+        private final boolean hasNullValues;
+
+        private SnapshotMap(Map<String, Object> values, boolean hasNullValues) {
+            this.values = Collections.unmodifiableMap(values);
+            this.hasNullValues = hasNullValues;
+        }
+
+        @Override
+        public Set<Entry<String, Object>> entrySet() {
+            return values.entrySet();
+        }
+
+        @Override
+        public Object get(Object key) {
+            return values.get(key);
+        }
+
+        @Override
+        public boolean containsKey(Object key) {
+            return values.containsKey(key);
+        }
+
+        @Override
+        public int size() {
+            return values.size();
         }
     }
 

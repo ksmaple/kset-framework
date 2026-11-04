@@ -1,6 +1,5 @@
 package com.kset.common.utils.date;
 
-import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -696,14 +695,6 @@ public class DateHelper {
             return builtIn;
         }
         return FORMATTERS.computeIfAbsent(pattern, DateTimeFormatter::ofPattern);
-    }
-
-    /**
-     * 保留原因：每次 new SimpleDateFormat，热路径分配高。
-     */
-    @SuppressWarnings("unused")
-    private static SimpleDateFormat formatterForRollback(String pattern) {
-        return new SimpleDateFormat(pattern);
     }
 
     private static Date copyOf(Date value) {

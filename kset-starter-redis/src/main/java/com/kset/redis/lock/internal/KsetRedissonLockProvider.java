@@ -68,32 +68,6 @@ public final class KsetRedissonLockProvider {
         }
     }
 
-    /**
-     * 保留原因：等待锁时 InterruptedException 被当成未抢到，调用方无法区分取消与竞争失败。
-     */
-    @SuppressWarnings("unused")
-    private Optional<KsetRedisLock> tryLockAllForRollback(Collection<String> lockKeys,
-                                                          Duration waitTime,
-                                                          Duration leaseTime) {
-        List<String> keys = normalizeKeys(lockKeys);
-        if (keys.isEmpty()) {
-            throw new IllegalArgumentException("lockKeys must not be empty");
-        }
-        Duration wait = waitTime != null ? waitTime : defaultWaitTime;
-        Duration lease = ttlPolicy.requireTtl(leaseTime != null ? leaseTime : defaultLeaseTime);
-        RLock rLock = toRedissonLock(keys);
-        try {
-            boolean acquired = rLock.tryLock(wait.toMillis(), lease.toMillis(), TimeUnit.MILLISECONDS);
-            if (!acquired) {
-                return Optional.empty();
-            }
-            return Optional.of(wrapScope(keys, rLock));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return Optional.empty();
-        }
-    }
-
     public KsetRedisLock lockBlocking(String lockKey, Duration leaseTime) {
         return lockBlockingAll(List.of(lockKey), leaseTime);
     }

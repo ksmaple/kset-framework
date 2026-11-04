@@ -85,21 +85,6 @@ public final class AgentRunState {
                 null, null, null);
     }
 
-    // agent-core / agent-core-20261010-17: retain the prior answer restoration for rollback.
-    @SuppressWarnings("unused")
-    private static AgentRunState restoreForRollback(AgentRunSnapshot snapshot, Instant now) {
-        if (snapshot.version() != AgentRunSnapshot.CURRENT_VERSION) {
-            throw new AgentCoreException(AgentErrorCode.UNSUPPORTED_SNAPSHOT_VERSION,
-                    "unsupported agent snapshot version: " + snapshot.version());
-        }
-        return new AgentRunState(
-                snapshot.agentRunId(), snapshot.task(), snapshot.protocolId(), AgentRunStatus.RUNNING,
-                snapshot.turn(), snapshot.startedAt(), now,
-                snapshot.observations(), snapshot.attributes(),
-                snapshot.consecutiveProtocolErrors(), snapshot.consecutiveNoProgress(),
-                snapshot.answer(), null, null);
-    }
-
     AgentRunState nextTurn(Instant now) {
         return copy(AgentRunStatus.RUNNING, turn + 1, now, observations, attributes,
                 consecutiveProtocolErrors, consecutiveNoProgress, answer, null, null);
@@ -145,7 +130,7 @@ public final class AgentRunState {
         Map<String, Object> nextAttributes = new LinkedHashMap<>(attributes);
         // Batch approval checks still need the original member while the full batch is in flight.
         if (action instanceof ToolBatchAction
-                && nextAttributes.containsKey(StandardActionHandlers.PENDING_BATCH)) {
+                && nextAttributes.containsKey(StandardActionHandlers.PENDING_ACTION)) {
             nextAttributes.put(StandardActionHandlers.APPROVAL_PENDING_ACTION,
                     nextAttributes.get(StandardActionHandlers.PENDING_ACTION));
         }
@@ -208,37 +193,12 @@ public final class AgentRunState {
                 stopDecision);
     }
 
-    // agent-core / agent-core-20261010-17: retain the mixed terminal text mapping for rollback.
-    @SuppressWarnings("unused")
-    private AgentRunState applyForRollback(AgentActionResult result, Instant now) {
-        List<AgentObservation> nextObservations = new ArrayList<>(observations);
-        nextObservations.addAll(result.observations());
-        Map<String, Object> nextAttributes = new LinkedHashMap<>(attributes);
-        result.removedStateAttributes().forEach(nextAttributes::remove);
-        nextAttributes.putAll(result.stateAttributes());
-        int noProgress = result.madeProgress() ? 0 : consecutiveNoProgress + 1;
-        AgentRunStatus nextRunStatus = result.requestedRunStatus() == null
-                ? runStatus : result.requestedRunStatus();
-        String terminalText = result.requestedRunStatus() == AgentRunStatus.SUSPENDED
-                ? result.suspensionMessage() : result.answer();
-        String nextAnswer = terminalText == null ? answer : terminalText;
-        return copy(nextRunStatus, turn, now, nextObservations, nextAttributes,
-                consecutiveProtocolErrors, noProgress, nextAnswer, null, stopDecision);
-    }
-
     AgentRunState stopped(AgentStopDecision decision, Instant now) {
         return copy(decision.runStatus(), turn, now, observations, attributes,
                 consecutiveProtocolErrors, consecutiveNoProgress,
                 decision.runStatus() == AgentRunStatus.COMPLETED ? answer : null,
                 decision.runStatus() == AgentRunStatus.SUSPENDED ? suspensionMessage : null,
                 decision);
-    }
-
-    // agent-core / agent-core-20261010-17: retain the prior terminal answer mapping for rollback.
-    @SuppressWarnings("unused")
-    private AgentRunState stoppedForRollback(AgentStopDecision decision, Instant now) {
-        return copy(decision.runStatus(), turn, now, observations, attributes,
-                consecutiveProtocolErrors, consecutiveNoProgress, answer, null, decision);
     }
 
     public AgentRunSnapshot snapshot() {

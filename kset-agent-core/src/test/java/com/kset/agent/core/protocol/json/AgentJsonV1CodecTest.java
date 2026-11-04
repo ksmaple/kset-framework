@@ -15,6 +15,7 @@ import com.kset.agent.core.api.AgentResult;
 import com.kset.agent.core.api.AgentRunStatus;
 import com.kset.agent.core.loop.AgentLoopKernel;
 import com.kset.agent.core.loop.AgentLoopOptions;
+import com.kset.agent.core.model.ModelRequest;
 import com.kset.agent.core.model.ModelResponse;
 import com.kset.agent.core.protocol.AgentDecision;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
@@ -33,6 +34,28 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AgentJsonV1CodecTest {
 
     private final AgentJsonV1Codec codec = new AgentJsonV1Codec(new ObjectMapper());
+
+    @Test
+    void preparesOnlyAllowedActionShapesWhenStrategyProvidesThem() {
+        ModelRequest request = new ModelRequest("Finish the answer", "task", 0,
+                Map.of(ModelRequest.ALLOWED_STANDARD_ACTION_TYPES_ATTRIBUTE,
+                        List.of("answer_chunk", "final_answer")));
+
+        String narrowed = codec.prepare(request, null).systemPrompt();
+        String full = codec.prepare(new ModelRequest("", "task", 0, Map.of()), null)
+                .systemPrompt();
+        String invalidHint = codec.prepare(new ModelRequest("", "task", 0,
+                Map.of(ModelRequest.ALLOWED_STANDARD_ACTION_TYPES_ATTRIBUTE,
+                        List.of("unknown"))), null)
+                .systemPrompt();
+
+        assertThat(narrowed).contains("answer_chunk", "final_answer")
+                .doesNotContain("task_plan", "tool_call", "tool_batch", "confirmation");
+        assertThat(narrowed.length()).isLessThan(full.length());
+        assertThat(full).contains("task_plan", "tool_call", "tool_batch",
+                "answer_chunk", "final_answer", "confirmation");
+        assertThat(invalidHint).isEqualTo(full);
+    }
 
     @Test
     void mapsAllSixBuiltInActionShapesAndMetadata() {

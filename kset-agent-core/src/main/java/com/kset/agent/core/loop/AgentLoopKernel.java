@@ -24,7 +24,10 @@ import com.kset.agent.core.event.AgentLifecycleStepType;
 import com.kset.agent.core.execution.AgentExecutionContext;
 import com.kset.agent.core.id.AgentRunIdGenerator;
 import com.kset.agent.core.model.AgentModel;
+import com.kset.agent.core.model.AgentModelCapacity;
 import com.kset.agent.core.model.AgentModelRetryOptions;
+import com.kset.agent.core.model.ModelCapacity;
+import com.kset.agent.core.model.ModelCapacityCatalog;
 import com.kset.agent.core.model.ModelRequest;
 import com.kset.agent.core.model.ModelResponse;
 import com.kset.agent.core.protocol.AgentDecision;
@@ -40,6 +43,7 @@ import com.kset.agent.core.stop.AgentStopReason;
 import com.kset.agent.core.strategy.AgentReasoningStrategy;
 import com.kset.agent.core.strategy.AgentTurn;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -62,6 +66,8 @@ import java.util.function.Consumer;
  */
 public final class AgentLoopKernel {
 
+    private static final int MAX_PROMPT_COMPACTION_ATTEMPTS = 16;
+
     private static final Set<String> STANDARD_ACTION_TYPES = Set.of(
             StandardActionTypes.TASK_PLAN,
             StandardActionTypes.TOOL_CALL,
@@ -72,6 +78,7 @@ public final class AgentLoopKernel {
 
     private final AgentModel model;
     private final AgentModelRetryOptions modelRetryOptions;
+    private final ModelCapacityCatalog modelCapacities;
     private final AgentReasoningStrategy reasoningStrategy;
     private final String strategyAttributePrefix;
     private final AgentProtocolRegistry protocolRegistry;
@@ -93,6 +100,7 @@ public final class AgentLoopKernel {
 
     AgentLoopKernel(AgentModel model,
                     AgentModelRetryOptions modelRetryOptions,
+                    ModelCapacityCatalog modelCapacities,
                     AgentReasoningStrategy reasoningStrategy,
                     String strategyId,
                     AgentProtocolRegistry protocolRegistry,
@@ -104,6 +112,7 @@ public final class AgentLoopKernel {
                     AgentRunIdGenerator agentRunIdGenerator) {
         this.model = requireConfiguration(model, "model");
         this.modelRetryOptions = requireConfiguration(modelRetryOptions, "modelRetryOptions");
+        this.modelCapacities = requireConfiguration(modelCapacities, "modelCapacities");
         this.reasoningStrategy = requireConfiguration(
                 reasoningStrategy, "reasoningStrategy");
         this.strategyAttributePrefix = requireConfiguration(strategyId, "strategyId") + ".";
@@ -243,19 +252,43 @@ public final class AgentLoopKernel {
                 }
                 AgentProtocolCodec codec = protocolRegistry.require(turn.protocolId());
                 AgentProtocolContext protocolContext = new AgentProtocolContext(request, state);
-                ModelRequest modelRequest = prepareModelRequest(
+                ModelRequest preparedModelRequest = prepareModelRequest(
                         codec, turn.modelRequest(), protocolContext);
                 AgentStopDecision beforeModel = stopController.evaluateImmediate(
                         stopContext(request, state, executionStartedAt, deadline, events));
                 if (beforeModel.shouldStop()) {
                     return finish(request, state, beforeModel, events);
                 }
-                if ((long) modelRequest.systemPrompt().length()
-                        + modelRequest.userPrompt().length() > request.options().maxPromptChars()) {
+                ModelRequest fittedModelRequest = fitModelRequest(preparedModelRequest, request);
+                int compressionAttempts = 0;
+                while (fittedModelRequest == null
+                        && compressionAttempts < MAX_PROMPT_COMPACTION_ATTEMPTS) {
+                    AgentStopDecision duringCompression = stopController.evaluateImmediate(
+                            stopContext(request, state, executionStartedAt, deadline, events));
+                    if (duringCompression.shouldStop()) {
+                        return finish(request, state, duringCompression, events);
+                    }
+                    AgentTurn compacted = compactPrompt(request, state, turn);
+                    if (compacted == null) {
+                        break;
+                    }
+                    compressionAttempts++;
+                    turn = compacted;
+                    preparedModelRequest = prepareModelRequest(
+                            codec, turn.modelRequest(), protocolContext);
+                    fittedModelRequest = fitModelRequest(preparedModelRequest, request);
+                }
+                AgentStopDecision afterCompression = stopController.evaluateImmediate(
+                        stopContext(request, state, executionStartedAt, deadline, events));
+                if (afterCompression.shouldStop()) {
+                    return finish(request, state, afterCompression, events);
+                }
+                if (fittedModelRequest == null) {
                     return finish(request, state, AgentStopDecision.stop(
                             AgentStopReason.CAPACITY_LIMIT, AgentRunStatus.FAILED,
-                            "model prompt exceeds maxPromptChars"), events);
+                            "model prompt exceeds available capacity"), events);
                 }
+                ModelRequest modelRequest = fittedModelRequest;
                 Instant modelStartedAt = clock.instant();
                 LifecycleEvents.LifecycleStep modelStep = events.beginStep(
                         AgentLifecycleStepType.MODEL, "model", modelStartedAt);
@@ -659,10 +692,28 @@ public final class AgentLoopKernel {
         }
     }
 
+    private AgentTurn compactPrompt(AgentRequest request, AgentRunState state,
+                                    AgentTurn current) {
+        try {
+            AgentTurn compacted = reasoningStrategy.compactPrompt(request, state, current);
+            if (compacted != null && !compacted.protocolId().equals(state.protocolId())) {
+                throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
+                        "reasoning strategy changed the run protocol during prompt compression");
+            }
+            return compacted;
+        } catch (AgentCoreException error) {
+            throw error;
+        } catch (RuntimeException error) {
+            throw new AgentCoreException(AgentErrorCode.STRATEGY_EXECUTION_FAILED,
+                    "reasoning strategy failed to compact prompt: " + errorMessage(error), error);
+        }
+    }
+
     private ModelRequest prepareModelRequest(
             AgentProtocolCodec codec, ModelRequest request, AgentProtocolContext context) {
         try {
-            ModelRequest prepared = codec.prepare(request, context);
+            ModelRequest prepared = codec.prepare(
+                    applySystemPromptPrefix(request, context.request()), context);
             if (prepared == null) {
                 throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
                         "protocol codec returned null model request");
@@ -674,6 +725,61 @@ public final class AgentLoopKernel {
             throw new AgentCoreException(AgentErrorCode.PROTOCOL_CODEC_FAILED,
                     "protocol request preparation failed: " + errorMessage(error), error);
         }
+    }
+
+    private ModelRequest applySystemPromptPrefix(ModelRequest request, AgentRequest agentRequest) {
+        String prefix = agentRequest.systemPromptPrefix();
+        if (prefix == null) {
+            return request;
+        }
+        String system = request.systemPrompt();
+        return request.withSystemPrompt(system.isBlank()
+                ? prefix : prefix + "\n\n" + system);
+    }
+
+    private ModelRequest limitModelRequest(ModelRequest request, ModelCapacity capacity) {
+        if (capacity == null) {
+            return request;
+        }
+        // UTF-8 byte count is a conservative text-only allowance; adapters must count their
+        // complete provider request, including tools and multimodal content, before sending it.
+        long promptBytes = (long) request.systemPrompt().getBytes(StandardCharsets.UTF_8).length
+                + request.userPrompt().getBytes(StandardCharsets.UTF_8).length;
+        long available = (long) capacity.contextTokens() - promptBytes;
+        if (available < 1L) {
+            return null;
+        }
+        if (request.maxOutputTokens() == 0) {
+            return request;
+        }
+        int outputLimit = (int) Math.min(Math.min(available, capacity.maxOutputTokens()),
+                request.maxOutputTokens());
+        return request.withMaxOutputTokens(outputLimit);
+    }
+
+    private ModelRequest fitModelRequest(ModelRequest prompt, AgentRequest request) {
+        if ((long) prompt.systemPrompt().length() + prompt.userPrompt().length()
+                > request.options().maxPromptChars()) {
+            return null;
+        }
+        ModelCapacity selectedCapacity = modelCapacities.find(model.modelName(prompt)).orElse(null);
+        ModelRequest bounded = limitModelRequest(prompt, selectedCapacity);
+        if (bounded == null) {
+            return null;
+        }
+        if (model instanceof AgentModelCapacity capacityModel) {
+            var capacity = capacityModel.promptCapacity(bounded);
+            if (capacity == null) {
+                throw new AgentCoreException(AgentErrorCode.EXTENSION_CONTRACT_VIOLATION,
+                        "model returned null prompt capacity");
+            }
+            if (capacity.exceedsLimit() || selectedCapacity != null
+                    && capacity.inputTokens() > (long) selectedCapacity.contextTokens()
+                            - bounded.maxOutputTokens()) {
+                return null;
+            }
+        }
+        return bounded;
     }
 
     private ModelCallOutcome generateModelWithRetry(

@@ -44,22 +44,6 @@ public class KsetLoggingEnvironmentPostProcessor implements EnvironmentPostProce
         environment.getPropertySources().addLast(new MapPropertySource(PROPERTY_SOURCE_NAME, defaults));
     }
 
-    /**
-     * 保留原因（feature-key=logging-default-profile, change-id=logging-profile-narrow-v1）：
-     * 原实现会向 Spring 环境注入 {@code spring.profiles.default=dev}，裸配应用静默落入 dev 语义；
-     * 现收窄为仅在日志层内部按 dev 判定（未配 profile 时 Spring 隐式 default profile 已匹配 logback 的 dev,default 组）。
-     * 如需恢复环境注入行为，在 {@link #postProcessEnvironment} 中重新调用本方法。
-     */
-    @SuppressWarnings("unused")
-    private void putDefaultProfileForRollback(ConfigurableEnvironment environment,
-                                              Map<String, Object> defaults,
-                                              String defaultProfile) {
-        if (!environment.containsProperty(PROFILES_DEFAULT_KEY)
-                && !environment.containsProperty(PROFILES_ACTIVE_KEY)) {
-            defaults.put(PROFILES_DEFAULT_KEY, defaultProfile);
-        }
-    }
-
     private static String resolveDefaultProfile(ConfigurableEnvironment environment) {
         return environment.getProperty(
                 DEFAULT_PROFILE_KEY,

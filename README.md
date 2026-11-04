@@ -16,7 +16,7 @@ Git 修改、提交与推送约定见 [Git 工作流](docs/git-workflow.md)。
 
 > 自 `kset-comm` 更名为 `kset-framework`：根聚合 `artifactId`、BOM `kset-boot-parent`、Starter `kset-starter-*`；子模块 `kset-common` 名称不变。
 
-当前构件版本以 `kset-boot-parent` 的 `<version>` 为准（现为 `1.0.17-SNAPSHOT`）。发布到仓库后去掉 `-SNAPSHOT`。
+当前构件版本以 `kset-boot-parent` 的 `<version>` 为准（现为 `1.0.17`）。
 
 ## 模块结构
 
@@ -52,6 +52,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | `kset-starter-web` | `com.kset.web` | Web 自动配置、`@OpLog`、`ApiResponse` |
 | `kset-starter-auth` | `com.kset.auth` | 登录态、默认主体、多套鉴权、Gateway/Web/Dubbo 上下文透传 |
 | `kset-starter-monitor` | `com.kset.common.monitor` | TraceId Filter、MDC 实现、Dubbo / Gateway / 线程池 |
+| `kset-starter-schedule` | `com.kset.schedule` | 受管定时任务、唯一运行锁切面与 SQL 锁表 |
 | `kset-starter-datasource` | `com.kset.datasource` | JDBC、MyBatis-Plus、dynamic-datasource、自动填充 |
 | `kset-starter-cache` | `com.kset.cache` | 缓存门面、L1 Caffeine、注解 AOP、L2 SPI |
 | `kset-starter-redis` | `com.kset.redis` | Redis 模板、锁、排行榜 |
@@ -67,30 +68,12 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 
 ## 文档
 
-- [版本发布说明（CHANGELOG）](CHANGELOG.md)
+[文档中心](docs/README.md)统一维护场景使用、模块参考、设计契约和项目协作入口，避免在多处重复维护同一份目录。
 
-使用说明按场景放在 [docs/README.md](docs/README.md)。模块原理与配置项：
-
-| 文档 | 说明 |
-|------|------|
-| [docs/README.md](docs/README.md) | 场景索引（并行、重试、锁、事件、鉴权、网关等） |
-| [docs/design/resource-permission.md](docs/design/resource-permission.md) | 资源权限规范（功能码 / 资源 ACL 两平面；本仓暂无实现） |
-| [kset-boot-parent/README.md](kset-boot-parent/README.md) | Java 21、Spring Boot / Cloud / Alibaba / Dubbo 版本基线与发布 |
-| [kset-common/README.md](kset-common/README.md) | `ListHelper`、`DateHelper`、`KsetHttp`、线程池、随机、签名、`KsetContext` |
-| [kset-cloud/README.md](kset-cloud/README.md) | 云服务公共配置、Nacos 命名约定、灰度与规则 SPI |
-| [kset-starter-web/README.md](kset-starter-web/README.md) | Web、统一响应、异常、日志与 TraceId |
-| [kset-starter-auth/README.md](kset-starter-auth/README.md) | 登录态、多套主体鉴权、Gateway/Web/Dubbo 上下文透传 |
-| [kset-starter-monitor/README.md](kset-starter-monitor/README.md) | 全链路监控门面层、无感知矩阵与配置 |
-| [kset-starter-datasource/README.md](kset-starter-datasource/README.md) | 数据源、MyBatis-Plus、dynamic-datasource |
-| [kset-starter-cache/README.md](kset-starter-cache/README.md) | 多级缓存门面、注解、编程式 API、L1/L2、指标 |
-| [kset-starter-redis/README.md](kset-starter-redis/README.md) | Redis 统一抽象、强制 TTL、分布式锁、排行榜、多数据源 |
-| [kset-starter-nacos/README.md](kset-starter-nacos/README.md) | Nacos 注册发现/配置与公共配置导入 |
-| [kset-starter-sentinel/README.md](kset-starter-sentinel/README.md) | Sentinel 规则从 Nacos 加载 |
-| [kset-starter-dubbo/README.md](kset-starter-dubbo/README.md) | Dubbo RPC、Nacos 注册与灰度路由 |
-| [kset-starter-gateway/README.md](kset-starter-gateway/README.md) | Gateway 动态路由、灰度、Sentinel 与鉴权 SPI |
-| [kset-starter-mq/README.md](kset-starter-mq/README.md) | RocketMQ 事件门面实现与 topic/tag 约定 |
-| [kset-agent-core/README.md](kset-agent-core/README.md) | 稳定循环内核、默认 ReAct、版本化协议与扩展 API |
-| [kset-agent-runtime/README.md](kset-agent-runtime/README.md) | Agent 按次组装、业务上下文与 MCP 工具适配 |
+- **业务接入**：从[场景使用文档](docs/README.md#场景使用文档)选择对应指南。
+- **配置与 API**：进入[模块参考](docs/README.md#模块参考)，或检索[当前代码对象与字段](docs/design/current-object-fields.md)。
+- **版本升级**：阅读[版本发布说明](CHANGELOG.md)中的行为变化与升级指引。
+- **项目协作**：遵循 [Git 工作流](docs/git-workflow.md)。
 
 ## Starter 能力说明
 
@@ -284,7 +267,7 @@ mvn dependency:tree -Dverbose | findstr "omitted for conflict"
 <parent>
     <groupId>com.kset</groupId>
     <artifactId>kset-boot-parent</artifactId>
-    <version>1.0.17-SNAPSHOT</version>
+    <version>1.0.17</version>
 </parent>
 ```
 

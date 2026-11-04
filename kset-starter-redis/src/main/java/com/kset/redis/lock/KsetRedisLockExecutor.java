@@ -292,14 +292,6 @@ public class KsetRedisLockExecutor {
         return ttlPolicy.requireTtl(options.leaseTime() != null ? options.leaseTime() : provider.defaultLeaseTime());
     }
 
-    /**
-     * 保留原因：lease=0 走 requireTtl 直接拒绝，长任务无法选用 watchdog。
-     */
-    @SuppressWarnings("unused")
-    private Duration resolveLeaseForRollback(KsetRedisLockOptions options) {
-        return ttlPolicy.requireTtl(options.leaseTime() != null ? options.leaseTime() : provider.defaultLeaseTime());
-    }
-
     private RuntimeException toAcquireException(String lockKey, KsetRedisLockOptions options) {
         if (options.strategy() == KsetRedisLockStrategy.WAIT_THEN_FAIL) {
             Duration wait = options.waitTime() != null ? options.waitTime() : provider.defaultWaitTime();

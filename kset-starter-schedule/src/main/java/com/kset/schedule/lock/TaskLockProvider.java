@@ -4,6 +4,7 @@ import java.time.Duration;
 
 /**
  * 唯一运行锁提供器。抢锁成功返回 {@code true}，执行完毕后须调用 {@link #unlock}。
+ * 默认 JDBC 实现要求在抢锁线程释放，以准确匹配本次持有的锁。
  */
 public interface TaskLockProvider {
 
@@ -17,7 +18,7 @@ public interface TaskLockProvider {
     boolean tryLock(String name, Duration atMostFor);
 
     /**
-     * 释放锁：将锁有效期缩短为 now + atLeastFor（最短持锁，防秒级任务集群接力）。
+     * 释放锁：将本次持有的锁有效期缩短为 now + atLeastFor（最短持锁，防秒级任务集群接力）。
      */
     void unlock(String name, Duration atLeastFor);
 }

@@ -2,13 +2,21 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
-## [Unreleased] - v1.0.17-SNAPSHOT
+## [v1.0.17] - 2026-11-04
+
+本次构件仅安装到本地 Maven 仓库，未上传 Nexus。
 
 ### 新增
 
+- **Agent 内置模型容量**：公开 OpenAI、Claude、Gemini 模型列表与上下文/输出 Token 限额；支持固定模型适配器绑定 ID，调用前检查上下文并收紧显式输出预算，未指定上限保持原语义。
+- **Agent 自定义模型容量**：Core 与 Runtime 构建器支持登记私有模型容量或覆盖同名内置容量；实例级只读目录按模型 ID 查找，未配置时沿用内置值。
+- **Agent 旧版模型容量**：补充 `gpt-6-sol`、GPT-5.6/4.1、Claude 4.5（含日期快照 ID）与 Gemini 3.6/3.5/2.5 等官方可核实的旧版 ID。
 - **kset-agent-runtime**：新增按调用组装的 Agent Runtime，提供业务上下文透传、显式 Skill 工具集合和 MCP 客户端适配接口。工具可见性与确认不作为授权；业务工具或 MCP 服务在每次真实调用时校验权限。
 - **Agent 默认模型输入保护**：ReAct 观察内容改为带不可信边界的限长摘要，快照保留原始结果；提示字符数超限时在模型调用前以 `CAPACITY_LIMIT` 停止。
 - **Agent 模型输入字段**：默认 ReAct 的模型属性键改为 `observationSummaries`，单条摘要限额访问器改为 `maxObservationSummaryChars`；两项字符限额均按 UTF-16 代码单元计算。
+- **Agent 提示与分片**：修复默认 ReAct 无法接收首个 `answer_chunk`；按阶段缩减工具目录和 JSON 协议示例，保持 `agent-json:v1` wire 契约不变。
+- **Agent 提示精简**：支持请求提供可信的固定系统提示前缀；缩短阶段提示，省略重复的阶段状态、空观察字段及回答分片观察，保持原始快照与工具身份不变。
+- **Agent 容量压缩**：模型适配器可报告完整请求的 Token 用量与可用窗口；超限时 Core 自动缩减默认 ReAct 的观察摘要，保留任务和必要协议上下文，无法容纳时返回 `CAPACITY_LIMIT`。
 - **Agent 字段契约**：快照单个待处理工具访问器更名为 `pendingSingleToolCall()`；明确模型属性由策略提供、由适配器按需读取，以及 `progress` 对无进展计数的含义。
 - **kset-agent-core**：Java 21 + Jackson 的框架无关 Agent 内核。同步 `run/resume` 固定 `RunState → ModelResponse → Decision → Action → Observation → StopDecision` 循环；默认提供 ReAct 策略和不可覆盖的 `agent-json:v1`，支持注册模型、协议、策略、动作、工具、停止策略、检查点和生命周期监听器。
 - **执行与恢复契约**：集中处理取消、超时、轮次、协议错误、无进展和容量限制；模型仅对显式可重试故障进行有限重试。当前快照 v4 保存任务状态、批次批准和未知工具结果核验标记；`agentRunId` 为可恢复任务身份，标准工具使用结构化 `(agentRunId, callId)` 幂等键。确认恢复与 `RECONCILIATION_REQUIRED` 恢复须满足待处理动作和权威结果校验，会话单飞、持久化条件写及业务补偿由宿主负责。

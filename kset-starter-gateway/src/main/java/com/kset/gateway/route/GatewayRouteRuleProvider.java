@@ -82,16 +82,6 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
                 .subscribe(null, error -> log.warn("Failed to delete gateway route [{}]: {}", routeId, error.getMessage()));
     }
 
-    /**
-     * 保留原因（feature-key=gateway-route-repository, change-id=gateway-route-repository-v1）：
-     * 原 RouteDefinitionWriter 已废弃且裸 subscribe 无错误处理，迁移 RouteDefinitionRepository 后仅用于回滚对照。
-     */
-    @SuppressWarnings({"unused", "deprecation", "removal"})
-    private void saveRouteForRollback(org.springframework.cloud.gateway.route.RouteDefinitionWriter writer,
-                                      RouteDefinition definition) {
-        writer.save(Mono.just(definition)).subscribe();
-    }
-
     private void removeStaleRoutes(Set<String> newIds) {
         Set<String> toRemove = new HashSet<>(managedRouteIds);
         toRemove.removeAll(newIds);

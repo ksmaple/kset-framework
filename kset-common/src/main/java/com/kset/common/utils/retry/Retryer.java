@@ -142,23 +142,4 @@ public final class Retryer {
         return new RuntimeException(error);
     }
 
-    /**
-     * 保留原因：TimeoutException / InterruptedException 被包成普通 RuntimeException，调用方接不住语义。
-     */
-    @SuppressWarnings("unused")
-    private static RuntimeException asUncheckedForRollback(Throwable error) {
-        if (error == null) {
-            return new IllegalStateException("重试失败但没有异常");
-        }
-        if (error instanceof Error fatal) {
-            throw fatal;
-        }
-        if (error instanceof InterruptedException) {
-            Thread.currentThread().interrupt();
-        }
-        if (error instanceof RuntimeException runtime) {
-            return runtime;
-        }
-        return new RuntimeException(error);
-    }
 }
