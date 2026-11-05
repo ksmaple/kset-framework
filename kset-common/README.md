@@ -4,6 +4,19 @@
 
 业务接入示例：[并行](../docs/usage/parallel.md) · [重试](../docs/usage/retry.md) · [事件](../docs/usage/events.md) · [请求上下文](../docs/usage/context.md)
 
+## 本地服务引用
+
+仅引入 `kset-common` 时，可在 Spring Bean 的接口字段上使用 `com.kset.common.service.KsetReference` 注入本地服务，不需要 Dubbo 依赖：
+
+```java
+@KsetReference
+private OrderService orderService;
+```
+
+本地候选按 Spring 的 `@Primary` / `@Qualifier` 规则选择。没有本地实现且没有可用的远端适配器时，启动时报出缺少服务；字段必须是非静态、非 `final` 的接口字段。宿主机以后引入 `kset-starter-dubbo` 并配置注册中心，重启时可在本地缺失的情况下自动改用 Dubbo 引用。本地实现存在时始终优先使用本地实现。
+
+外部业务服务接口字段默认使用该注解；完整接入规则见[业务服务引用规范](../docs/usage/service-reference.md)。
+
 ## ListHelper（`com.kset.common.utils.collection`）
 
 列表分批、函数式转换、排序与空安全取用。日常单元素变换用 JDK Stream；IN 上限、Redis 分片、批量写库等用分批 API。

@@ -43,7 +43,13 @@ class LoginAuthGatewayFilterTest {
                 .build()));
         LoginAuthGatewayFilter filter = filter(store);
         MockServerWebExchange exchange = MockServerWebExchange.from(
-                MockServerHttpRequest.get("/api/orders").header(AuthHeaders.SESSION_TOKEN, "t1"));
+                MockServerHttpRequest.get("/api/orders")
+                        .header(AuthHeaders.SESSION_TOKEN, "t1")
+                        .header(AuthHeaders.APP_LOGIN_CONTEXT, "forged")
+                        .header(AuthHeaders.ADMIN_LOGIN_CONTEXT, "forged")
+                        .header(AuthHeaders.LOGIN_CONTEXT, "forged")
+                        .header(AuthHeaders.USER_ID, "attacker")
+                        .header(AuthHeaders.CLIENT_VERSION, "forged"));
         CapturingGatewayChain chain = new CapturingGatewayChain();
 
         filter.filter(exchange, chain).block();
@@ -58,6 +64,9 @@ class LoginAuthGatewayFilterTest {
         assertThat(chain.exchange.getRequest().getHeaders().getFirst(AuthHeaders.IP)).isEqualTo("10.0.0.1");
         assertThat(chain.exchange.getRequest().getHeaders().getFirst(AuthHeaders.LANGUAGE)).isEqualTo("zh-CN");
         assertThat(chain.exchange.getRequest().getHeaders().containsKey(AuthHeaders.USER_ID)).isFalse();
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey(AuthHeaders.ADMIN_LOGIN_CONTEXT)).isFalse();
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey(AuthHeaders.LOGIN_CONTEXT)).isFalse();
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey(AuthHeaders.CLIENT_VERSION)).isFalse();
     }
 
     @Test
@@ -90,12 +99,43 @@ class LoginAuthGatewayFilterTest {
     @Test
     void publicRuleBypassesAuth() {
         LoginAuthGatewayFilter filter = filter(mock(LoginSessionStore.class));
-        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/api/public/ping"));
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/public/ping")
+                        .header(AuthHeaders.AUTH_SUBJECT, "admin")
+                        .header(AuthHeaders.ADMIN_LOGIN_CONTEXT, "forged")
+                        .header(AuthHeaders.LOGIN_CONTEXT, "forged")
+                        .header(AuthHeaders.USER_ID, "attacker")
+                        .header(AuthHeaders.IP, "attacker-ip"));
         CapturingGatewayChain chain = new CapturingGatewayChain();
 
         filter.filter(exchange, chain).block();
 
         assertThat(chain.exchange).isNotNull();
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey(AuthHeaders.AUTH_SUBJECT)).isFalse();
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey(AuthHeaders.ADMIN_LOGIN_CONTEXT)).isFalse();
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey(AuthHeaders.LOGIN_CONTEXT)).isFalse();
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey(AuthHeaders.USER_ID)).isFalse();
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey(AuthHeaders.IP)).isFalse();
+    }
+
+    @Test
+    void publicRuleRemovesConfiguredTrustedHeaders() {
+        KsetAuthProperties properties = new KsetAuthProperties();
+        properties.setSubjectHeader("X-Custom-Subject");
+        KsetAuthProperties.AuthRule rule = new KsetAuthProperties.AuthRule();
+        rule.setTrustedHeaderName("X-Trusted-Identity");
+        properties.setRules(List.of(rule));
+        LoginAuthGatewayFilter filter = filter(properties, mock(LoginSessionStore.class));
+        MockServerWebExchange exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/public/ping")
+                        .header("X-Custom-Subject", "admin")
+                        .header("X-Trusted-Identity", "forged"));
+        CapturingGatewayChain chain = new CapturingGatewayChain();
+
+        filter.filter(exchange, chain).block();
+
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey("X-Custom-Subject")).isFalse();
+        assertThat(chain.exchange.getRequest().getHeaders().containsKey("X-Trusted-Identity")).isFalse();
     }
 
     @Test

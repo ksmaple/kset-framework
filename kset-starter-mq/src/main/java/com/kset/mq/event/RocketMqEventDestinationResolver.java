@@ -19,8 +19,12 @@ final class RocketMqEventDestinationResolver {
         String topic = annotation != null && StringUtils.hasText(annotation.topic())
                 ? annotation.topic()
                 : defaultTopic();
-        String tag = annotation != null ? annotation.tag() : null;
-        return destination(topic, tag);
+        return destination(topic, annotation != null ? annotation.tag() : null);
+    }
+
+    String tag(Object event) {
+        KsetMqEvent annotation = event.getClass().getAnnotation(KsetMqEvent.class);
+        return annotation != null ? annotation.tag() : null;
     }
 
     String destination(String topic, String tag) {

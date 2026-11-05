@@ -6,6 +6,7 @@ import com.kset.auth.core.AuthResult;
 import com.kset.auth.core.AuthRuleResolver;
 import com.kset.auth.core.LoginAuthService;
 import com.kset.auth.spi.LoginUserHeaderCodec;
+import com.kset.common.auth.AuthHeaders;
 import com.kset.common.auth.LoginUser;
 import com.kset.common.trace.TraceHeaders;
 import lombok.extern.slf4j.Slf4j;
@@ -16,16 +17,30 @@ import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
 public class LoginAuthGatewayFilter implements GlobalFilter, Ordered {
 
+    private static final Set<String> IDENTITY_HEADERS = Set.of(
+            AuthHeaders.AUTH_SUBJECT, AuthHeaders.LOGIN_CONTEXT,
+            AuthHeaders.USER_ID, AuthHeaders.USER_NAME, AuthHeaders.REAL_NAME,
+            AuthHeaders.NICK_NAME, AuthHeaders.AVATAR, AuthHeaders.MOBILE,
+            AuthHeaders.EMAIL, AuthHeaders.TENANT_ID, AuthHeaders.ORG_ID,
+            AuthHeaders.DEPT_ID, AuthHeaders.ROLES, AuthHeaders.PERMISSIONS,
+            AuthHeaders.DEVICE_ID, AuthHeaders.DEVICE_TYPE, AuthHeaders.CLIENT_TYPE,
+            AuthHeaders.CLIENT_VERSION, AuthHeaders.IP, AuthHeaders.LANGUAGE,
+            AuthHeaders.TIME_ZONE, AuthHeaders.LOGIN_TIME);
+
     private final KsetAuthProperties properties;
     private final LoginAuthService authService;
     private final LoginUserHeaderCodec headerCodec;
     private final GatewayAuthFailureHandler failureHandler;
+    private final Set<String> identityHeaders;
 
     public LoginAuthGatewayFilter(KsetAuthProperties properties,
                                   LoginAuthService authService,
@@ -35,6 +50,16 @@ public class LoginAuthGatewayFilter implements GlobalFilter, Ordered {
         this.authService = authService;
         this.headerCodec = headerCodec;
         this.failureHandler = failureHandler;
+        this.identityHeaders = new HashSet<>();
+        IDENTITY_HEADERS.forEach(header -> identityHeaders.add(header.toLowerCase(Locale.ROOT)));
+        if (properties.getSubjectHeader() != null) {
+            identityHeaders.add(properties.getSubjectHeader().toLowerCase(Locale.ROOT));
+        }
+        properties.getRules().stream()
+                .map(KsetAuthProperties.AuthRule::getTrustedHeaderName)
+                .filter(header -> header != null && !header.isBlank())
+                .map(header -> header.toLowerCase(Locale.ROOT))
+                .forEach(identityHeaders::add);
     }
 
     @Override
@@ -48,8 +73,10 @@ public class LoginAuthGatewayFilter implements GlobalFilter, Ordered {
                 AuthRuleResolver.SOURCE_GATEWAY,
                 exchange.getRequest().getMethod() != null ? exchange.getRequest().getMethod().name() : null,
                 queryParams(exchange)));
+        ServerHttpRequest.Builder requestBuilder = exchange.getRequest().mutate()
+                .headers(headers -> headers.keySet().removeIf(this::isIdentityHeader));
         if (result.isPermitAll()) {
-            return chain.filter(exchange);
+            return chain.filter(exchange.mutate().request(requestBuilder.build()).build());
         }
         if (!result.isAuthenticated() || result.getUser().isEmpty()) {
             try {
@@ -73,11 +100,16 @@ public class LoginAuthGatewayFilter implements GlobalFilter, Ordered {
                 // Authentication must not depend on logging.
             }
         }
-        ServerHttpRequest.Builder requestBuilder = exchange.getRequest().mutate();
         for (Map.Entry<String, String> entry : headerCodec.encode(user, false, user.getSubjectType()).entrySet()) {
-            requestBuilder.header(entry.getKey(), entry.getValue());
+            requestBuilder.headers(headers -> headers.set(entry.getKey(), entry.getValue()));
         }
         return chain.filter(exchange.mutate().request(requestBuilder.build()).build());
+    }
+
+    private boolean isIdentityHeader(String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        return identityHeaders.contains(lower)
+                || lower.startsWith("x-") && lower.endsWith("-login-context");
     }
 
     @Override

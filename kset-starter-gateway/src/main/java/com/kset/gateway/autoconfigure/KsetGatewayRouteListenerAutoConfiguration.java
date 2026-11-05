@@ -10,16 +10,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.env.Environment;
 
 import java.util.concurrent.Executor;
 
-@AutoConfiguration
+@AutoConfiguration(afterName = "com.kset.nacos.registrar.KsetCloudRuleRegistrarAutoConfiguration")
 @ConditionalOnClass(ConfigService.class)
 public class KsetGatewayRouteListenerAutoConfiguration {
 
     @Bean
+    @ConditionalOnMissingBean(name = "ksetCloudRuleRegistrar")
     public GatewayRouteNacosListener gatewayRouteNacosListener(
             ObjectProvider<ConfigService> configServiceProvider,
             GatewayRouteRuleProvider routeRuleProvider,

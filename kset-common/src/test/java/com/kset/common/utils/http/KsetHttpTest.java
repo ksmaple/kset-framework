@@ -6,6 +6,7 @@ import com.kset.common.monitor.facade.CompletedTransaction;
 import com.kset.common.monitor.facade.MonitorEvent;
 import com.kset.common.monitor.facade.MonitorFacade;
 import com.kset.common.monitor.facade.MonitorMetric;
+import com.kset.common.monitor.facade.MonitorStatus;
 import com.kset.common.monitor.facade.MonitorTypes;
 import com.kset.common.monitor.internal.DefaultMonitorFacade;
 import com.kset.common.monitor.reporter.NoOpMetricAggregator;
@@ -123,7 +124,7 @@ class KsetHttpTest {
             try {
                 release.await(5, TimeUnit.SECONDS);
                 byte[] body = "ok".getBytes(StandardCharsets.UTF_8);
-                exchange.sendResponseHeaders(200, body.length);
+                exchange.sendResponseHeaders(503, body.length);
                 exchange.getResponseBody().write(body);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -160,6 +161,7 @@ class KsetHttpTest {
 
             assertThat(completed.get()).isNotNull();
             assertThat(completed.get().type()).isEqualTo(MonitorTypes.HTTP_CLIENT);
+            assertThat(completed.get().status()).isEqualTo(MonitorStatus.FAIL);
             assertThat(completed.get().durationMs()).isGreaterThanOrEqualTo(100);
         } finally {
             release.countDown();

@@ -3,8 +3,6 @@ package com.kset.dubbo.autoconfigure;
 import com.alibaba.nacos.api.config.ConfigService;
 import com.alibaba.nacos.api.config.listener.Listener;
 import com.alibaba.nacos.api.exception.NacosException;
-import com.kset.cloud.config.KsetCloudProperties;
-import com.kset.dubbo.route.DubboRouteRuleHolder;
 import com.kset.dubbo.route.DubboRouteRuleProvider;
 import com.kset.cloud.nacos.NacosConfigConvention;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +15,7 @@ import org.springframework.core.env.Environment;
 
 import java.util.concurrent.Executor;
 
-@AutoConfiguration
+@AutoConfiguration(afterName = "com.kset.nacos.registrar.KsetCloudRuleRegistrarAutoConfiguration")
 @ConditionalOnClass(ConfigService.class)
 @Slf4j
 public class KsetDubboRouteBootstrapConfiguration {
@@ -27,12 +25,8 @@ public class KsetDubboRouteBootstrapConfiguration {
     public DubboRouteNacosBootstrap dubboRouteNacosBootstrap(
             ObjectProvider<ConfigService> configServiceProvider,
             DubboRouteRuleProvider routeRuleProvider,
-            KsetCloudProperties properties,
             NacosConfigConvention convention,
             Environment environment) {
-        DubboRouteRuleHolder.configureLocalDefault(
-                properties.getDubbo().getGrayMetadataKey(),
-                properties.getDubbo().getDefaultGrayTag());
         return new DubboRouteNacosBootstrap(configServiceProvider, routeRuleProvider, convention, environment);
     }
 

@@ -214,7 +214,7 @@ public final class KsetHttp {
                 return;
             }
             transaction.addData("status", String.valueOf(response.statusCode()));
-            transaction.setStatus(MonitorStatus.SUCCESS);
+            transaction.setStatus(response.statusCode() >= 400 ? MonitorStatus.FAIL : MonitorStatus.SUCCESS);
         }
 
         private void failure(Throwable error) {

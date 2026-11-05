@@ -18,7 +18,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 
 @Slf4j
@@ -26,7 +25,7 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
 
     private final RouteDefinitionRepository routeDefinitionRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final Set<String> managedRouteIds = ConcurrentHashMap.newKeySet();
+    private final Set<String> managedRouteIds = new HashSet<>();
 
     public GatewayRouteRuleProvider(RouteDefinitionRepository routeDefinitionRepository,
                                     ApplicationEventPublisher eventPublisher) {
@@ -40,7 +39,7 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
     }
 
     @Override
-    public void onRuleChanged(String jsonContent) {
+    public synchronized void onRuleChanged(String jsonContent) {
         if (jsonContent == null || jsonContent.isBlank()) {
             removeManagedRoutes();
             return;
@@ -58,44 +57,63 @@ public class GatewayRouteRuleProvider implements CloudRuleProvider {
                 definitions.add(def);
                 newIds.add(def.getId());
             }
-            removeStaleRoutes(newIds);
-            definitions.forEach(def -> saveRoute(def));
-            managedRouteIds.clear();
-            managedRouteIds.addAll(newIds);
-            eventPublisher.publishEvent(new RefreshRoutesEvent(this));
-            log.info("Gateway routes refreshed, count={}", definitions.size());
+            boolean changed = removeStaleRoutes(newIds);
+            for (RouteDefinition definition : definitions) {
+                if (saveRoute(definition)) {
+                    managedRouteIds.add(definition.getId());
+                    changed = true;
+                }
+            }
+            refreshRoutes(changed);
+            log.info("Gateway routes applied, managed={}", managedRouteIds.size());
         } catch (Exception e) {
             log.warn("Failed to refresh gateway routes: {}", e.getMessage());
         }
     }
 
-    /**
-     * 写入单条路由：错误进入日志而不是裸 subscribe 静默吞掉。
-     */
-    private void saveRoute(RouteDefinition definition) {
-        routeDefinitionRepository.save(Mono.just(definition))
-                .subscribe(null, error -> log.warn("Failed to save gateway route [{}]: {}", definition.getId(), error.getMessage()));
+    private boolean saveRoute(RouteDefinition definition) {
+        try {
+            routeDefinitionRepository.save(Mono.just(definition)).block();
+            return true;
+        } catch (RuntimeException error) {
+            log.warn("Failed to save gateway route [{}]", definition.getId(), error);
+            return false;
+        }
     }
 
-    private void deleteRoute(String routeId) {
-        routeDefinitionRepository.delete(Mono.just(routeId))
-                .subscribe(null, error -> log.warn("Failed to delete gateway route [{}]: {}", routeId, error.getMessage()));
+    private boolean deleteRoute(String routeId) {
+        try {
+            routeDefinitionRepository.delete(Mono.just(routeId)).block();
+            managedRouteIds.remove(routeId);
+            return true;
+        } catch (RuntimeException error) {
+            log.warn("Failed to delete gateway route [{}]", routeId, error);
+            return false;
+        }
     }
 
-    private void removeStaleRoutes(Set<String> newIds) {
+    private boolean removeStaleRoutes(Set<String> newIds) {
         Set<String> toRemove = new HashSet<>(managedRouteIds);
         toRemove.removeAll(newIds);
+        boolean changed = false;
         for (String routeId : toRemove) {
-            deleteRoute(routeId);
+            changed |= deleteRoute(routeId);
         }
+        return changed;
     }
 
     private void removeManagedRoutes() {
+        boolean changed = false;
         for (String routeId : new HashSet<>(managedRouteIds)) {
-            deleteRoute(routeId);
+            changed |= deleteRoute(routeId);
         }
-        managedRouteIds.clear();
-        eventPublisher.publishEvent(new RefreshRoutesEvent(this));
+        refreshRoutes(changed);
+    }
+
+    private void refreshRoutes(boolean changed) {
+        if (changed) {
+            eventPublisher.publishEvent(new RefreshRoutesEvent(this));
+        }
     }
 
     private RouteDefinition parseRoute(JsonNode node) {

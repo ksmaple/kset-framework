@@ -2,7 +2,7 @@
 
 默认是进程内 Spring 事件。引入 `kset-starter-mq` 且存在 `RocketMQClientTemplate` 后，同一套 API 切到 RocketMQ。
 
-业务只依赖 `EventFacade` / `EventHandler` / `SendCallback`。编程式指定 topic/tag 时再注入 `RocketMqEventOperations`（需要 `kset-starter-mq`）。
+发布业务依赖 `EventFacade` / `SendCallback`。进程内或内置 MQ 通配消费可使用 `EventHandler`；MQ 按 Tag 独立消费使用 `RocketMqTagEventConsumer`。编程式指定 topic/tag 时再注入 `RocketMqEventOperations`（需要 `kset-starter-mq`）。
 
 ## 发布
 
@@ -17,18 +17,6 @@ public class OrderService {
 
     public void created(OrderCreatedEvent event) {
         events.publish(event);
-        events.publishAsync(event, null);
-        events.publishDelay(event, 30_000L, new SendCallback() {
-            @Override
-            public void onSuccess() {
-            }
-
-            @Override
-            public void onException(Throwable error) {
-            }
-        });
-        events.publishOrderly(event, String.valueOf(event.userId()));
-        events.publishTransaction(event);
     }
 }
 ```
@@ -39,9 +27,9 @@ public class OrderService {
 | `publishAsync` | 异步；本地实现会带上调用线程的登录态和 Trace |
 | `publishDelay` | 延迟；本地失败打 error 并回调；MQ 在消息被接受时回调 |
 | `publishOrderly` | 本地按 `hashKey` 分 64 槽串行；跨进程 FIFO 需要 MQ |
-| `publishTransaction` | 有 Spring 事务时等提交后再发，没有则立刻发 |
+| `publishTransaction` | 有 Spring 事务时等提交后再发，没有则立刻发；不是 RocketMQ 事务消息 |
 
-事件对象不要为 `null`。延迟毫秒数不能为负。
+表中方法是不同发送方式，不应对同一次业务事件逐个调用。RocketMQ 的顺序、延时消息须使用对应消息类型的 Topic；见 [RocketMQ 使用规范](rocketmq.md)。事件对象不要为 `null`，延迟毫秒数不能为负。
 
 ## 消费
 
@@ -60,6 +48,6 @@ public class OrderCreatedHandler implements EventHandler<OrderCreatedEvent> {
 }
 ```
 
-MQ 侧建议给事件类加 `@KsetMqEvent(topic = "...", tag = "...")`。topic 为空时用 `rocketmq.producer.topic`，再空则 `{spring.application.name}-event`。
+上例中的 `EventHandler` 由内置通配消费者调用，多个处理器共用一次消息确认。MQ 业务需要失败隔离时，继承 `RocketMqTagEventConsumer<T>` 并为每个业务声明专属 Consumer Group；接入示例见 [Starter README](../../kset-starter-mq/README.md)。Topic、Tag、Consumer Group 的判断规则见 [RocketMQ 使用规范](rocketmq.md)。
 
 RocketMQ 配置见 [kset-starter-mq/README.md](../../kset-starter-mq/README.md)。

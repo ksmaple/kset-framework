@@ -49,12 +49,31 @@ public class KsetCloudRuleRegistrarAutoConfiguration {
 
             registerListener(configService, group, convention.dubboRouteDataId(appName),
                     CloudRuleType.DUBBO_ROUTE, providers);
-            registerListener(configService, group, convention.gatewayRouteDataId(appName),
-                    CloudRuleType.GATEWAY_ROUTE, providers);
+            if (properties.getGateway().isEnabled()) {
+                String gatewayDataId = properties.getGateway().getRouteDataId();
+                registerListener(configService, group,
+                        gatewayDataId != null && !gatewayDataId.isBlank()
+                                ? gatewayDataId : convention.gatewayRouteDataId(appName),
+                        CloudRuleType.GATEWAY_ROUTE, providers);
+            }
         }
 
         private void registerListener(ConfigService configService, String group, String dataId,
                                       CloudRuleType type, List<CloudRuleProvider> providers) {
+            List<CloudRuleProvider> matchingProviders = providers.stream()
+                    .filter(provider -> provider.ruleType() == type)
+                    .toList();
+            if (matchingProviders.isEmpty()) {
+                return;
+            }
+            try {
+                String initial = configService.getConfig(dataId, group, 5000);
+                if (initial != null) {
+                    matchingProviders.forEach(provider -> provider.onRuleChanged(initial));
+                }
+            } catch (NacosException e) {
+                log.warn("Failed to load initial CloudRuleProvider rules for dataId={}: {}", dataId, e.getMessage());
+            }
             try {
                 configService.addListener(dataId, group, new Listener() {
                     @Override
@@ -64,9 +83,7 @@ public class KsetCloudRuleRegistrarAutoConfiguration {
 
                     @Override
                     public void receiveConfigInfo(String configInfo) {
-                        providers.stream()
-                                .filter(p -> p.ruleType() == type)
-                                .forEach(p -> p.onRuleChanged(configInfo));
+                        matchingProviders.forEach(provider -> provider.onRuleChanged(configInfo));
                     }
                 });
                 log.info("Registered CloudRuleProvider listener: dataId={}, type={}", dataId, type);

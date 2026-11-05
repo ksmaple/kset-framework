@@ -17,11 +17,13 @@
 | Web 登录态、多套鉴权与网关可信请求头 | [登录鉴权](usage/auth.md) |
 | 一批独立任务并行执行、限制并发 | [并行批跑](usage/parallel.md) |
 | HTTP / RPC 瞬时失败重试 | [重试](usage/retry.md) |
+| 引用本地或 Dubbo 业务服务接口 | [业务服务引用规范](usage/service-reference.md) |
 | 跨线程传递登录态与 Trace | [请求上下文](usage/context.md) |
 | Redis 读写、Key 规范与强制 TTL | [Redis 读写](usage/redis.md) |
 | 使用 Redis 分布式锁 | [Redis 分布式锁](usage/redis-lock.md) |
 | 使用本地或 Redis 多级缓存 | [多级缓存](usage/cache.md) |
 | 发布 Spring 本地事件或 RocketMQ 消息 | [事件](usage/events.md) |
+| 规划 RocketMQ Topic、Tag 与消费者分组 | [RocketMQ 使用规范](usage/rocketmq.md) |
 | TraceId、业务埋点与跨线程观测 | [监控与 TraceId](usage/monitor.md) |
 | 接入 MyBatis-Plus 单库或多数据源 | [数据源](usage/datasource.md) |
 | 接入 Nacos、Sentinel 与 Dubbo | [云服务](usage/cloud.md) |
@@ -71,4 +73,5 @@
 | [项目根 README](../README.md) | 仓库结构、能力总览、版本矩阵、快速开始与构建 |
 | [版本发布说明](../CHANGELOG.md) | 版本变更、升级指引与发布流程 |
 | [Git 工作流](git-workflow.md) | 主工作树、提交范围、提交信息与推送约定 |
+| [本地 Docker 公共组件](../env/README.md) | Nacos、Redis、MySQL、PostgreSQL、RocketMQ 的连接、资源约定与操作命令 |
 | [AI 协作配置](../AGENTS.md) | 项目技能、协作规则与多平台索引 |

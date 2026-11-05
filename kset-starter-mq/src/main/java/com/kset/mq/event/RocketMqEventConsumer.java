@@ -26,31 +26,72 @@ public class RocketMqEventConsumer implements RocketMQListener {
 
     private final List<EventHandler<?>> handlers;
     private final ObjectMapper objectMapper;
+    private final boolean failOnUnhandled;
 
     public RocketMqEventConsumer(List<EventHandler<?>> handlers, ObjectMapper objectMapper) {
+        this(handlers, objectMapper, false);
+    }
+
+    public RocketMqEventConsumer(List<EventHandler<?>> handlers, ObjectMapper objectMapper, boolean failOnUnhandled) {
         this.handlers = List.copyOf(handlers);
         this.objectMapper = objectMapper;
+        this.failOnUnhandled = failOnUnhandled;
     }
 
     @Override
     public ConsumeResult consume(MessageView messageView) {
         String eventType = messageView.getProperties().get(RocketMqEventHeaders.EVENT_TYPE);
-        try {
-            Class<?> eventClass = Class.forName(eventType);
-            Object event = objectMapper.readValue(bytes(messageView.getBody()), eventClass);
-            try (MonitorScope ignored = Monitor.openScope(traceSnapshot(messageView))) {
-                dispatch(eventType, event);
-            }
-            return ConsumeResult.SUCCESS;
-        } catch (Throwable throwable) {
-            MonitorTransaction transaction = RocketMqEventMonitorSupport.beginConsume(eventType, null);
+        try (MonitorScope ignored = Monitor.openScope(traceSnapshot(messageView))) {
             try {
-                RocketMqEventMonitorSupport.fail(transaction, throwable, "consume", eventType);
-            } finally {
-                RocketMqEventMonitorSupport.close(transaction);
+                if (eventType == null || eventType.isBlank()) {
+                    if (failOnUnhandled) {
+                        throw new IllegalArgumentException("missing rocketmq event type");
+                    }
+                    return ConsumeResult.SUCCESS;
+                }
+                Class<?> eventClass;
+                try {
+                    eventClass = Class.forName(eventType);
+                } catch (ClassNotFoundException exception) {
+                    if (failOnUnhandled) {
+                        throw exception;
+                    }
+                    return ConsumeResult.SUCCESS;
+                }
+                if (!hasHandler(eventClass)) {
+                    if (failOnUnhandled) {
+                        throw new IllegalStateException("no rocketmq event handler for " + eventType);
+                    }
+                    return ConsumeResult.SUCCESS;
+                }
+                Object event = objectMapper.readValue(bytes(messageView.getBody()), eventClass);
+                dispatch(eventType, event);
+                return ConsumeResult.SUCCESS;
+            } catch (Throwable throwable) {
+                return fail(eventType, throwable);
             }
-            return ConsumeResult.FAILURE;
+        } catch (Throwable throwable) {
+            return fail(eventType, throwable);
         }
+    }
+
+    private ConsumeResult fail(String eventType, Throwable throwable) {
+        MonitorTransaction transaction = RocketMqEventMonitorSupport.beginConsume(eventType, null);
+        try {
+            RocketMqEventMonitorSupport.fail(transaction, throwable, "consume", eventType);
+        } finally {
+            RocketMqEventMonitorSupport.close(transaction);
+        }
+        return ConsumeResult.FAILURE;
+    }
+
+    private boolean hasHandler(Class<?> eventClass) {
+        for (EventHandler<?> handler : handlers) {
+            if (handler.eventType().isAssignableFrom(eventClass)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @SuppressWarnings("unchecked")

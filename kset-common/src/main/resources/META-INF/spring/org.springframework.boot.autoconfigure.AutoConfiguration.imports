@@ -1,2 +1,3 @@
 com.kset.common.event.autoconfigure.KsetEventAutoConfiguration
 com.kset.common.lifecycle.autoconfigure.KsetLifecycleAutoConfiguration
+com.kset.common.service.autoconfigure.KsetServiceReferenceAutoConfiguration

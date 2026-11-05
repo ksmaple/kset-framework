@@ -1,0 +1,150 @@
+name: kset-local
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    mem_limit: 384m
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+      - --innodb-buffer-pool-size=64M
+      - --max-connections=30
+      - --table-open-cache=256
+      - --performance-schema=OFF
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  redis:
+    image: redis:7.4.9-alpine
+    restart: unless-stopped
+    mem_limit: 128m
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:16379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  nacos:
+    image: nacos/nacos-server:v2.5.2
+    restart: unless-stopped
+    mem_limit: 640m
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+      JVM_XMS: 128m
+      JVM_XMX: 256m
+      JVM_XMN: 64m
+      TIME_ZONE: Asia/Shanghai
+    ports:
+      - "127.0.0.1:8848:8848"
+      - "127.0.0.1:9848:9848"
+    volumes:
+      - nacos-data:/home/nacos/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8848/nacos/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      TZ: Asia/Shanghai
+    command:
+      - postgres
+      - -c
+      - shared_buffers=32MB
+      - -c
+      - max_connections=30
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - timezone=Asia/Shanghai
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.5.0
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      HEAP_OPTS: -Xms64m -Xmx128m -Xmn32m
+    command: ["nameserver"]
+    ports:
+      - "127.0.0.1:9876:9876"
+    healthcheck:
+      test: ["CMD", "bash", "-c", ": > /dev/tcp/127.0.0.1/9876"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  rocketmq-store-init:
+    image: apache/rocketmq:5.5.0
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command: ["chown 3000:3000 /home/rocketmq/store"]
+    volumes:
+      - rocketmq-store:/home/rocketmq/store
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.5.0
+    restart: unless-stopped
+    mem_limit: 768m
+    environment:
+      HEAP_OPTS: -Xms128m -Xmx512m -Xmn64m -XX:MaxDirectMemorySize=128m
+    command: ["broker", "-n", "rocketmq-namesrv:9876", "--enable-proxy"]
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_healthy
+      rocketmq-store-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - rocketmq-store:/home/rocketmq/store
+    healthcheck:
+      test: ["CMD", "bash", "-c", ": > /dev/tcp/127.0.0.1/8081"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+
+volumes:
+  mysql-data:
+  redis-data:
+  nacos-data:
+  postgres-data:
+  rocketmq-store:

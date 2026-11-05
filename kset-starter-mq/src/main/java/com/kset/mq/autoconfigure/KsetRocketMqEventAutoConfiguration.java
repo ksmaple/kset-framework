@@ -33,6 +33,7 @@ public class KsetRocketMqEventAutoConfiguration {
     @Bean
     @ConditionalOnBean(RocketMQClientTemplate.class)
     @ConditionalOnMissingBean(EventFacade.class)
+    @ConditionalOnProperty(prefix = "kset.event", name = "enabled", havingValue = "true", matchIfMissing = true)
     public RocketMqEventFacade rocketMqEventFacade(RocketMQClientTemplate rocketMqTemplate,
                                                    ObjectProvider<ObjectMapper> objectMapperProvider,
                                                    RocketMQProperties rocketMqProperties,
@@ -59,9 +60,13 @@ public class KsetRocketMqEventAutoConfiguration {
     @Bean
     @ConditionalOnBean({RocketMQClientTemplate.class, EventHandler.class})
     @ConditionalOnMissingBean(RocketMqEventConsumer.class)
+    @ConditionalOnProperty(name = {"kset.event.enabled", "kset.mq.event.default-consumer-enabled"},
+            havingValue = "true", matchIfMissing = true)
     public RocketMqEventConsumer rocketMqEventConsumer(List<EventHandler<?>> handlers,
-                                                       ObjectProvider<ObjectMapper> objectMapperProvider) {
+                                                       ObjectProvider<ObjectMapper> objectMapperProvider,
+                                                       Environment environment) {
         ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(JsonUtil::mapper);
-        return new RocketMqEventConsumer(handlers, objectMapper);
+        boolean failOnUnhandled = environment.getProperty("kset.mq.event.fail-on-unhandled", Boolean.class, false);
+        return new RocketMqEventConsumer(handlers, objectMapper, failOnUnhandled);
     }
 }

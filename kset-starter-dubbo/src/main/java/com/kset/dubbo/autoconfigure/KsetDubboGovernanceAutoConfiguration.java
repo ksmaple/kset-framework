@@ -1,6 +1,8 @@
 package com.kset.dubbo.autoconfigure;
 
+import com.kset.cloud.config.KsetCloudProperties;
 import com.kset.dubbo.lifecycle.KsetDubboLifecycle;
+import com.kset.dubbo.route.DubboRouteRuleHolder;
 import com.kset.dubbo.route.DubboRouteRuleProvider;
 import org.apache.dubbo.config.bootstrap.DubboBootstrap;
 import org.apache.dubbo.rpc.Filter;
@@ -15,7 +17,10 @@ import org.springframework.context.annotation.Bean;
 public class KsetDubboGovernanceAutoConfiguration {
 
     @Bean
-    public DubboRouteRuleProvider dubboRouteRuleProvider() {
+    public DubboRouteRuleProvider dubboRouteRuleProvider(KsetCloudProperties properties) {
+        DubboRouteRuleHolder.configureLocalDefault(
+                properties.getDubbo().getGrayMetadataKey(),
+                properties.getDubbo().getDefaultGrayTag());
         return new DubboRouteRuleProvider();
     }
 

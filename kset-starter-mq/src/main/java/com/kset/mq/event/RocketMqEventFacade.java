@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kset.common.event.EventFacade;
 import com.kset.common.event.SendCallback;
 import com.kset.common.monitor.Monitor;
+import com.kset.common.monitor.MonitorScope;
 import com.kset.common.monitor.TraceSnapshot;
 import com.kset.common.monitor.facade.MonitorTransaction;
 import com.kset.common.trace.TraceHeaders;
@@ -58,7 +59,8 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
 
     @Override
     public void publish(String topic, Object event) {
-        publish(topic, null, event);
+        Object payload = requireEvent(event);
+        publish(topic, destinationResolver.tag(payload), payload);
     }
 
     @Override
@@ -81,31 +83,33 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
     @Override
     public void publishAsync(Object event, SendCallback callback) {
         Object payload = requireEvent(event);
+        TraceSnapshot trace = publishTrace();
         CompletableFuture<SendReceipt> future = new CompletableFuture<>();
         try {
-            rocketMqTemplate.asyncSendNormalMessage(destinationResolver.destination(payload), message(payload), future);
+            rocketMqTemplate.asyncSendNormalMessage(destinationResolver.destination(payload), message(payload, trace), future);
         } catch (RuntimeException | Error e) {
             if (callback != null) {
                 callback.onException(e);
             }
             throw e;
         }
-        future.whenComplete((receipt, throwable) -> handleAsyncResult(payload, callback, receipt, throwable));
+        future.whenComplete((receipt, throwable) -> handleAsyncResult(payload, trace, callback, receipt, throwable));
     }
 
     @Override
     public void publishAsync(String topic, String tag, Object event, SendCallback callback) {
         Object payload = requireEvent(event);
+        TraceSnapshot trace = publishTrace();
         CompletableFuture<SendReceipt> future = new CompletableFuture<>();
         try {
-            rocketMqTemplate.asyncSendNormalMessage(destinationResolver.destination(topic, tag), message(payload), future);
+            rocketMqTemplate.asyncSendNormalMessage(destinationResolver.destination(topic, tag), message(payload, trace), future);
         } catch (RuntimeException | Error e) {
             if (callback != null) {
                 callback.onException(e);
             }
             throw e;
         }
-        future.whenComplete((receipt, throwable) -> handleAsyncResult(payload, callback, receipt, throwable));
+        future.whenComplete((receipt, throwable) -> handleAsyncResult(payload, trace, callback, receipt, throwable));
     }
 
     @Override
@@ -212,15 +216,18 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
     }
 
     private Message<byte[]> message(Object payload) {
+        return message(payload, publishTrace());
+    }
+
+    private Message<byte[]> message(Object payload, TraceSnapshot trace) {
         try {
             String eventType = payload.getClass().getName();
-            TraceSnapshot trace = Monitor.capture();
             MessageBuilder<byte[]> builder = MessageBuilder.withPayload(objectMapper.writeValueAsBytes(payload))
                     .setHeader(RocketMqEventHeaders.EVENT_TYPE, eventType)
                     .setHeader(RocketMqEventHeaders.EVENT_ID, UUID.randomUUID().toString())
                     .setHeader(RocketMQHeaders.KEYS, eventType);
             setHeaderIfPresent(builder, TraceHeaders.TRACE_ID_KEY,
-                    trace.getTraceId() != null ? trace.getTraceId() : Monitor.generateTraceId());
+                    trace.getTraceId());
             setHeaderIfPresent(builder, TraceHeaders.SPAN_ID_KEY, trace.getSpanId());
             setHeaderIfPresent(builder, TraceHeaders.GRAY_TAG_KEY, trace.getGrayTag());
             return builder.build();
@@ -229,30 +236,42 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
         }
     }
 
+    private TraceSnapshot publishTrace() {
+        TraceSnapshot trace = Monitor.capture();
+        String traceId = trace.getTraceId();
+        if (traceId == null || traceId.isBlank()) {
+            traceId = Monitor.generateTraceId();
+        }
+        return new TraceSnapshot(traceId, trace.getSpanId(), trace.getGrayTag());
+    }
+
     private void setHeaderIfPresent(MessageBuilder<byte[]> builder, String key, String value) {
         if (value != null && !value.isBlank()) {
             builder.setHeader(key, value);
         }
     }
 
-    private void handleAsyncResult(Object payload, SendCallback callback, SendReceipt receipt, Throwable throwable) {
-        MonitorTransaction transaction = RocketMqEventMonitorSupport.beginPublish("async", payload);
-        try {
-            if (throwable == null) {
-                RocketMqEventMonitorSupport.addData(transaction, "messageId", receipt.getMessageId().toString());
-                RocketMqEventMonitorSupport.success(transaction);
-                if (callback != null) {
-                    callback.onSuccess();
+    private void handleAsyncResult(Object payload, TraceSnapshot trace, SendCallback callback,
+                                   SendReceipt receipt, Throwable throwable) {
+        try (MonitorScope ignored = Monitor.openScope(trace)) {
+            MonitorTransaction transaction = RocketMqEventMonitorSupport.beginPublish("async", payload);
+            try {
+                if (throwable == null) {
+                    RocketMqEventMonitorSupport.addData(transaction, "messageId", receipt.getMessageId().toString());
+                    RocketMqEventMonitorSupport.success(transaction);
+                    if (callback != null) {
+                        callback.onSuccess();
+                    }
+                } else {
+                    RocketMqEventMonitorSupport.fail(transaction, throwable, "publishAsync",
+                            RocketMqEventMonitorSupport.eventType(payload));
+                    if (callback != null) {
+                        callback.onException(throwable);
+                    }
                 }
-            } else {
-                RocketMqEventMonitorSupport.fail(transaction, throwable, "publishAsync",
-                        RocketMqEventMonitorSupport.eventType(payload));
-                if (callback != null) {
-                    callback.onException(throwable);
-                }
+            } finally {
+                RocketMqEventMonitorSupport.close(transaction);
             }
-        } finally {
-            RocketMqEventMonitorSupport.close(transaction);
         }
     }
 
