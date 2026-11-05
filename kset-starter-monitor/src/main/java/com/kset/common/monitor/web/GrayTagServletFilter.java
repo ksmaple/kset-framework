@@ -28,6 +28,7 @@ public class GrayTagServletFilter implements Filter {
         HttpServletRequest httpRequest = (HttpServletRequest) request;
         String grayTag = httpRequest.getHeader(TraceHeaders.GRAY_TAG_HEADER);
         Monitor.bindHttpGrayTag(grayTag, defaultGrayTag);
+        Monitor.currentGrayTag().ifPresent(value -> httpRequest.setAttribute(TraceHeaders.GRAY_TAG_KEY, value));
         try {
             chain.doFilter(request, response);
         } finally {

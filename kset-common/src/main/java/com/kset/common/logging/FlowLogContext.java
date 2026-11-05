@@ -64,7 +64,6 @@ public final class FlowLogContext {
         step(stepName, FlowEventType.ERROR);
         if (t != null) {
             MDC.put("flow.errorType", t.getClass().getSimpleName());
-            MDC.put("flow.errorMessage", t.getMessage());
         }
     }
 
@@ -77,7 +76,6 @@ public final class FlowLogContext {
         MDC.remove(FLOW_STEP_NAME_KEY);
         MDC.remove(FLOW_EVENT_TYPE_KEY);
         MDC.remove("flow.errorType");
-        MDC.remove("flow.errorMessage");
     }
 
     

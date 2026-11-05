@@ -7,6 +7,8 @@ import com.kset.auth.core.AuthRuleResolver;
 import com.kset.auth.core.LoginAuthService;
 import com.kset.auth.spi.LoginUserHeaderCodec;
 import com.kset.common.auth.LoginUser;
+import com.kset.common.trace.TraceHeaders;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -17,6 +19,7 @@ import reactor.core.publisher.Mono;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 public class LoginAuthGatewayFilter implements GlobalFilter, Ordered {
 
     private final KsetAuthProperties properties;
@@ -49,9 +52,27 @@ public class LoginAuthGatewayFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
         if (!result.isAuthenticated() || result.getUser().isEmpty()) {
+            try {
+                log.warn("auth result=REJECTED source=gateway method={} path={} businessCode={} traceId={}",
+                        exchange.getRequest().getMethod(), exchange.getRequest().getURI().getRawPath(),
+                        result.getCode(), exchange.getAttribute(TraceHeaders.TRACE_ID_KEY));
+            } catch (RuntimeException ignored) {
+                // Authentication response must not depend on logging.
+            }
             return failureHandler.handle(exchange, result.getCode(), result.getMessage());
         }
         LoginUser user = result.getUser().get();
+        if (log.isDebugEnabled()) {
+            try {
+                String operatorUid = user.getUserId();
+                String subjectType = user.getSubjectType();
+                log.debug("auth result=AUTHENTICATED source=gateway method={} path={} operatorUid={} subjectType={} traceId={}",
+                        exchange.getRequest().getMethod(), exchange.getRequest().getURI().getRawPath(),
+                        operatorUid, subjectType, exchange.getAttribute(TraceHeaders.TRACE_ID_KEY));
+            } catch (RuntimeException ignored) {
+                // Authentication must not depend on logging.
+            }
+        }
         ServerHttpRequest.Builder requestBuilder = exchange.getRequest().mutate();
         for (Map.Entry<String, String> entry : headerCodec.encode(user, false, user.getSubjectType()).entrySet()) {
             requestBuilder.header(entry.getKey(), entry.getValue());

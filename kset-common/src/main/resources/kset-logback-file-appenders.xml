@@ -1,8 +1,52 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  test / prod 文件日志（log-spec L002 JSON）：同步写盘，按日期 + 大小滚动，保留 7 天，不压缩。
+  文件日志（log-spec L002 JSON）：同步写盘，按日期 + 大小滚动，保留 7 天，不压缩。
 -->
 <included>
+    <appender name="KSET_DEBUG_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_PATH}/debug.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/debug.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>${LOG_MAX_SIZE}</maxFileSize>
+            <maxHistory>${LOG_MAX_HISTORY}</maxHistory>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+            <providers>
+                <timestamp>
+                    <fieldName>timestamp</fieldName>
+                    <pattern>yyyy-MM-dd'T'HH:mm:ss.SSSX</pattern>
+                </timestamp>
+                <logLevel><fieldName>level</fieldName></logLevel>
+                <loggerName><fieldName>logger</fieldName><shortenedLoggerNameLength>36</shortenedLoggerNameLength></loggerName>
+                <message/>
+                <mdc>
+                    <includeMdcKeyName>traceId</includeMdcKeyName>
+                    <includeMdcKeyName>spanId</includeMdcKeyName>
+                    <includeMdcKeyName>grayTag</includeMdcKeyName>
+                    <includeMdcKeyName>operator</includeMdcKeyName>
+                    <includeMdcKeyName>flow.instanceId</includeMdcKeyName>
+                    <includeMdcKeyName>flow.step</includeMdcKeyName>
+                    <includeMdcKeyName>flow.stepName</includeMdcKeyName>
+                    <includeMdcKeyName>flow.eventType</includeMdcKeyName>
+                    <includeMdcKeyName>flow.errorType</includeMdcKeyName>
+                </mdc>
+                <arguments/>
+                <stackTrace/>
+                <pattern><pattern>{"app":"${APP_NAME}","env":"${KSET_ENV}"}</pattern></pattern>
+            </providers>
+        </encoder>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>DEBUG</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>NEUTRAL</onMismatch>
+        </filter>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>TRACE</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+    </appender>
+
     <appender name="KSET_INFO_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
         <file>${LOG_PATH}/info.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
@@ -34,7 +78,6 @@
                     <includeMdcKeyName>flow.stepName</includeMdcKeyName>
                     <includeMdcKeyName>flow.eventType</includeMdcKeyName>
                     <includeMdcKeyName>flow.errorType</includeMdcKeyName>
-                    <includeMdcKeyName>flow.errorMessage</includeMdcKeyName>
                 </mdc>
                 <arguments/>
                 <stackTrace/>
@@ -86,7 +129,6 @@
                     <includeMdcKeyName>flow.stepName</includeMdcKeyName>
                     <includeMdcKeyName>flow.eventType</includeMdcKeyName>
                     <includeMdcKeyName>flow.errorType</includeMdcKeyName>
-                    <includeMdcKeyName>flow.errorMessage</includeMdcKeyName>
                 </mdc>
                 <arguments/>
                 <stackTrace/>
@@ -138,7 +180,6 @@
                     <includeMdcKeyName>flow.stepName</includeMdcKeyName>
                     <includeMdcKeyName>flow.eventType</includeMdcKeyName>
                     <includeMdcKeyName>flow.errorType</includeMdcKeyName>
-                    <includeMdcKeyName>flow.errorMessage</includeMdcKeyName>
                 </mdc>
                 <arguments/>
                 <stackTrace/>

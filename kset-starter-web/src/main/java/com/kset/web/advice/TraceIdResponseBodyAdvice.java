@@ -41,6 +41,7 @@ public class TraceIdResponseBodyAdvice implements ResponseBodyAdvice<Object> {
         if (body instanceof ApiResponse<?> apiResponse) {
             if (request instanceof ServletServerHttpRequest servletRequest && apiResponse.getCode() != 0) {
                 servletRequest.getServletRequest().setAttribute(TraceHeaders.HTTP_FAILURE_ATTRIBUTE, true);
+                servletRequest.getServletRequest().setAttribute(TraceHeaders.BUSINESS_CODE_ATTRIBUTE, apiResponse.getCode());
             }
             if (traceIdEnabled && (apiResponse.getTraceId() == null || apiResponse.getTraceId().isBlank())) {
                 apiResponse.setTraceId(Monitor.currentTraceId().orElse(null));

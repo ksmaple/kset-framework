@@ -1,6 +1,9 @@
 package com.kset.web.handler;
 
 import com.kset.common.exception.BusinessException;
+import com.kset.common.auth.LoginContext;
+import com.kset.common.monitor.Monitor;
+import com.kset.web.logging.RequestLogParameters;
 import com.kset.web.config.KsetWebProperties;
 import com.kset.web.response.ApiResponse;
 import jakarta.validation.ConstraintViolation;
@@ -23,6 +26,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -134,9 +139,27 @@ public class GlobalExceptionHandler {
                 }
             }
         }
-        log.error("Unhandled web exception", ex);
+        try {
+            logUnhandled(ex);
+        } catch (RuntimeException ignored) {
+            // Keep the configured API error response if diagnostics fail.
+        }
         return response(HttpStatus.INTERNAL_SERVER_ERROR,
                 ApiResponse.fail(properties.getSystemCode(), "系统异常，请稍后重试"));
+    }
+
+    private void logUnhandled(Exception ex) {
+        ServletRequestAttributes attrs = RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes servlet
+                ? servlet : null;
+        String method = attrs != null ? attrs.getRequest().getMethod() : null;
+        String path = attrs != null ? RequestLogParameters.route(attrs.getRequest()) : null;
+        String parameters = attrs != null
+                ? RequestLogParameters.capture(attrs.getRequest()) : "parameters=unavailable";
+        String userId = LoginContext.currentUserId().orElse(null);
+        log.error("http exception outcome=FAIL method={} path={} businessCode={} traceId={} loginState={} operatorUid={} subjectType={} errorType={} {}",
+                method, path, properties.getSystemCode(), Monitor.currentTraceId().orElse(null),
+                userId != null ? "AUTHENTICATED" : "ANONYMOUS", userId,
+                LoginContext.currentSubjectType().orElse(null), ex.getClass().getName(), parameters, ex);
     }
 
     private ResponseEntity<ApiResponse<Void>> map(Exception exception) {

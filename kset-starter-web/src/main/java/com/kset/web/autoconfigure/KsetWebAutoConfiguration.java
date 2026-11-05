@@ -36,25 +36,25 @@ public class KsetWebAutoConfiguration {
     @ConditionalOnClass(name = "org.aspectj.lang.annotation.Aspect")
     @ConditionalOnProperty(prefix = "kset.web.oplog", name = "enabled", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
-    public OpLogAspect opLogAspect(KsetWebProperties properties) {
-        return new OpLogAspect(properties.getOplog().getUserIdHeader());
+    public OpLogAspect opLogAspect() {
+        return new OpLogAspect();
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "kset.web.request-logging", name = "enabled", havingValue = "true")
+    @ConditionalOnProperty(prefix = "kset.web.request-logging", name = "enabled", havingValue = "true", matchIfMissing = true)
     @ConditionalOnMissingBean
     public RequestLoggingFilter requestLoggingFilter() {
         return new RequestLoggingFilter();
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "kset.web.request-logging", name = "enabled", havingValue = "true")
+    @ConditionalOnProperty(prefix = "kset.web.request-logging", name = "enabled", havingValue = "true", matchIfMissing = true)
     public FilterRegistrationBean<RequestLoggingFilter> requestLoggingFilterRegistration(
             RequestLoggingFilter requestLoggingFilter) {
         FilterRegistrationBean<RequestLoggingFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(requestLoggingFilter);
         registration.addUrlPatterns("/*");
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 4);
         registration.setName("requestLoggingFilter");
         return registration;
     }

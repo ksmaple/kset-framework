@@ -29,12 +29,13 @@ public @interface OpLog {
     /** 目标对象ID SpEL 表达式，如 "#command.id" 或 "#request.id" */
     String targetId() default "";
 
-    /** 目标对象名称 SpEL 表达式 */
+    /** 旧目标名称表达式；为避免记录个人信息，日志不再输出该值 */
+    @Deprecated
     String targetName() default "";
 
-    /** 是否记录请求参数 */
+    /** 是否在 DEBUG 中记录与 HTTP 请求日志相同的脱敏参数 */
     boolean recordParams() default false;
 
-    /** 是否记录响应结果 */
+    /** 是否在 DEBUG 中记录响应类型；不记录完整响应 */
     boolean recordResult() default false;
 }

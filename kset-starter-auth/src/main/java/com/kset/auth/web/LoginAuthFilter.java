@@ -9,6 +9,9 @@ import com.kset.auth.core.AuthRuleResolver;
 import com.kset.auth.core.LoginAuthService;
 import com.kset.common.auth.LoginContext;
 import com.kset.common.auth.LoginContextSnapshot;
+import com.kset.common.logging.LogMaskingUtil;
+import com.kset.common.monitor.Monitor;
+import com.kset.common.trace.TraceHeaders;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,6 +20,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerExecutionChain;
 import org.springframework.web.servlet.HandlerMapping;
+import org.springframework.web.util.pattern.PathPattern;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -24,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 public class LoginAuthFilter extends OncePerRequestFilter {
 
     private final KsetAuthProperties properties;
@@ -83,14 +89,35 @@ public class LoginAuthFilter extends OncePerRequestFilter {
                 return;
             }
             if (!result.isAuthenticated() || result.getUser().isEmpty()) {
+                try {
+                    log.warn("auth result=REJECTED source=web method={} path={} rule={} subjectType={} businessCode={} traceId={}",
+                            request.getMethod(), route(request), match != null ? match.getName() : null,
+                            match != null ? match.getSubject() : null, result.getCode(), Monitor.currentTraceId().orElse(null));
+                } catch (RuntimeException ignored) {
+                    // Authentication response must not depend on logging.
+                }
                 failureHandler.handle(request, response, result.getCode(), result.getMessage());
                 return;
             }
-            LoginContext.bind(result.getUser().get());
+            var user = result.getUser().get();
+            LoginContext.bind(user);
+            request.setAttribute(TraceHeaders.LOGIN_USER_ID_ATTRIBUTE, user.getUserId());
+            request.setAttribute(TraceHeaders.LOGIN_SUBJECT_TYPE_ATTRIBUTE, user.getSubjectType());
             filterChain.doFilter(request, response);
         } finally {
             LoginContext.restore(previous);
         }
+    }
+
+    private String route(HttpServletRequest request) {
+        Object pattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        if (pattern instanceof String value && !value.isBlank()) {
+            return value;
+        }
+        if (pattern instanceof PathPattern value) {
+            return value.getPatternString();
+        }
+        return LogMaskingUtil.maskFieldValue("path", request.getRequestURI());
     }
 
     private HandlerMethod resolveHandlerMethod(HttpServletRequest request) throws ServletException {

@@ -202,6 +202,8 @@ factory.execute("order-payment", () -> {
 
 默认日志配置由 `kset-logback-spring.xml` 注入：`dev/default` 写文件并输出控制台，`test/prod` 仅写文件。框架包 `com.kset` 默认保持 `INFO`，避免框架层 DEBUG 淹没本地调试日志。未显式配置 profile 时按 dev 日志行为处理（Spring 隐式 default profile 匹配 `dev,default` 组），但不会向环境注入 `spring.profiles.default`，避免裸配应用静默落入 dev 语义。
 
+文件日志按等级写入 `debug.log`（DEBUG/TRACE）、`info.log`、`warn.log`、`error.log`，均为 JSON。DEBUG/TRACE 仅在对应包的 `logging.level` 显式开启时产生；异常原始消息不放入流程 MDC，未预期异常由最终处理边界记录堆栈。
+
 业务侧 DEBUG 通过显式包名开启：
 
 ```yaml

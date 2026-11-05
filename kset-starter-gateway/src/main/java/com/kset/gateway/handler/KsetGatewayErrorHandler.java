@@ -32,8 +32,19 @@ public class KsetGatewayErrorHandler implements ErrorWebExceptionHandler {
         }
         HttpStatusCode status = statusFor(error);
         String traceId = GatewayErrorResponse.traceId(exchange, traceHeader);
-        log.warn("Gateway request failed traceId={} status={} errorType={}",
-                traceId, status.value(), error.getClass().getName());
+        try {
+            if (status.is5xxServerError()) {
+                log.error("gateway exception outcome=FAIL method={} path={} httpStatus={} traceId={} errorType={}",
+                        exchange.getRequest().getMethod(), exchange.getRequest().getURI().getRawPath(),
+                        status.value(), traceId, error.getClass().getName(), error);
+            } else {
+                log.warn("gateway exception outcome=REJECTED method={} path={} httpStatus={} traceId={} errorType={}",
+                        exchange.getRequest().getMethod(), exchange.getRequest().getURI().getRawPath(),
+                        status.value(), traceId, error.getClass().getName());
+            }
+        } catch (RuntimeException ignored) {
+            // Keep the original gateway error response.
+        }
         return GatewayErrorResponse.write(exchange, status, traceHeader);
     }
 

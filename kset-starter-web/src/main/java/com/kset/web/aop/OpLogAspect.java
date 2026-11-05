@@ -1,14 +1,14 @@
 package com.kset.web.aop;
 
-import com.kset.common.logging.LogMaskingUtil;
+import com.kset.common.auth.LoginContext;
 import com.kset.common.logging.OpLogContext;
 import com.kset.common.logging.StructLog;
 import com.kset.common.monitor.Monitor;
 import com.kset.common.monitor.facade.MonitorStatus;
 import com.kset.common.monitor.facade.MonitorTypes;
-import com.kset.common.utils.JsonUtil;
+import com.kset.web.logging.RequestLogParameters;
 import com.kset.web.annotation.OpLog;
-import jakarta.servlet.http.HttpServletRequest;
+import com.kset.web.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -37,10 +37,13 @@ public class OpLogAspect {
     private static final ExpressionParser PARSER = new SpelExpressionParser();
     private static final DefaultParameterNameDiscoverer NAME_DISCOVERER = new DefaultParameterNameDiscoverer();
 
-    private final String userIdHeader;
+    public OpLogAspect() {
+    }
 
-    public OpLogAspect(String userIdHeader) {
-        this.userIdHeader = userIdHeader != null ? userIdHeader : "X-User-Id";
+    /** Kept for existing manual configuration; operator identity now comes from LoginContext. */
+    @Deprecated
+    public OpLogAspect(String ignoredUserIdHeader) {
+        this();
     }
 
     @Around("@annotation(opLog)")
@@ -57,7 +60,11 @@ public class OpLogAspect {
             throw t;
         } finally {
             try {
-                logOperation(joinPoint, opLog, result, error, System.currentTimeMillis() - start);
+                try {
+                    logOperation(joinPoint, opLog, result, error, System.currentTimeMillis() - start);
+                } catch (RuntimeException ignored) {
+                    // Diagnostics must not replace the operation result or its original error.
+                }
             } finally {
                 OpLogContext.clear();
             }
@@ -65,15 +72,7 @@ public class OpLogAspect {
     }
 
     private void resolveOperator() {
-        ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attrs == null) {
-            return;
-        }
-        HttpServletRequest request = attrs.getRequest();
-        String userId = request.getHeader(userIdHeader);
-        if (userId != null && !userId.isBlank()) {
-            OpLogContext.setOperator(userId);
-        }
+        LoginContext.currentUserId().ifPresent(OpLogContext::setOperator);
     }
 
     private void logOperation(ProceedingJoinPoint joinPoint, OpLog opLog, Object result,
@@ -83,9 +82,10 @@ public class OpLogAspect {
         EvaluationContext context = buildContext(joinPoint, method, result, error);
 
         String targetId = eval(opLog.targetId(), context);
-        String targetName = eval(opLog.targetName(), context);
-        String status = error == null ? "SUCCESS" : "FAIL";
+        Integer businessCode = result instanceof ApiResponse<?> response ? response.getCode() : null;
+        String status = error == null && (businessCode == null || businessCode == 0) ? "SUCCESS" : "FAIL";
         String operator = OpLogContext.getOperator();
+        String subjectType = LoginContext.currentSubjectType().orElse(null);
 
         String traceId = Monitor.currentTraceId().orElse(null);
         if (error != null) {
@@ -93,20 +93,33 @@ public class OpLogAspect {
                     "type", opLog.type(),
                     "target", opLog.target(),
                     "targetId", targetId,
-                    "targetName", targetName,
                     "operator", operator,
+                    "subjectType", subjectType,
                     "status", status,
+                    "businessCode", businessCode,
                     "costMs", costMs,
                     "traceId", traceId,
-                    "error", error.getMessage());
+                    "errorType", error.getClass().getName());
+        } else if (businessCode != null && businessCode != 0) {
+            OP_LOG.warn("operation log",
+                    "type", opLog.type(),
+                    "target", opLog.target(),
+                    "targetId", targetId,
+                    "operator", operator,
+                    "subjectType", subjectType,
+                    "status", status,
+                    "businessCode", businessCode,
+                    "costMs", costMs,
+                    "traceId", traceId);
         } else {
             OP_LOG.info("operation log",
                     "type", opLog.type(),
                     "target", opLog.target(),
                     "targetId", targetId,
-                    "targetName", targetName,
                     "operator", operator,
+                    "subjectType", subjectType,
                     "status", status,
+                    "businessCode", businessCode,
                     "costMs", costMs,
                     "traceId", traceId);
         }
@@ -115,11 +128,13 @@ public class OpLogAspect {
                     costMs + "ms " + opLog.type() + ":" + opLog.target());
         }
 
-        if (opLog.recordParams()) {
-            log.debug("oplog params: {}", maskJson(toJson(joinPoint.getArgs())));
+        if (opLog.recordParams() && log.isDebugEnabled()) {
+            log.debug("operation params type={} target={} {}", opLog.type(), opLog.target(),
+                    parameterSummary());
         }
-        if (opLog.recordResult() && result != null && error == null) {
-            log.debug("oplog result: {}", maskJson(toJson(result)));
+        if (opLog.recordResult() && result != null && error == null && log.isDebugEnabled()) {
+            log.debug("operation result type={} target={} resultType={}",
+                    opLog.type(), opLog.target(), result.getClass().getSimpleName());
         }
     }
 
@@ -145,25 +160,22 @@ public class OpLogAspect {
         try {
             Expression exp = PARSER.parseExpression(expression);
             Object value = exp.getValue(context);
-            return value != null ? String.valueOf(value) : null;
+            if (!(value instanceof String || value instanceof Number || value instanceof java.util.UUID)) {
+                return null;
+            }
+            String text = String.valueOf(value);
+            return text.length() <= 128 && text.matches("[A-Za-z0-9_.:-]+") ? text : null;
         } catch (Exception e) {
             log.warn("Failed to evaluate OpLog SpEL: {}", expression, e);
             return null;
         }
     }
 
-    private String toJson(Object value) {
-        try {
-            return JsonUtil.toJson(value);
-        } catch (RuntimeException e) {
-            return String.valueOf(value);
+    private String parameterSummary() {
+        ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attrs != null) {
+            return RequestLogParameters.capture(attrs.getRequest());
         }
-    }
-
-    private String maskJson(String json) {
-        if (json == null) {
-            return null;
-        }
-        return LogMaskingUtil.maskJson(json);
+        return "parameters=unavailable";
     }
 }

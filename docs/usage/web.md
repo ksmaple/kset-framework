@@ -41,18 +41,21 @@ throw new BusinessException(409, "订单已关闭");
 
 ## 操作日志
 
-`@OpLog` 默认从请求头 `X-User-Id` 取操作人。鉴权默认不认遗留分头，这个头经常是空的。请改 `kset.web.oplog.user-id-header`，或在业务里用 `LoginContext` 写入 `OpLogContext`。
+`@OpLog` 优先从可信 `LoginContext` 取操作人；无登录上下文时可由业务显式设置 `OpLogContext`。不从客户端 `X-User-Id` 请求头取操作人。
 
 ```yaml
 kset:
   web:
     oplog:
       enabled: true
-      user-id-header: X-User-Id
     request-logging:
-      enabled: false
+      enabled: true
     response:
       trace-id-enabled: true
 ```
+
+每条请求都会记录日志：失败和慢请求为 WARN，普通成功请求为 INFO。日志包含 traceId、登录态、可信用户 ID、主体类型、HTTP 状态、业务错误码、耗时，以及全部可解析的路径变量、查询/表单参数和嵌套 JSON 参数值。敏感值脱敏；参数内容最多 64KB，超过时记录 `parametersTruncated=true`。上传文件内容、非 JSON 原始请求体和响应体不记录。未预期异常在最终处理边界记录完整堆栈。`@OpLog(recordParams = true)` 在 HTTP 请求中使用相同参数内容，`recordResult = true` 仅记录结果类型。
+
+`@OpLog.targetName` 保留兼容但不再输出原值；目标定位使用 `target` 和 `targetId`。
 
 配置项清单见 [kset-starter-web/README.md](../../kset-starter-web/README.md)。

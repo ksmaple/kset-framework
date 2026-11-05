@@ -10,6 +10,8 @@ import com.kset.common.utils.JsonUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 日志敏感数据脱敏工具。
@@ -29,7 +31,9 @@ public class LogMaskingUtil {
     private static final Set<String> REDACTED_KEYS = Set.of(
             "password", "pwd", "passwd", "secret", "token",
             "apikey", "api_key", "auth", "authorization", "credential",
-            "key", "privatekey", "private_key", "accesskey", "access_key"
+            "key", "privatekey", "private_key", "accesskey", "access_key",
+            "cookie", "session", "sessionid", "clientsecret",
+            "otp", "pin", "passcode", "captcha", "verificationcode", "smscode"
     );
 
     private static final Set<String> PHONE_KEYS = Set.of("phone", "phones", "mobile", "tel", "telephone");
@@ -37,8 +41,15 @@ public class LogMaskingUtil {
     private static final Set<String> IDCARD_KEYS = Set.of("idcard", "id_card", "identity", "idnumber", "id_number");
     private static final Set<String> BANK_KEYS = Set.of("bankcard", "bank_card", "bankno", "bank_no");
     private static final Set<String> ADDRESS_KEYS = Set.of("address", "addr");
+    private static final Set<String> NAME_KEYS = Set.of("username", "realname", "nickname", "fullname");
+    private static final Pattern PHONE_VALUE = Pattern.compile("(?<![0-9])1[3-9][0-9]{9}(?![0-9])");
+    private static final Pattern EMAIL_VALUE = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
 
     private LogMaskingUtil() {
+    }
+
+    public static String maskFieldValue(String key, String value) {
+        return maskValue(key, value);
     }
 
     /**
@@ -68,6 +79,10 @@ public class LogMaskingUtil {
             obj.fieldNames().forEachRemaining(fields::add);
             for (String fieldName : fields) {
                 JsonNode value = obj.get(fieldName);
+                if (keyMatches(fieldName, REDACTED_KEYS)) {
+                    obj.set(fieldName, TextNode.valueOf("[REDACTED]"));
+                    continue;
+                }
                 if (isScalar(value)) {
                     obj.set(fieldName, TextNode.valueOf(maskValue(fieldName, value.asText())));
                 } else if (value != null && (value.isObject() || value.isArray())) {
@@ -91,7 +106,7 @@ public class LogMaskingUtil {
     }
 
     private static boolean isScalar(JsonNode value) {
-        return value != null && (value.isTextual() || value.isNumber());
+        return value != null && (value.isTextual() || value.isNumber() || value.isBoolean());
     }
 
     private static String maskValue(String key, String value) {
@@ -116,7 +131,26 @@ public class LogMaskingUtil {
         if (keyMatches(key, ADDRESS_KEYS)) {
             return maskAddress(value);
         }
-        return value;
+        if (keyMatches(key, NAME_KEYS)) {
+            return "[REDACTED]";
+        }
+        return maskCommonContactValues(value);
+    }
+
+    private static String maskCommonContactValues(String value) {
+        String withPhonesMasked = replaceMatches(value, PHONE_VALUE, true);
+        return replaceMatches(withPhonesMasked, EMAIL_VALUE, false);
+    }
+
+    private static String replaceMatches(String value, Pattern pattern, boolean phone) {
+        Matcher matcher = pattern.matcher(value);
+        StringBuffer result = new StringBuffer();
+        while (matcher.find()) {
+            String masked = phone ? maskPhone(matcher.group()) : maskEmail(matcher.group());
+            matcher.appendReplacement(result, Matcher.quoteReplacement(masked));
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 
     private static boolean keyMatches(String key, Set<String> patterns) {

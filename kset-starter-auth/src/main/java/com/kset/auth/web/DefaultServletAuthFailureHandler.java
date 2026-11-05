@@ -32,6 +32,8 @@ public class DefaultServletAuthFailureHandler implements ServletAuthFailureHandl
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         ApiResponse<Void> body = ApiResponse.fail(code, message);
+        request.setAttribute(TraceHeaders.HTTP_FAILURE_ATTRIBUTE, true);
+        request.setAttribute(TraceHeaders.BUSINESS_CODE_ATTRIBUTE, code);
         String traceId = Monitor.currentTraceId().orElse(null);
         if (traceId != null && !traceId.isBlank()) {
             body.setTraceId(traceId);

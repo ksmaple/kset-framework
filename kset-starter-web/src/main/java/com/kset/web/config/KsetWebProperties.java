@@ -28,6 +28,8 @@ public class KsetWebProperties {
 
     public static class Oplog {
         private boolean enabled = true;
+        /** Legacy binding key; operator identity is resolved from LoginContext. */
+        @Deprecated
         private String userIdHeader = "X-User-Id";
 
         public boolean isEnabled() {
@@ -38,17 +40,19 @@ public class KsetWebProperties {
             this.enabled = enabled;
         }
 
+        @Deprecated
         public String getUserIdHeader() {
             return userIdHeader;
         }
 
+        @Deprecated
         public void setUserIdHeader(String userIdHeader) {
             this.userIdHeader = userIdHeader;
         }
     }
 
     public static class RequestLogging {
-        private boolean enabled = false;
+        private boolean enabled = true;
 
         public boolean isEnabled() {
             return enabled;
@@ -57,6 +61,7 @@ public class KsetWebProperties {
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
         }
+
     }
 
     public static class Response {
