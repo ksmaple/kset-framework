@@ -40,6 +40,12 @@ AgentResult result = runtime.run(coreRequest, businessContext, List.of("code-sea
 
 `.onEvent(callback)` 接收 Core 的生命周期事件上下文；`.onModelMetrics(callback)` 只在模型响应提供非空 `ModelCallMetrics` 时调用，参数为该次 `MODEL_COMPLETED` 上下文和指标。回调同步执行，遵循普通非关键 Listener 的失败处理；终态通知为 best-effort，可靠状态仍须使用 CheckpointPort。回调应保持轻量、线程安全，不能直接记录未脱敏的请求内容。
 
+## 生命周期耗时日志
+
+Runtime 默认注册 Core 提供的无状态 `AgentTimingLogListener`，复用生命周期事件的 `elapsed`，通过 Java 平台日志输出稳定关键词 `agent.timing`。模型步骤达到 30 秒、`tool_call` 或 `tool_batch` 动作达到 10 秒时，该步骤日志标记 `slow=true` 并输出 WARNING；批次按整个动作耗时判断。其余整次 `run/resume` 的终态和模型调用耗时为 INFO；模型、动作或检查点失败为 WARNING；动作、轮次和检查点的逐步耗时为 DEBUG。宿主可按 `com.kset.agent.core.event.AgentTimingLogListener` 调整日志等级；直接使用 Core 的宿主也可通过 `.listener(new AgentTimingLogListener())` 注册。
+
+日志包含 `operation`、阶段、状态、`agentRunId`、`invocationId`、`stepId`、轮次与 `durationMs`。整次调用使用 `runStatus`，步骤使用 `eventStatus`；动作的 `COMPLETED` 只表示该动作调用已返回，不等于工具业务成功。模型耗时包含 Core 的重试等待，整次调用耗时只覆盖 Core 执行，不包含 Runtime 的工具目录组装。日志不记录 Prompt、模型正文、工具参数或 Observation。
+
 需要按身份、租户或业务配置为每次调用选择模型时，可配置 `.modelFactory(context -> selectModel(context))`；未配置时使用 `builder(model)` 的默认模型。需要按工具目录构建策略时，可配置 `.strategyFactory(tools -> createStrategy(tools))`。共享的模型、策略、Codec、工具、检查点和监听器必须符合 Core 的线程安全要求；持有可变单次状态的组件应为每次调用创建独立 Runtime。
 
 恢复时使用相同任务与协议、快照中的 `agentRunId`，并重新提供当前可信的 `AgentBusinessContext` 与所选 Skill；需要核验未知工具结果时，传入 Core 的 `AgentResumeInput`：

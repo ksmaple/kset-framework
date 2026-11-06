@@ -7,6 +7,7 @@ import com.kset.agent.core.api.AgentResumeInput;
 import com.kset.agent.core.checkpoint.AgentCheckpointPort;
 import com.kset.agent.core.event.AgentLifecycleContext;
 import com.kset.agent.core.event.AgentLifecycleListener;
+import com.kset.agent.core.event.AgentTimingLogListener;
 import com.kset.agent.core.id.AgentRunIdGenerator;
 import com.kset.agent.core.loop.AgentKernelBuilder;
 import com.kset.agent.core.loop.AgentLoopKernel;
@@ -47,6 +48,8 @@ import java.util.function.Function;
 
 /** Per-invocation assembly around Core; Core remains the only execution loop. */
 public final class AgentRuntime {
+
+    private static final AgentTimingLogListener TIMING_LOG_LISTENER = new AgentTimingLogListener();
 
     private final AgentModel model;
     private final Function<AgentBusinessContext, AgentModel> modelFactory;
@@ -150,6 +153,7 @@ public final class AgentRuntime {
         protocols.forEach(builder::protocol);
         actionHandlers.forEach(builder::actionHandler);
         stopPolicies.forEach(builder::stopPolicy);
+        builder.listener(TIMING_LOG_LISTENER);
         listeners.forEach(builder::listener);
         return builder.build();
     }

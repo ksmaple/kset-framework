@@ -123,4 +123,6 @@ AgentResult result = kernel.run(request);
 
 完成事件只表示同步扩展调用已经返回，不表示检查点已经持久化；可靠恢复以 `afterCheckpoint` 对应的 `AgentCheckpointPort.save` 成功为准。保存失败会发出 `CHECKPOINT_FAILED` 并调用 best-effort `onCheckpointError`，该回调异常不能覆盖原检查点错误。独立健康 Listener 可通过 `onListenerError` 接收其他 Listener 的失败信息。Listener 必须线程安全，不得保存无界的按 run 可变状态。日志和指标实现不得输出未经脱敏的模型文本、工具参数或 Observation 内容。
 
+需要基础耗时日志时，可注册 `com.kset.agent.core.event.AgentTimingLogListener`；Runtime 已默认注册。该 Listener 仅输出生命周期标识、状态和 `elapsed`，不保存运行状态或输出请求内容。
+
 同一个 Kernel 可以并发处理不同 run，因为运行状态和生命周期序号均为 invocation 局部数据。所有构建期注入对象会被不同调用共享，必须线程安全。扩展放入 Request、Decision、Action、Observation、Snapshot 或指标 attributes 的 Map、List、Set 和数组会被递归快照为只读结构，数组统一规范化为 List；不透明业务 DTO 不做反射复制，仍必须不可变或按调用隔离。
