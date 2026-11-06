@@ -62,6 +62,7 @@ public final class AgentRuntime {
     private final List<AgentLifecycleListener> listeners;
     private final AgentCheckpointPort checkpointPort;
     private final Executor toolExecutor;
+    private final boolean readOnlyToolFlowEnabled;
     private final Clock clock;
     private final AgentRunIdGenerator agentRunIdGenerator;
     private final AgentModelRetryOptions modelRetryOptions;
@@ -79,6 +80,7 @@ public final class AgentRuntime {
         listeners = List.copyOf(builder.listeners);
         checkpointPort = builder.checkpointPort;
         toolExecutor = builder.toolExecutor;
+        readOnlyToolFlowEnabled = builder.readOnlyToolFlowEnabled;
         clock = builder.clock;
         agentRunIdGenerator = builder.agentRunIdGenerator;
         modelRetryOptions = builder.modelRetryOptions;
@@ -138,10 +140,15 @@ public final class AgentRuntime {
                 : Objects.requireNonNull(modelFactory.apply(context), "model factory result");
         AgentKernelBuilder builder = AgentLoopKernel.builder(selectedModel)
                 .tools(fixedTools)
-                .toolExecutor(toolExecutor)
                 .checkpoints(checkpointPort)
                 .clock(clock)
                 .modelRetry(modelRetryOptions);
+        if (toolExecutor != null) {
+            builder.toolExecutor(toolExecutor);
+        }
+        if (readOnlyToolFlowEnabled) {
+            builder.readOnlyToolFlow();
+        }
         modelCapacities.forEach(builder::modelCapacity);
         if (agentRunIdGenerator != null) {
             builder.agentRunIdGenerator(agentRunIdGenerator);
@@ -180,7 +187,8 @@ public final class AgentRuntime {
         private final List<AgentStopPolicy> stopPolicies = new ArrayList<>();
         private final List<AgentLifecycleListener> listeners = new ArrayList<>();
         private AgentCheckpointPort checkpointPort = AgentCheckpointPort.noop();
-        private Executor toolExecutor = Runnable::run;
+        private Executor toolExecutor;
+        private boolean readOnlyToolFlowEnabled;
         private Clock clock = Clock.systemUTC();
         private AgentRunIdGenerator agentRunIdGenerator;
         private AgentModelRetryOptions modelRetryOptions = AgentModelRetryOptions.defaults();
@@ -321,6 +329,12 @@ public final class AgentRuntime {
 
         public Builder toolExecutor(Executor executor) {
             toolExecutor = Objects.requireNonNull(executor, "executor");
+            return this;
+        }
+
+        /** Enables read-only tool_flow for each invocation's selected tool registry. */
+        public Builder readOnlyToolFlow() {
+            readOnlyToolFlowEnabled = true;
             return this;
         }
 

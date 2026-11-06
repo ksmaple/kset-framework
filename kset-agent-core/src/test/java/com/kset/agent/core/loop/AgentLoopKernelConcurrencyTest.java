@@ -166,18 +166,11 @@ class AgentLoopKernelConcurrencyTest {
                           {"callId":"call-2","taskId":"batch","toolName":"parallel","arguments":{}}
                         ]}
                         """));
-        ExecutorService toolExecutor = Executors.newFixedThreadPool(2);
         AgentLoopKernel kernel = AgentLoopKernel.builder(model)
                 .tools(new InMemoryAgentToolRegistry().register(tool))
-                .toolExecutor(toolExecutor)
                 .build();
 
-        AgentResult result;
-        try {
-            result = kernel.run(request("batch-run"));
-        } finally {
-            toolExecutor.shutdownNow();
-        }
+        AgentResult result = kernel.run(request("batch-run"));
 
         assertThat(result.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
         assertThat(result.stopDecision().stopReason()).isEqualTo(AgentStopReason.RECONCILIATION_REQUIRED);

@@ -97,7 +97,6 @@ tools.register(yourTool);
 
 AgentLoopKernel kernel = AgentLoopKernel.builder(model)
         .tools(tools)
-        .toolExecutor(yourExecutor)
         .agentRunIdGenerator(new SnowflakeAgentRunIdGenerator(datacenterId, workerId))
         .build();
 
@@ -109,7 +108,9 @@ AgentResult result = kernel.run(request);
 
 `agentRunId` 是一次可恢复 Agent 任务跨 `run/resume` 不变的 ID，上例在 Kernel 收到新请求后、发出第一条生命周期事件前生成雪花 ID；`datacenterId` 和 `workerId` 范围均为 0–31，宿主必须保证每个并发进程使用唯一组合，禁止所有实例沿用相同默认值。业务已有专用于该 Agent 任务的唯一 ID 时也可直接传入 `AgentRequest`，此时 Kernel 不调用生成器；不能直接复用会话 ID 或计划任务 ID。恢复请求必须显式传入原快照 `agentRunId`，绝不生成新 ID。生成器异常或空结果分别以稳定的 `ID_GENERATION_FAILED` 返回。
 
-构建器默认使用同步 `Executor`，不会创建或持有线程。需要工具并行执行时，宿主必须通过 `toolExecutor` 提供有界线程池并负责其生命周期。构建器仅用于启动期组装；`build()` 会冻结工具集合，之后修改原工具注册表不会影响已创建的 Kernel。
+标准 `tool_batch` 默认使用 Agent Core 内部共享的有界执行器并行调用独立工具：最多 8 个守护工作线程、64 个排队任务，空闲线程会回收；队列饱和时由当前调用线程执行，批次并行度可能下降。宿主仍可通过 `toolExecutor` 覆盖默认执行器，并负责自定义执行器的生命周期。构建器仅用于启动期组装；`build()` 会冻结工具集合，之后修改原工具注册表不会影响已创建的 Kernel。
+
+只读工具需要先后依赖和前一步结果引用时，可在构建器调用 `readOnlyToolFlow()`，并将请求协议设为 `AgentJsonFlowV1Codec.ID`。可选 `tool_flow` 扩展按依赖分层并行，失败或引用缺失会阻断下游；写入工具会在执行前被整批拒绝。字段与恢复边界见[协议说明](docs/protocols/agent-json-flow-v1.md)。
 
 模型调用默认最多尝试 3 次（首次调用加 2 次重试），仅当模型适配器抛出 `AgentCoreException(AgentErrorCode.MODEL_CALL_FAILED, ..., true, cause)` 时重试。普通异常、`retryable=false`、协议错误和工具错误不会自动重试。可在构建时通过 `modelRetry(new AgentModelRetryOptions(maxAttempts, initialDelay, maxDelay))` 调整次数与退避范围；`maxAttempts` 限 1–10，退避范围限 1 ms–30 s，`maxAttempts=1` 可关闭重试。等待采用有上限的指数退避与抖动，计入本次 `run/resume` 的活动 deadline；取消、线程中断或超时后不会开始下一次模型调用。整个过程仍属于同一个 MODEL step，步骤耗时包含重试等待与全部模型调用。
 
@@ -183,11 +184,11 @@ Listener 在循环线程同步执行，耗时计入本次活动 deadline。普�
 
 每次 `run` 或 `resume` 都有独立的执行起点和 deadline，暂停等待外部输入的时间不计入下一次恢复调用的活动执行超时。`AgentRunState.startedAt` 仍记录整个任务最初创建时间；任务总生命周期由宿主控制。
 
-Model 和 Tool 是同步边界，内核不会为它们创建线程。适配器必须把 `AgentExecutionContext` 或 `AgentToolContext` 的 deadline 转换成底层 SDK/HTTP 超时，并主动响应 cancellation；记录底层请求日志时必须沿用其中的 `agentRunId/invocationId/stepId`，工具再追加 `callId/taskId/toolName`。内核会在模型和动作调用前后执行停止检查。该 deadline 是协作式约束：同步调用未返回时，核心不会强制中断线程，也不承诺立即返回。
+Model 和单次 `tool_call` 是同步边界；标准 `tool_batch` 将各工具调用提交给默认或宿主指定的 Executor。适配器必须把 `AgentExecutionContext` 或 `AgentToolContext` 的 deadline 转换成底层 SDK/HTTP 超时，并主动响应 cancellation；记录底层请求日志时必须沿用其中的 `agentRunId/invocationId/stepId`，工具再追加 `callId/taskId/toolName`。内核会在模型和动作调用前后执行停止检查。该 deadline 是协作式约束：底层调用未返回时，核心不会强制中断执行线程。
 
-`AgentLoopOptions` 同时限制每轮动作数量、工具批次大小、单工具时限和批次时限。容量超限以 `CAPACITY_LIMIT` 结束，不进入后续动作。工具 `callId` 在同一决策内由 Kernel 判重，并且在整个 run 内只能标识一个工具操作；Kernel 会把 `callId/taskId/toolName/arguments` 身份写入快照账本，跨轮复用同 ID 但更换身份时以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。后续轮次的新操作必须使用新 ID，只有确认、重试、核验或恢复同一操作时才复用原 ID。工具持久化幂等身份固定为结构化 `AgentToolIdempotencyKey(agentRunId, callId)`，禁止单独使用 `callId` 或用无边界字符串拼接替代结构化字段。适配器仍必须保存 `toolName + 规范化 arguments` 参数指纹，作为跨进程和外部副作用的最终防线：同身份同指纹返回原结果，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。每条标准工具 Observation 固定携带 `callId/taskId/toolName`，无计划关联时 `taskId` 为 null；工具自定义 attributes 不能覆盖这些身份字段。
+`AgentLoopOptions` 同时限制每轮动作数量、工具批次大小、单工具时限和批次时限。容量超限以 `CAPACITY_LIMIT` 结束，不进入后续动作。工具 `callId` 在同一决策内由 Kernel 判重，并且在整个 run 内只能标识一个工具操作；Kernel 会把标准工具调用的 `callId/taskId/toolName/arguments` 身份写入快照账本，`tool_flow` 调用则通过历史 Observation 与账本校验 ID。跨轮复用同 ID 但更换身份时以可纠正的 `TOOL_IDEMPOTENCY_CONFLICT` 拒绝。后续轮次的新操作必须使用新 ID，只有确认、重试、核验或恢复同一操作时才复用原 ID。工具持久化幂等身份固定为结构化 `AgentToolIdempotencyKey(agentRunId, callId)`，禁止单独使用 `callId` 或用无边界字符串拼接替代结构化字段。适配器仍必须保存 `toolName + 规范化 arguments` 参数指纹，作为跨进程和外部副作用的最终防线：同身份同指纹返回原结果，同身份异指纹返回 `TOOL_IDEMPOTENCY_CONFLICT`。每条标准工具 Observation 固定携带 `callId/taskId/toolName`，无计划关联时 `taskId` 为 null；工具自定义 attributes 不能覆盖这些身份字段。
 
-标准 `tool_batch` 将调用提交给宿主配置的 Executor；默认 Executor 同步执行，只有宿主提供并行 Executor 时工具才会并发。已有任务提交后，若批次等待超时、线程中断或提交/汇总异常导致结果无法确认，Kernel 会将结果标记为 `TOOL_RESULT_UNKNOWN`、保留完整 `agent.pendingAction`，并以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止本次调用。默认同步 Executor 不会强制中断尚未返回的工具调用。工具适配器主动返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)` 时采用相同出口：单工具保存原调用，批次任一调用未知则保存完整批次及全部 Observation。该核验停止优先于同一批次等待期间发生的通用超时或线程中断；线程中断标志仍会保留。宿主恢复前必须按每个 `AgentToolIdempotencyKey` 查询权威结果；带依赖关系的批次仍应使用自定义 Action/Handler。
+标准 `tool_batch` 将调用提交给内部默认或宿主指定的 Executor；独立调用默认并行。已有任务提交后，若批次等待超时、线程中断或提交/汇总异常导致结果无法确认，Kernel 会将结果标记为 `TOOL_RESULT_UNKNOWN`、保留完整 `agent.pendingAction`，并以 `RECONCILIATION_REQUIRED + SUSPENDED` 停止本次调用。取消 `CompletableFuture` 不保证中断尚未返回的工具调用。工具适配器主动返回 `ToolExecutionResult.failure(TOOL_RESULT_UNKNOWN, ...)` 时采用相同出口：单工具保存原调用，批次任一调用未知则保存完整批次及全部 Observation。该核验停止优先于同一批次等待期间发生的通用超时或线程中断；线程中断标志仍会保留。宿主恢复前必须按每个 `AgentToolIdempotencyKey` 查询权威结果；带依赖关系的批次仍应使用自定义 Action/Handler。
 
 `RECONCILIATION_REQUIRED` 快照禁止空输入恢复。若核验终态的检查点写入失败，返回的 `FAILED` 快照也保留 `agent.reconciliationPending`，同样必须先核验，不能作为普通失败直接续跑。宿主必须为 pending 中每个调用提供一条权威 `tool_call` Observation，并通过 `AgentResumeInput` 调用三参数 `resume`；`callId/taskId/toolName` 必须是与 pending 完整匹配的字符串身份，不能依赖数字等值的隐式转换。空输入、非工具动作或仍为 `TOOL_RESULT_UNKNOWN` 的结果返回 `INVALID_RESUME_INPUT`；缺项、重复项和身份不匹配返回 `PENDING_ACTION_MISMATCH`。校验成功后 Kernel 清理 pending 与核验标记、保存新快照并进入下一模型轮次。工具结果的 `progress` 会进入 Observation 并影响连续无进展计数：`success(output)` 默认有进展，成功但状态未推进时用 `unchanged(output)`；该标记不证明外部副作用已提交。
 

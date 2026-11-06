@@ -1,6 +1,7 @@
 package com.kset.agent.core.event;
 
 import com.kset.agent.core.action.StandardActionTypes;
+import com.kset.agent.core.action.ToolFlowPlan;
 import com.kset.agent.core.api.AgentRequest;
 import com.kset.agent.core.api.AgentResult;
 import com.kset.agent.core.api.AgentRunStatus;
@@ -52,7 +53,8 @@ public final class AgentTimingLogListener implements AgentLifecycleListener {
             case MODEL_COMPLETED, MODEL_FAILED -> context.elapsed().compareTo(SLOW_MODEL_THRESHOLD) >= 0;
             case ACTION_COMPLETED, ACTION_FAILED ->
                     (StandardActionTypes.TOOL_CALL.equals(context.operation())
-                            || StandardActionTypes.TOOL_BATCH.equals(context.operation()))
+                            || StandardActionTypes.TOOL_BATCH.equals(context.operation())
+                            || ToolFlowPlan.ACTION_TYPE.equals(context.operation()))
                             && context.elapsed().compareTo(SLOW_TOOL_THRESHOLD) >= 0;
             default -> false;
         };

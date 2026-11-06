@@ -6,6 +6,7 @@ import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.action.AgentActionHandler;
 import com.kset.agent.core.action.AgentActionRegistry;
 import com.kset.agent.core.action.StandardActionHandlers;
+import com.kset.agent.core.action.ToolFlowActionHandler;
 import com.kset.agent.core.checkpoint.AgentCheckpointPort;
 import com.kset.agent.core.event.AgentLifecycleListener;
 import com.kset.agent.core.id.AgentRunIdGenerator;
@@ -16,6 +17,7 @@ import com.kset.agent.core.model.ModelCapacityCatalog;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
 import com.kset.agent.core.protocol.AgentProtocolRegistry;
 import com.kset.agent.core.protocol.json.AgentJsonV1Codec;
+import com.kset.agent.core.protocol.json.AgentJsonFlowV1Codec;
 import com.kset.agent.core.stop.AgentStopController;
 import com.kset.agent.core.stop.AgentStopPolicy;
 import com.kset.agent.core.strategy.AgentReasoningStrategy;
@@ -27,20 +29,26 @@ import com.kset.agent.core.tool.InMemoryAgentToolRegistry;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /** Fluent, framework-neutral assembly entry point. Builders are for single-threaded startup use. */
 public final class AgentKernelBuilder {
 
+    private static final Executor DEFAULT_TOOL_EXECUTOR = createDefaultToolExecutor();
+
     private final AgentModel model;
     private AgentModelRetryOptions modelRetryOptions = AgentModelRetryOptions.defaults();
     private AgentToolRegistry toolRegistry = new InMemoryAgentToolRegistry();
-    private Executor toolExecutor = Runnable::run;
+    private Executor toolExecutor = DEFAULT_TOOL_EXECUTOR;
     private AgentReasoningStrategy reasoningStrategy;
     private AgentCheckpointPort checkpointPort = AgentCheckpointPort.noop();
     private Clock clock = Clock.systemUTC();
     private AgentRunIdGenerator agentRunIdGenerator;
     private ObjectMapper objectMapper = new ObjectMapper();
+    private boolean readOnlyToolFlowEnabled;
     private final List<AgentProtocolCodec> protocolCodecs = new ArrayList<>();
     private final List<AgentActionHandler> actionHandlers = new ArrayList<>();
     private final List<AgentStopPolicy> stopPolicies = new ArrayList<>();
@@ -99,6 +107,12 @@ public final class AgentKernelBuilder {
         return this;
     }
 
+    /** Enables the opt-in read-only tool_flow protocol and dependency handler. */
+    public AgentKernelBuilder readOnlyToolFlow() {
+        readOnlyToolFlowEnabled = true;
+        return this;
+    }
+
     public AgentKernelBuilder protocol(AgentProtocolCodec protocolCodec) {
         this.protocolCodecs.add(requireConfiguration(protocolCodec, "protocolCodec"));
         return this;
@@ -124,10 +138,17 @@ public final class AgentKernelBuilder {
             AgentToolRegistry fixedToolRegistry = FixedAgentToolRegistry.copyOf(toolRegistry);
             List<AgentProtocolCodec> registeredProtocolCodecs = new ArrayList<>();
             registeredProtocolCodecs.add(new AgentJsonV1Codec(objectMapper));
+            if (readOnlyToolFlowEnabled) {
+                registeredProtocolCodecs.add(new AgentJsonFlowV1Codec(objectMapper));
+            }
             registeredProtocolCodecs.addAll(protocolCodecs);
 
             List<AgentActionHandler> registeredActionHandlers = new ArrayList<>(
                     StandardActionHandlers.create(fixedToolRegistry, toolExecutor));
+            if (readOnlyToolFlowEnabled) {
+                registeredActionHandlers.add(new ToolFlowActionHandler(
+                        fixedToolRegistry, toolExecutor, objectMapper));
+            }
             registeredActionHandlers.addAll(actionHandlers);
 
             AgentReasoningStrategy selectedReasoningStrategy = reasoningStrategy == null
@@ -146,6 +167,15 @@ public final class AgentKernelBuilder {
             throw new AgentCoreException(AgentErrorCode.INVALID_CONFIGURATION,
                     "agent kernel configuration is invalid: " + errorMessage(error), error);
         }
+    }
+
+    private static Executor createDefaultToolExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(8, 8, 30L, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(64),
+                Thread.ofPlatform().daemon(true).name("kset-agent-tool-", 0).factory(),
+                new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
     }
 
     private static <T> T requireConfiguration(T configuration, String configurationName) {

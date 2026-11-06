@@ -88,6 +88,8 @@ AgentResult result = kernel.run(request);
 
 当外部协议包含标准动作没有表达的执行语义，例如工具调用依赖 DAG、业务审批状态或多角色委派，应返回具有独立类型名的 `ExtensionAction`，并注册对应 Handler。不得把依赖字段塞入 metadata 后继续交给会忽略它的标准 Handler。
 
+Core 另提供可选的只读依赖扩展 `agent-json-flow:v1`，通过 `readOnlyToolFlow()` 注册 Codec 与 Handler。它支持调用结果引用和分层并行，但明确拒绝有副作用或需要确认的工具；需要写入及崩溃核验的宿主扩展仍须自行设计执行前持久化与恢复协议。
+
 ## metadata
 
 `AgentDecision.metadata` 适合承载引用、记忆建议等不改变动作执行语义的协议数据；供应商使用量应放在 `ModelResponse.metrics`。内核只保留最近一次协议 metadata。跨轮状态由 Strategy 写入自己的属性命名空间；业务输出可由 Listener 在 `afterDecision` 中投影。各层字段归属见[对象与字段契约](core-object-contract.md)。

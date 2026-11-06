@@ -6,10 +6,13 @@ import com.kset.agent.core.action.AgentAction;
 import com.kset.agent.core.action.AgentActionContext;
 import com.kset.agent.core.action.AgentActionRegistry;
 import com.kset.agent.core.action.AgentActionResult;
+import com.kset.agent.core.action.AgentObservation;
+import com.kset.agent.core.action.ExtensionAction;
 import com.kset.agent.core.action.StandardActionHandlers;
 import com.kset.agent.core.action.StandardActionTypes;
 import com.kset.agent.core.action.ToolBatchAction;
 import com.kset.agent.core.action.ToolCallAction;
+import com.kset.agent.core.action.ToolFlowPlan;
 import com.kset.agent.core.api.AgentFailure;
 import com.kset.agent.core.api.AgentRequest;
 import com.kset.agent.core.api.AgentResumeInput;
@@ -31,6 +34,7 @@ import com.kset.agent.core.model.ModelCapacityCatalog;
 import com.kset.agent.core.model.ModelRequest;
 import com.kset.agent.core.model.ModelResponse;
 import com.kset.agent.core.protocol.AgentDecision;
+import com.kset.agent.core.protocol.AgentProtocolCapacityException;
 import com.kset.agent.core.protocol.AgentProtocolCodec;
 import com.kset.agent.core.protocol.AgentProtocolContext;
 import com.kset.agent.core.protocol.AgentProtocolException;
@@ -348,6 +352,10 @@ public final class AgentLoopKernel {
                         return finish(request, state, capacityStop, events);
                     }
                     validateDecision(request, state, decision);
+                } catch (AgentProtocolCapacityException capacityError) {
+                    return finish(request, state,
+                            AgentStopDecision.stop(AgentStopReason.CAPACITY_LIMIT,
+                                    AgentRunStatus.FAILED, capacityError.getMessage()), events);
                 } catch (AgentProtocolException protocolError) {
                     state = state.protocolFailed(
                             protocolError.protocolErrorCode(), protocolError.getMessage(),
@@ -1010,6 +1018,18 @@ public final class AgentLoopKernel {
             return AgentStopDecision.stop(AgentStopReason.CAPACITY_LIMIT, AgentRunStatus.FAILED,
                     "tool batch size limit exceeded");
         }
+        boolean oversizedFlow = decision.actions().stream()
+                .filter(ExtensionAction.class::isInstance)
+                .map(ExtensionAction.class::cast)
+                .filter(action -> ToolFlowPlan.ACTION_TYPE.equals(action.actionType()))
+                .map(action -> action.payload().get("toolCalls"))
+                .filter(List.class::isInstance)
+                .map(List.class::cast)
+                .anyMatch(calls -> calls.size() > request.options().maxToolCallsPerBatch());
+        if (oversizedFlow) {
+            return AgentStopDecision.stop(AgentStopReason.CAPACITY_LIMIT, AgentRunStatus.FAILED,
+                    "tool flow size limit exceeded");
+        }
         return AgentStopDecision.continueRun();
     }
 
@@ -1047,13 +1067,26 @@ public final class AgentLoopKernel {
             throw new AgentCoreException(AgentErrorCode.INVALID_SNAPSHOT,
                     "tool operation state must be a map");
         }
+        Set<String> observedCallIds = new HashSet<>();
+        if (decision.actions().stream().anyMatch(action ->
+                action instanceof ToolCallAction || action instanceof ToolBatchAction)) {
+            state.observations().forEach(observation -> {
+                if (!StandardActionTypes.TOOL_CALL.equals(observation.actionType())) {
+                    return;
+                }
+                Object callId = observation.attributes().get(AgentObservation.TOOL_CALL_ID);
+                if (callId instanceof String id) {
+                    observedCallIds.add(id);
+                }
+            });
+        }
         for (AgentAction action : decision.actions()) {
             if (action instanceof ToolCallAction call) {
-                validateToolCallId(call, callIds, operations);
+                validateToolCallId(call, callIds, operations, observedCallIds);
             }
             if (action instanceof ToolBatchAction batch) {
                 for (ToolCallAction call : batch.toolCalls()) {
-                    validateToolCallId(call, callIds, operations);
+                    validateToolCallId(call, callIds, operations, observedCallIds);
                 }
             }
         }
@@ -1075,10 +1108,17 @@ public final class AgentLoopKernel {
     }
 
     private void validateToolCallId(
-            ToolCallAction call, Set<String> callIds, java.util.Map<?, ?> operations) {
+            ToolCallAction call, Set<String> callIds, java.util.Map<?, ?> operations,
+            Set<String> observedCallIds) {
         if (!callIds.add(call.callId())) {
             throw new AgentProtocolException(
                     "DUPLICATE_TOOL_CALL_ID", "tool call ids must be unique within a decision");
+        }
+        if (observedCallIds.contains(call.callId())
+                && !operations.containsKey(call.callId())) {
+            throw new AgentProtocolException(
+                    AgentErrorCode.TOOL_IDEMPOTENCY_CONFLICT.name(),
+                    "tool call id was already used in this run: " + call.callId());
         }
         if (operations.containsKey(call.callId())
                 && !call.matchesStoredOperation(operations.get(call.callId()))) {

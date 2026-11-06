@@ -38,11 +38,15 @@ AgentResult result = runtime.run(coreRequest, businessContext, List.of("code-sea
 
 原有 `.tools(source/registry)`、`.skill(AgentSkill)`、`.listener(AgentLifecycleListener)` 继续可用。已有按次构建的 Core `AgentToolRegistry` 可直接传入 `.tools(registry)`；Runtime 会在每次调用时读取并固定其工具目录。
 
+标准 `tool_batch` 默认沿用 Core 内部的有界并行执行器，无须额外配置。宿主需要隔离工具负载或自定容量时，可通过 `.toolExecutor(executor)` 覆盖默认值，并负责关闭该执行器。
+
+只读工具有依赖和结果引用时，可在 Runtime 构建器调用 `.readOnlyToolFlow()`，请求使用 `AgentJsonFlowV1Codec.ID`；Runtime 会为本次选定的工具集合组装依赖 Handler。`tool_flow` 与标准批次共用工具执行器，写入和需要确认的工具不能进入该扩展。格式与失败语义见 Core 的[协议说明](../kset-agent-core/docs/protocols/agent-json-flow-v1.md)。
+
 `.onEvent(callback)` 接收 Core 的生命周期事件上下文；`.onModelMetrics(callback)` 只在模型响应提供非空 `ModelCallMetrics` 时调用，参数为该次 `MODEL_COMPLETED` 上下文和指标。回调同步执行，遵循普通非关键 Listener 的失败处理；终态通知为 best-effort，可靠状态仍须使用 CheckpointPort。回调应保持轻量、线程安全，不能直接记录未脱敏的请求内容。
 
 ## 生命周期耗时日志
 
-Runtime 默认注册 Core 提供的无状态 `AgentTimingLogListener`，复用生命周期事件的 `elapsed`，通过 Java 平台日志输出稳定关键词 `agent.timing`。模型步骤达到 30 秒、`tool_call` 或 `tool_batch` 动作达到 10 秒时，该步骤日志标记 `slow=true` 并输出 WARNING；批次按整个动作耗时判断。其余整次 `run/resume` 的终态和模型调用耗时为 INFO；模型、动作或检查点失败为 WARNING；动作、轮次和检查点的逐步耗时为 DEBUG。宿主可按 `com.kset.agent.core.event.AgentTimingLogListener` 调整日志等级；直接使用 Core 的宿主也可通过 `.listener(new AgentTimingLogListener())` 注册。
+Runtime 默认注册 Core 提供的无状态 `AgentTimingLogListener`，复用生命周期事件的 `elapsed`，通过 Java 平台日志输出稳定关键词 `agent.timing`。模型步骤达到 30 秒、`tool_call`、`tool_batch` 或 `tool_flow` 动作达到 10 秒时，该步骤日志标记 `slow=true` 并输出 WARNING；批次与依赖流程按整个动作耗时判断。其余整次 `run/resume` 的终态和模型调用耗时为 INFO；模型、动作或检查点失败为 WARNING；动作、轮次和检查点的逐步耗时为 DEBUG。宿主可按 `com.kset.agent.core.event.AgentTimingLogListener` 调整日志等级；直接使用 Core 的宿主也可通过 `.listener(new AgentTimingLogListener())` 注册。
 
 日志包含 `operation`、阶段、状态、`agentRunId`、`invocationId`、`stepId`、轮次与 `durationMs`。整次调用使用 `runStatus`，步骤使用 `eventStatus`；动作的 `COMPLETED` 只表示该动作调用已返回，不等于工具业务成功。模型耗时包含 Core 的重试等待，整次调用耗时只覆盖 Core 执行，不包含 Runtime 的工具目录组装。日志不记录 Prompt、模型正文、工具参数或 Observation。
 

@@ -11,6 +11,7 @@ import com.kset.agent.core.model.ModelCapacity;
 import com.kset.agent.core.model.ModelRequest;
 import com.kset.agent.core.model.ModelResponse;
 import com.kset.agent.core.protocol.json.AgentJsonV1Codec;
+import com.kset.agent.core.protocol.json.AgentJsonFlowV1Codec;
 import com.kset.agent.core.stop.AgentStopReason;
 import com.kset.agent.core.tool.AgentTool;
 import com.kset.agent.core.tool.AgentToolContext;
@@ -36,6 +37,70 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class AgentRuntimeFlowTest {
+
+    @Test
+    void assemblesReadOnlyToolFlowFromSelectedRuntimeTools() {
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentRuntime runtime = AgentRuntime.builder((modelRequest, executionContext) ->
+                ModelResponse.text(switch (modelCalls.incrementAndGet()) {
+                    case 1 -> plan();
+                    case 2 -> envelope("""
+                            {"type":"tool_flow","plan":"inspect","toolCalls":[
+                              {"callId":"find","taskId":"inspect","toolName":"find","arguments":{}},
+                              {"callId":"read","taskId":"inspect","toolName":"read",
+                               "dependsOn":["find"],"arguments":{"id":
+                                 {"$toolResult":{"callId":"find","path":"/id"}}}}
+                            ]}
+                            """);
+                    default -> "done";
+                }))
+                .tool(descriptor("find", true), (arguments, toolContext) ->
+                        ToolExecutionResult.success(Map.of("id", "item-1")))
+                .tool(descriptor("read", true), (arguments, toolContext) -> {
+                    assertThat(arguments).containsEntry("id", "item-1");
+                    return ToolExecutionResult.success("found");
+                })
+                .readOnlyToolFlow()
+                .build();
+        AgentRequest request = AgentRequest.of("runtime-flow", "inspect",
+                AgentJsonFlowV1Codec.ID);
+
+        AgentResult result = runtime.run(request, context("user-1"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(result.snapshot().observations()).extracting(AgentObservation::output)
+                .contains("found");
+    }
+
+    @Test
+    void runsToolBatchConcurrentlyByDefault() {
+        CountDownLatch bothToolsStarted = new CountDownLatch(2);
+        AtomicInteger modelCalls = new AtomicInteger();
+        AgentRuntime runtime = AgentRuntime.builder((modelRequest, executionContext) ->
+                ModelResponse.text(switch (modelCalls.incrementAndGet()) {
+                    case 1 -> plan();
+                    case 2 -> envelope("""
+                            {"type":"tool_batch","plan":"inspect both","toolCalls":[
+                              {"callId":"call-1","taskId":"inspect","toolName":"read","arguments":{}},
+                              {"callId":"call-2","taskId":"inspect","toolName":"read","arguments":{}}
+                            ]}
+                            """);
+                    default -> "done";
+                }))
+                .tool(descriptor("read", true), (arguments, toolContext) -> {
+                    bothToolsStarted.countDown();
+                    await(bothToolsStarted);
+                    return ToolExecutionResult.success(toolContext.callId());
+                })
+                .build();
+
+        AgentResult result = runtime.run(request("default-batch"), context("user-1"));
+
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(bothToolsStarted.getCount()).isZero();
+        assertThat(result.snapshot().observations()).extracting(AgentObservation::output)
+                .contains("call-1", "call-2");
+    }
 
     @Test
     void fixedModelNameBuilderAppliesCatalogLimit() {
