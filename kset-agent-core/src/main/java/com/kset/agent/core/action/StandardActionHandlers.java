@@ -18,9 +18,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeoutException;
 
 /** Factory for handlers of the standard protocol-neutral actions. */
@@ -44,7 +44,7 @@ public final class StandardActionHandlers {
         Objects.requireNonNull(toolExecutor, "toolExecutor");
         return List.of(
                 new PlanHandler(),
-                new ToolCallHandler(toolRegistry),
+                new ToolCallHandler(toolRegistry, toolExecutor),
                 new ToolBatchHandler(toolRegistry, toolExecutor),
                 new AnswerChunkHandler(),
                 new FinalAnswerHandler(),
@@ -73,9 +73,11 @@ public final class StandardActionHandlers {
 
     private static final class ToolCallHandler implements AgentActionHandler {
         private final AgentToolRegistry toolRegistry;
+        private final Executor toolExecutor;
 
-        private ToolCallHandler(AgentToolRegistry toolRegistry) {
+        private ToolCallHandler(AgentToolRegistry toolRegistry, Executor toolExecutor) {
             this.toolRegistry = toolRegistry;
+            this.toolExecutor = toolExecutor;
         }
 
         @Override
@@ -100,6 +102,7 @@ public final class StandardActionHandlers {
                         Set.of(RECONCILIATION_PENDING, APPROVAL_PENDING_ACTION));
             }
             AgentActionResult result;
+            FutureTask<ToolExecutionResult> running = null;
             try {
                 AgentToolContext toolContext = toolContext(
                         call, context, context.request().options().toolCallTimeout(),
@@ -113,17 +116,35 @@ public final class StandardActionHandlers {
                             call, AgentErrorCode.TOOL_TIMEOUT,
                             "tool deadline reached"));
                 } else {
-                    AgentObservation observation = toObservation(
-                            call, tool.descriptor().readOnly(),
-                            tool.execute(call.arguments(), toolContext));
+                    running = new FutureTask<>(() -> tool.execute(call.arguments(), toolContext));
+                    long waitDeadline = CancellableActionWait.deadlineNanos(
+                            context.clock().instant(), toolContext.deadline());
+                    toolExecutor.execute(running);
+                    AgentObservation observation = toObservation(call, tool.descriptor().readOnly(),
+                            CancellableActionWait.await(running, context.executionContext(),
+                                    waitDeadline));
                     result = isResultUnknown(observation)
                             ? suspendUnknownCall(call, observation)
                             : observedAndClearPending(observation);
                 }
             } catch (CancellationException error) {
                 result = uncertainToolFailure(call, tool, AgentErrorCode.TOOL_CANCELLED, error);
+            } catch (TimeoutException error) {
+                result = uncertainToolFailure(call, tool, AgentErrorCode.TOOL_TIMEOUT,
+                        new IllegalStateException(error));
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                result = uncertainToolFailure(call, tool, AgentErrorCode.TOOL_CANCELLED,
+                        new IllegalStateException(error));
+            } catch (ExecutionException error) {
+                result = uncertainToolFailure(call, tool,
+                        error.getCause() instanceof CancellationException
+                                ? AgentErrorCode.TOOL_CANCELLED : AgentErrorCode.TOOL_EXECUTION_FAILED,
+                        new IllegalStateException(error.getCause()));
             } catch (RuntimeException error) {
                 result = uncertainToolFailure(call, tool, AgentErrorCode.TOOL_EXECUTION_FAILED, error);
+            } finally {
+                if (running != null && !running.isDone()) running.cancel(true);
             }
             return rememberApprovedOperations(
                     approved ? List.of(call) : List.of(), context, result);
@@ -188,19 +209,21 @@ public final class StandardActionHandlers {
                                 "tool batch deadline reached")));
             }
             Instant batchDeadline = batchStartedAt.plus(timeout);
+            long waitDeadline = CancellableActionWait.deadlineNanos(batchStartedAt, batchDeadline);
 
-            List<CompletableFuture<AgentObservation>> futures = new ArrayList<>();
+            List<FutureTask<AgentObservation>> futures = new ArrayList<>();
             try {
                 for (ToolCallAction call : batch.toolCalls()) {
-                    futures.add(CompletableFuture.supplyAsync(
-                            () -> executeCall(call, context, callTimeout, batchDeadline),
-                            toolExecutor));
+                    FutureTask<AgentObservation> future = new FutureTask<>(
+                            () -> executeCall(call, context, callTimeout, batchDeadline));
+                    futures.add(future);
+                    toolExecutor.execute(future);
                 }
-                CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-                        .get(Math.max(1L, timeout.toMillis()), TimeUnit.MILLISECONDS);
-                List<AgentObservation> observations = futures.stream()
-                        .map(CompletableFuture::join)
-                        .toList();
+                List<AgentObservation> observations = new ArrayList<>(futures.size());
+                for (FutureTask<AgentObservation> future : futures) {
+                    observations.add(CancellableActionWait.await(
+                            future, context.executionContext(), waitDeadline));
+                }
                 if (observations.stream().anyMatch(StandardActionHandlers::isResultUnknown)) {
                     return rememberApprovedOperations(approvedCalls, context,
                             suspendForReconciliation(
@@ -214,17 +237,20 @@ public final class StandardActionHandlers {
                                         RECONCILIATION_PENDING,
                                         APPROVAL_PENDING_ACTION)));
             } catch (Exception error) {
-                futures.forEach(future -> future.cancel(false));
+                futures.forEach(future -> future.cancel(true));
                 if (error instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
-                if (!futures.isEmpty()) {
+                boolean mayHaveSideEffects = batch.toolCalls().stream()
+                        .map(call -> toolRegistry.find(call.toolName()).orElse(null))
+                        .anyMatch(tool -> tool != null && !tool.descriptor().readOnly());
+                if (!futures.isEmpty() && mayHaveSideEffects) {
                     return rememberApprovedOperations(approvedCalls, context,
                             suspendUnknownBatch(batch, batchFailureCode(error), error));
                 }
                 return rememberApprovedOperations(approvedCalls, context,
                         observedAndClearPending(AgentObservation.failure(
-                                action.actionType(), AgentErrorCode.TOOL_BATCH_FAILED,
+                                action.actionType(), batchFailureCode(error),
                                 errorMessage(error))));
             }
         }

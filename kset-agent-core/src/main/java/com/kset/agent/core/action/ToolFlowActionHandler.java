@@ -19,9 +19,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeoutException;
 
 /** Executes opt-in read-only tool graphs in dependency layers. */
@@ -85,6 +84,7 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
         Duration remaining = context.executionContext().remainingFrom(started);
         Duration timeout = min(context.request().options().toolBatchTimeout(), remaining);
         Instant deadline = started.plus(timeout);
+        long waitDeadline = CancellableActionWait.deadlineNanos(started, deadline);
         Map<String, AgentObservation> results = new LinkedHashMap<>();
         boolean aborted = context.executionContext().isCancellationRequested() || timeout.isZero();
         String abortCode = context.executionContext().isCancellationRequested()
@@ -93,7 +93,7 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
             if (aborted) {
                 break;
             }
-            Map<String, CompletableFuture<AgentObservation>> running = new LinkedHashMap<>();
+            Map<String, FutureTask<AgentObservation>> running = new LinkedHashMap<>();
             for (ToolFlowPlan.Call call : layer) {
                 String failedDependency = call.dependsOn().stream()
                         .filter(dependency -> !results.get(dependency).success())
@@ -120,8 +120,10 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
                     break;
                 }
                 try {
-                    running.put(call.callId(), CompletableFuture.supplyAsync(
-                            () -> execute(call, arguments, context, deadline), executor));
+                    FutureTask<AgentObservation> future = new FutureTask<>(
+                            () -> execute(call, arguments, context, deadline));
+                    running.put(call.callId(), future);
+                    executor.execute(future);
                 } catch (RuntimeException error) {
                     aborted = true;
                     abortCode = AgentErrorCode.TOOL_BATCH_FAILED.name();
@@ -130,10 +132,14 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
             }
             if (!running.isEmpty()) {
                 try {
-                    long waitMillis = Math.max(1L, Duration.between(
-                            context.clock().instant(), deadline).toMillis());
-                    CompletableFuture.allOf(running.values().toArray(CompletableFuture[]::new))
-                            .get(waitMillis, TimeUnit.MILLISECONDS);
+                    if (!aborted) {
+                        for (FutureTask<AgentObservation> future : running.values()) {
+                            CancellableActionWait.await(future, context.executionContext(), waitDeadline);
+                        }
+                    }
+                } catch (CancellationException error) {
+                    aborted = true;
+                    abortCode = AgentErrorCode.TOOL_CANCELLED.name();
                 } catch (InterruptedException error) {
                     Thread.currentThread().interrupt();
                     aborted = true;
@@ -146,20 +152,30 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
                     abortCode = AgentErrorCode.TOOL_EXECUTION_FAILED.name();
                 }
                 for (ToolFlowPlan.Call call : layer) {
-                    CompletableFuture<AgentObservation> future = running.get(call.callId());
+                    FutureTask<AgentObservation> future = running.get(call.callId());
                     if (future == null) {
                         continue;
                     }
-                    if (future.isDone() && !future.isCompletedExceptionally()
-                            && !future.isCancelled()) {
-                        results.put(call.callId(), future.getNow(null));
+                    if (!aborted && future.isDone() && !future.isCancelled()) {
+                        try {
+                            results.put(call.callId(), future.get());
+                        } catch (InterruptedException error) {
+                            Thread.currentThread().interrupt();
+                            aborted = true;
+                            abortCode = AgentErrorCode.TOOL_CANCELLED.name();
+                        } catch (java.util.concurrent.ExecutionException error) {
+                            aborted = true;
+                            abortCode = AgentErrorCode.TOOL_EXECUTION_FAILED.name();
+                        } catch (CancellationException error) {
+                            aborted = true;
+                            abortCode = AgentErrorCode.TOOL_CANCELLED.name();
+                        }
                     } else {
-                        future.cancel(false);
-                        results.put(call.callId(), failure(call,
-                                aborted ? abortCode
-                                        : AgentErrorCode.TOOL_EXECUTION_FAILED.name(),
-                                "tool_flow call did not complete"));
+                        future.cancel(true);
                     }
+                    results.putIfAbsent(call.callId(), failure(call,
+                            aborted ? abortCode : AgentErrorCode.TOOL_EXECUTION_FAILED.name(),
+                            "tool_flow call did not complete"));
                 }
             }
         }

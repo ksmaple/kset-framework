@@ -173,7 +173,7 @@ public final class AgentKernelBuilder {
         ThreadPoolExecutor executor = new ThreadPoolExecutor(8, 8, 30L, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(64),
                 Thread.ofPlatform().daemon(true).name("kset-agent-tool-", 0).factory(),
-                new ThreadPoolExecutor.CallerRunsPolicy());
+                new ThreadPoolExecutor.AbortPolicy());
         executor.allowCoreThreadTimeOut(true);
         return executor;
     }
