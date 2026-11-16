@@ -2518,6 +2518,58 @@ class AgentLoopKernelFlowTest {
     }
 
     @Test
+    void keepsKnownWriteResultWhenBatchToolReturnsAfterCallDeadline() {
+        String batch = envelope("""
+                {"type":"tool_batch","plan":"write and inspect","toolCalls":[
+                  {"callId":"write#1","taskId":"write","toolName":"writer","arguments":{}},
+                  {"callId":"read#1","taskId":"write","toolName":"reader","arguments":{}}
+                ]}
+                """);
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"write","tasks":[
+                          {"taskId":"write","title":"Write","dependsOn":[]}
+                        ]}
+                        """),
+                batch, batch, "done");
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-09T00:00:00Z"));
+        AtomicInteger writes = new AtomicInteger();
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(dangerousTool("writer", (arguments, context) -> {
+                    writes.incrementAndGet();
+                    clock.advance(Duration.ofSeconds(2));
+                    return ToolExecutionResult.success("written");
+                }))
+                .register(tool("reader", (arguments, context) -> {
+                    clock.advance(Duration.ofSeconds(2));
+                    return ToolExecutionResult.success("late read");
+                }));
+        AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofSeconds(10),
+                3, 3, 0, Duration.ofSeconds(1), Duration.ofSeconds(8), 8, 8);
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model).tools(tools)
+                .toolExecutor(Runnable::run).clock(clock).build();
+        AgentRequest initial = request("late-batch-write", options, Map.of(), null);
+
+        AgentResult waiting = kernel.run(initial);
+        AgentResult completed = kernel.resume(request("late-batch-write", options,
+                Map.of(AgentRequest.APPROVED_TOOL_CALL_IDS, List.of("write#1")), null),
+                waiting.snapshot());
+
+        assertThat(waiting.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
+        assertThat(completed.runStatus()).isEqualTo(AgentRunStatus.COMPLETED);
+        assertThat(completed.snapshot().observations()).anySatisfy(observation -> {
+            assertThat(observation.attributes()).containsEntry(AgentObservation.TOOL_CALL_ID, "write#1");
+            assertThat(observation.success()).isTrue();
+            assertThat(observation.output()).isEqualTo("written");
+        });
+        assertThat(completed.snapshot().observations()).anySatisfy(observation -> {
+            assertThat(observation.attributes()).containsEntry(AgentObservation.TOOL_CALL_ID, "read#1");
+            assertThat(observation.errorCode()).isEqualTo(AgentErrorCode.TOOL_TIMEOUT.name());
+        });
+        assertThat(writes).hasValue(1);
+    }
+
+    @Test
     void keepsTheWholeBatchPendingWhenTheApprovedCallIsLast() {
         String batch = envelope("""
                 {"type":"tool_batch","plan":"write both","toolCalls":[

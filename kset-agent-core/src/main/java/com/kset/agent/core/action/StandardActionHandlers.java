@@ -274,9 +274,12 @@ public final class StandardActionHandlers {
                     return toolFailure(call,
                             AgentErrorCode.TOOL_TIMEOUT, "tool deadline reached");
                 }
-                return toObservation(call,
-                        tool.descriptor().readOnly(),
-                        tool.execute(call.arguments(), toolContext));
+                ToolExecutionResult result = tool.execute(call.arguments(), toolContext);
+                if (tool.descriptor().readOnly()
+                        && toolContext.isDeadlineExceeded(context.clock().instant())) {
+                    return toolFailure(call, AgentErrorCode.TOOL_TIMEOUT, "tool deadline reached");
+                }
+                return toObservation(call, tool.descriptor().readOnly(), result);
             } catch (CancellationException error) {
                 return uncertainBatchToolFailure(call, tool, AgentErrorCode.TOOL_CANCELLED, error);
             } catch (RuntimeException error) {

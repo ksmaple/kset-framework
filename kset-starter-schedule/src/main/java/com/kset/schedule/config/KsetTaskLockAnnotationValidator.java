@@ -2,8 +2,11 @@ package com.kset.schedule.config;
 
 import com.kset.schedule.annotation.KsetTaskLock;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.beans.factory.FactoryBean;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 
 import java.lang.reflect.Method;
@@ -22,8 +25,16 @@ public class KsetTaskLockAnnotationValidator implements SmartInitializingSinglet
 
     @Override
     public void afterSingletonsInstantiated() {
+        ConfigurableListableBeanFactory beanFactory = applicationContext instanceof ConfigurableApplicationContext context
+                ? context.getBeanFactory() : null;
         for (String beanName : applicationContext.getBeanDefinitionNames()) {
-            Class<?> targetClass = AopUtils.getTargetClass(applicationContext.getBean(beanName));
+            Class<?> targetClass = applicationContext.getType(beanName, false);
+            if (beanFactory != null && beanFactory.containsSingleton(beanName)) {
+                Object singleton = beanFactory.getSingleton(beanName);
+                if (singleton != null && !(singleton instanceof FactoryBean<?>)) {
+                    targetClass = AopUtils.getTargetClass(singleton);
+                }
+            }
             if (targetClass == null) {
                 continue;
             }
