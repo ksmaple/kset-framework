@@ -1,6 +1,6 @@
 # kset-rag 接入映射
 
-本文记录 `kset-rag` 当前 `agent-json-v1`、模型供应商协议和 SSE 输出与 `kset-agent-core` 的边界。它是接入约定，不把 RAG 业务类型引入 core。
+本文保留 `kset-rag` 旧 Core 接入的历史映射。2026-11-18 起，业务仓源码改由 AgentScope Java 2.0.5 执行 Agent 循环与模型通信，并移除对本模块及 `kset-agent-runtime` 的 Maven 依赖。以下内容不再是当前接入约定；业务仓的迁移记录与代码是当前依据。
 
 ## 三层协议
 

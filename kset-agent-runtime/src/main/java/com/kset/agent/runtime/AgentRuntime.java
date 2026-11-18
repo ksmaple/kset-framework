@@ -52,7 +52,8 @@ public final class AgentRuntime {
     private static final AgentTimingLogListener TIMING_LOG_LISTENER = new AgentTimingLogListener();
 
     private final AgentModel model;
-    private final Function<AgentBusinessContext, AgentModel> modelFactory;
+    private final BiFunction<AgentRequest, AgentBusinessContext, AgentModel> modelFactory;
+    private final BiFunction<AgentRequest, AgentBusinessContext, List<String>> skillSelector;
     private final List<AgentToolSource> toolSources;
     private final Map<String, AgentSkill> skills;
     private final Function<AgentToolRegistry, AgentReasoningStrategy> strategyFactory;
@@ -71,6 +72,7 @@ public final class AgentRuntime {
     private AgentRuntime(Builder builder) {
         model = builder.model;
         modelFactory = builder.modelFactory;
+        skillSelector = builder.skillSelector;
         toolSources = List.copyOf(builder.toolSources);
         skills = Map.copyOf(builder.skills);
         strategyFactory = builder.strategyFactory;
@@ -97,28 +99,42 @@ public final class AgentRuntime {
     }
 
     public AgentResult run(AgentRequest request, AgentBusinessContext context) {
-        return run(request, context, List.of());
+        return run(request, context, selectSkills(request, context));
     }
 
     public AgentResult run(AgentRequest request, AgentBusinessContext context,
                            List<String> selectedSkillIds) {
         AgentRequest boundRequest = AgentRuntimeContexts.attach(request, context);
-        return kernel(context, selectedSkillIds).run(boundRequest);
+        return kernel(request, context, selectedSkillIds).run(boundRequest);
     }
 
     public AgentResult resume(AgentRequest request, AgentRunSnapshot snapshot,
                               AgentBusinessContext context) {
-        return resume(request, snapshot, AgentResumeInput.none(), context, List.of());
+        return resume(request, snapshot, AgentResumeInput.none(), context);
+    }
+
+    public AgentResult resume(AgentRequest request, AgentRunSnapshot snapshot,
+                              AgentResumeInput input, AgentBusinessContext context) {
+        return resume(request, snapshot, input, context, selectSkills(request, context));
     }
 
     public AgentResult resume(AgentRequest request, AgentRunSnapshot snapshot,
                               AgentResumeInput input, AgentBusinessContext context,
                               List<String> selectedSkillIds) {
         AgentRequest boundRequest = AgentRuntimeContexts.attach(request, context);
-        return kernel(context, selectedSkillIds).resume(boundRequest, snapshot, input);
+        return kernel(request, context, selectedSkillIds).resume(boundRequest, snapshot, input);
     }
 
-    private AgentLoopKernel kernel(AgentBusinessContext context, List<String> selectedSkillIds) {
+    private List<String> selectSkills(AgentRequest request, AgentBusinessContext context) {
+        if (skillSelector == null) {
+            return List.of();
+        }
+        return List.copyOf(Objects.requireNonNull(skillSelector.apply(request, context),
+                "skill selector result"));
+    }
+
+    private AgentLoopKernel kernel(AgentRequest request, AgentBusinessContext context,
+                                   List<String> selectedSkillIds) {
         InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry();
         for (AgentToolSource source : toolSources) {
             registerTools(tools, source, context);
@@ -137,7 +153,7 @@ public final class AgentRuntime {
         }
         AgentToolRegistry fixedTools = FixedAgentToolRegistry.copyOf(tools);
         AgentModel selectedModel = modelFactory == null ? model
-                : Objects.requireNonNull(modelFactory.apply(context), "model factory result");
+                : Objects.requireNonNull(modelFactory.apply(request, context), "model factory result");
         AgentKernelBuilder builder = AgentLoopKernel.builder(selectedModel)
                 .tools(fixedTools)
                 .checkpoints(checkpointPort)
@@ -178,7 +194,8 @@ public final class AgentRuntime {
     public static final class Builder {
 
         private final AgentModel model;
-        private Function<AgentBusinessContext, AgentModel> modelFactory;
+        private BiFunction<AgentRequest, AgentBusinessContext, AgentModel> modelFactory;
+        private BiFunction<AgentRequest, AgentBusinessContext, List<String>> skillSelector;
         private final List<AgentToolSource> toolSources = new ArrayList<>();
         private final Map<String, AgentSkill> skills = new LinkedHashMap<>();
         private Function<AgentToolRegistry, AgentReasoningStrategy> strategyFactory;
@@ -199,7 +216,21 @@ public final class AgentRuntime {
         }
 
         public Builder modelFactory(Function<AgentBusinessContext, AgentModel> factory) {
+            Function<AgentBusinessContext, AgentModel> selectedFactory =
+                    Objects.requireNonNull(factory, "factory");
+            modelFactory = (request, context) -> selectedFactory.apply(context);
+            return this;
+        }
+
+        /** Selects a model for this task and the current trusted business context. */
+        public Builder modelFactory(BiFunction<AgentRequest, AgentBusinessContext, AgentModel> factory) {
             modelFactory = Objects.requireNonNull(factory, "factory");
+            return this;
+        }
+
+        /** Selects relevant skills for overloads without an explicit skill list. */
+        public Builder skillSelector(BiFunction<AgentRequest, AgentBusinessContext, List<String>> selector) {
+            skillSelector = Objects.requireNonNull(selector, "selector");
             return this;
         }
 

@@ -22,6 +22,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Executes opt-in read-only tool graphs in dependency layers. */
 public final class ToolFlowActionHandler implements AgentActionHandler {
@@ -93,7 +94,7 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
             if (aborted) {
                 break;
             }
-            Map<String, FutureTask<AgentObservation>> running = new LinkedHashMap<>();
+            Map<String, RunningCall> running = new LinkedHashMap<>();
             for (ToolFlowPlan.Call call : layer) {
                 String failedDependency = call.dependsOn().stream()
                         .filter(dependency -> !results.get(dependency).success())
@@ -120,9 +121,14 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
                     break;
                 }
                 try {
+                    AtomicLong callWaitDeadline = new AtomicLong(Long.MAX_VALUE);
                     FutureTask<AgentObservation> future = new FutureTask<>(
-                            () -> execute(call, arguments, context, deadline));
-                    running.put(call.callId(), future);
+                            () -> {
+                                callWaitDeadline.set(System.nanoTime()
+                                        + context.request().options().toolCallTimeout().toNanos());
+                                return execute(call, arguments, context, deadline);
+                            });
+                    running.put(call.callId(), new RunningCall(future, callWaitDeadline));
                     executor.execute(future);
                 } catch (RuntimeException error) {
                     aborted = true;
@@ -133,8 +139,9 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
             if (!running.isEmpty()) {
                 try {
                     if (!aborted) {
-                        for (FutureTask<AgentObservation> future : running.values()) {
-                            CancellableActionWait.await(future, context.executionContext(), waitDeadline);
+                        for (RunningCall call : running.values()) {
+                            CancellableActionWait.await(call.future(), context.executionContext(),
+                                    waitDeadline, () -> earliestDeadline(running));
                         }
                     }
                 } catch (CancellationException error) {
@@ -152,11 +159,12 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
                     abortCode = AgentErrorCode.TOOL_EXECUTION_FAILED.name();
                 }
                 for (ToolFlowPlan.Call call : layer) {
-                    FutureTask<AgentObservation> future = running.get(call.callId());
-                    if (future == null) {
+                    RunningCall runningCall = running.get(call.callId());
+                    if (runningCall == null) {
                         continue;
                     }
-                    if (!aborted && future.isDone() && !future.isCancelled()) {
+                    FutureTask<AgentObservation> future = runningCall.future();
+                    if (future.isDone() && !future.isCancelled()) {
                         try {
                             results.put(call.callId(), future.get());
                         } catch (InterruptedException error) {
@@ -179,10 +187,17 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
                 }
             }
         }
-        for (ToolFlowPlan.Call call : plan.calls()) {
-            if (!results.containsKey(call.callId())) {
+        for (List<ToolFlowPlan.Call> layer : plan.layers()) {
+            for (ToolFlowPlan.Call call : layer) {
+                if (results.containsKey(call.callId())) {
+                    continue;
+                }
+                String failedDependency = call.dependsOn().stream()
+                        .filter(dependency -> !results.get(dependency).success())
+                        .findFirst().orElse(null);
                 results.put(call.callId(), failure(call,
-                        aborted ? abortCode : DEPENDENCY_FAILED,
+                        failedDependency != null ? DEPENDENCY_FAILED
+                                : aborted ? abortCode : DEPENDENCY_FAILED,
                         "tool_flow call was not executed"));
             }
         }
@@ -211,6 +226,9 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
         }
         try {
             ToolExecutionResult result = tool.execute(arguments, toolContext);
+            if (toolContext.isDeadlineExceeded(context.clock().instant())) {
+                return failure(call, AgentErrorCode.TOOL_TIMEOUT.name(), "tool deadline reached");
+            }
             return result == null
                     ? failure(call, AgentErrorCode.TOOL_RESULT_MISSING.name(),
                             "tool returned null")
@@ -360,6 +378,19 @@ public final class ToolFlowActionHandler implements AgentActionHandler {
     private static Duration min(Duration first, Duration second) {
         return first.compareTo(second) <= 0 ? first : second;
     }
+
+    private static long earliestDeadline(Map<String, RunningCall> running) {
+        long earliest = Long.MAX_VALUE;
+        for (RunningCall call : running.values()) {
+            if (!call.future().isDone()) {
+                earliest = Math.min(earliest, call.deadlineNanos().get());
+            }
+        }
+        return earliest;
+    }
+
+    private record RunningCall(FutureTask<AgentObservation> future,
+                               AtomicLong deadlineNanos) { }
 
     private static final class MissingReference extends RuntimeException { }
 }

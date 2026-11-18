@@ -455,6 +455,87 @@ class AgentLoopKernelFlowTest {
     }
 
     @Test
+    void defaultStrategyRendersStructuredOutputAndAcceptsConciseToolSummary() throws Exception {
+        AgentRequest request = request("structured-observations");
+        Instant now = Instant.parse("2026-11-16T00:00:00Z");
+        Map<String, Object> output = Map.of("id", "order-1", "items", List.of(1, 2));
+        AgentObservation structured = AgentObservation.toolResult("call-1", null, "search",
+                ToolExecutionResult.success(output));
+        AgentRunState state = AgentRunState.start(request, now).apply(
+                AgentActionResult.observed(structured), now);
+        ReactReasoningStrategy strategy = new ReactReasoningStrategy(new InMemoryAgentToolRegistry());
+        String rendered = (String) ((List<?>) strategy.nextTurn(request, state)
+                .modelRequest().attributes().get(
+                        ReactReasoningStrategy.OBSERVATION_SUMMARIES_ATTRIBUTE)).getFirst();
+        String encodedOutput = new ObjectMapper().readTree(rendered.substring(
+                "<observation>".length(), rendered.indexOf("</observation>")))
+                .get("output").asText();
+
+        assertThat(new ObjectMapper().readTree(encodedOutput).get("id").asText())
+                .isEqualTo("order-1");
+        assertThat(state.snapshot().observations().getFirst().output()).isEqualTo(output);
+
+        AgentObservation concise = AgentObservation.toolResult("call-2", null, "search",
+                ToolExecutionResult.success(Map.of("privateField", "hidden-value"))
+                        .withModelSummary("one matching order"));
+        AgentRunState conciseState = AgentRunState.start(request, now).apply(
+                AgentActionResult.observed(concise), now);
+        String prompt = strategy.nextTurn(request, conciseState).modelRequest().userPrompt();
+
+        assertThat(prompt).contains("one matching order").doesNotContain("hidden-value");
+        assertThat(conciseState.snapshot().observations().getFirst().output())
+                .isEqualTo(Map.of("privateField", "hidden-value"));
+    }
+
+    @Test
+    void defaultStrategyStopsReadingStructuredOutputAtSummaryLimit() {
+        AgentRequest request = request("large-structured-observation");
+        Instant now = Instant.parse("2026-11-16T00:00:00Z");
+        AtomicInteger tailConversions = new AtomicInteger();
+        Map<String, Object> output = new LinkedHashMap<>();
+        output.put("first", "x".repeat(10000));
+        output.put("tail", new Object() {
+            @Override
+            public String toString() {
+                tailConversions.incrementAndGet();
+                return "tail-value";
+            }
+        });
+        AgentObservation observation = AgentObservation.toolResult("call-1", null, "search",
+                ToolExecutionResult.success(output));
+        AgentRunState state = AgentRunState.start(request, now).apply(
+                AgentActionResult.observed(observation), now);
+
+        String prompt = new ReactReasoningStrategy(new InMemoryAgentToolRegistry())
+                .nextTurn(request, state).modelRequest().userPrompt();
+
+        assertThat(prompt).contains("...[truncated]").doesNotContain("tail-value");
+        assertThat(tailConversions).hasValue(0);
+        assertThat(state.snapshot().observations().getFirst().output())
+                .isEqualTo(output);
+    }
+
+    @Test
+    void defaultStrategyUsesBoundedFallbackWhenStructuredOutputCannotBeSerialized() {
+        AgentRequest request = request("nested-structured-observation");
+        Instant now = Instant.parse("2026-11-16T00:00:00Z");
+        Object output = "leaf";
+        for (int depth = 0; depth < 1_100; depth++) {
+            output = List.of(output);
+        }
+        AgentObservation observation = AgentObservation.toolResult("call-1", null, "search",
+                ToolExecutionResult.success(output));
+        AgentRunState state = AgentRunState.start(request, now).apply(
+                AgentActionResult.observed(observation), now);
+
+        String prompt = new ReactReasoningStrategy(new InMemoryAgentToolRegistry())
+                .nextTurn(request, state).modelRequest().userPrompt();
+
+        assertThat(prompt).contains("structured output summary unavailable");
+        assertThat(prompt.length()).isLessThan(request.options().maxPromptChars());
+    }
+
+    @Test
     void defaultStrategyOmitsEmptyObservationFieldsAndDuplicateAnswerChunks() {
         AgentRequest request = request("compact-observations");
         Instant now = Instant.parse("2026-11-04T00:00:00Z");

@@ -74,7 +74,7 @@
 | `AgentToolIdempotencyKey` | `agentRunId/callId` | 工具持久化幂等键的两个结构化分量；不可只保存 `callId`。`ToolCallAction.operationDefinition()` 是包含工具名、关联任务和参数的操作定义，不可充当幂等键。 |
 | `AgentToolDescriptor` | `toolName/description/inputSchema` | 策略可见的工具名、说明和输入结构定义；`inputSchema` 不是一次调用的参数。 |
 | `AgentToolDescriptor` | `readOnly/requiresConfirmation/metadata` | 是否只读、是否要求执行前确认、工具目录附属信息；`metadata` 不等于模型或协议 metadata。 |
-| `ToolExecutionResult` | `success/progress/output/errorCode/errorMessage/attributes` | 工具权威结果；`progress` 经标准工具 Observation 参与 `AgentActionResult.madeProgress()` 和连续无进展计数，不代表外部副作用提交。`success(output)` 默认 `progress=true`，结果虽成功但未推进时用 `unchanged(output)`；失败必须有稳定错误码。属性进入标准工具 Observation，显式 null 值不被删减。 |
+| `ToolExecutionResult` | `success/progress/output/errorCode/errorMessage/attributes` | 工具权威结果；`progress` 经标准工具 Observation 参与 `AgentActionResult.madeProgress()` 和连续无进展计数，不代表外部副作用提交。`success(output)` 默认 `progress=true`，结果虽成功但未推进时用 `unchanged(output)`；失败必须有稳定错误码。属性进入标准工具 Observation，显式 null 值不被删减。`withModelSummary(text)` 在属性中保存业务提供的模型可见摘要，原始 `output` 保留在快照中。 |
 | `AgentObservation` | `actionType/success/progress/output/errorCode/errorMessage/attributes` | 下轮策略可见且进入快照的动作反馈；`progress` 表示本动作对循环的进展，不代表外部副作用提交，任一观察有进展即可使该动作的无进展计数清零。标准工具的属性固定含 `callId/taskId/toolName`，无计划关联时 `taskId` 为 null，工具自定义值不得覆盖这些身份。普通动作属性仍拒绝顶层 null 值。 |
 
 ## 状态、停止、恢复与观测

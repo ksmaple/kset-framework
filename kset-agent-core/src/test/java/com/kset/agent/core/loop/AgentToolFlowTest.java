@@ -18,8 +18,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
 
 import static com.kset.agent.core.loop.AgentTestSupport.envelope;
@@ -158,6 +160,131 @@ class AgentToolFlowTest {
         assertThat(blockedCalls).hasValue(0);
         assertThat(toolObservations(result)).extracting(AgentObservation::errorCode)
                 .containsExactly("NOT_FOUND", null, ToolFlowActionHandler.DEPENDENCY_FAILED);
+    }
+
+    @Test
+    void lateReadResultDoesNotUnlockDependentCall() {
+        AtomicInteger dependentCalls = new AtomicInteger();
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(tool("slow-read", true, (arguments, context) -> {
+                    try {
+                        Thread.sleep(20);
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return ToolExecutionResult.success(Map.of("id", "late"));
+                }))
+                .register(tool("dependent", true, (arguments, context) -> {
+                    dependentCalls.incrementAndGet();
+                    return ToolExecutionResult.success("unexpected");
+                }));
+        AgentLoopKernel kernel = kernel(tools, """
+                {"type":"tool_flow","plan":"inspect","toolCalls":[
+                  {"callId":"first","taskId":"inspect","toolName":"slow-read","arguments":{}},
+                  {"callId":"second","taskId":"inspect","toolName":"dependent",
+                   "dependsOn":["first"],"arguments":{"id":
+                     {"$toolResult":{"callId":"first","path":"/id"}}}}
+                ]}
+                """);
+        AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofMinutes(5),
+                3, 3, 0, Duration.ofMillis(1), Duration.ofSeconds(1), 8, 2);
+        AgentRequest request = new AgentRequest("flow-late-read", "inspect",
+                AgentJsonFlowV1Codec.ID, options, Map.of(), null);
+
+        AgentResult result = kernel.run(request);
+
+        assertThat(dependentCalls).hasValue(0);
+        assertThat(toolObservations(result)).extracting(AgentObservation::errorCode)
+                .containsExactly("TOOL_TIMEOUT", ToolFlowActionHandler.DEPENDENCY_FAILED);
+    }
+
+    @Test
+    void blockedReadReturnsAtCallTimeoutBeforeBatchTimeout() {
+        AtomicInteger startedCalls = new AtomicInteger();
+        AtomicInteger dependentCalls = new AtomicInteger();
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(tool("blocked-read", true, (arguments, context) -> {
+                    startedCalls.incrementAndGet();
+                    try {
+                        Thread.sleep(2_000);
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return ToolExecutionResult.success(Map.of("id", "late"));
+                }))
+                .register(tool("independent", true, (arguments, context) ->
+                        ToolExecutionResult.success("ready")))
+                .register(tool("dependent", true, (arguments, context) -> {
+                    dependentCalls.incrementAndGet();
+                    return ToolExecutionResult.success("unexpected");
+                }));
+        AgentLoopKernel kernel = kernel(tools, """
+                {"type":"tool_flow","plan":"inspect","toolCalls":[
+                  {"callId":"first","taskId":"inspect","toolName":"blocked-read","arguments":{}},
+                  {"callId":"other","taskId":"inspect","toolName":"independent","arguments":{}},
+                  {"callId":"second","taskId":"inspect","toolName":"dependent",
+                   "dependsOn":["first"],"arguments":{}}
+                ]}
+                """);
+        AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofMinutes(5),
+                3, 3, 0, Duration.ofMillis(100), Duration.ofSeconds(3), 8, 3);
+        AgentRequest request = new AgentRequest("flow-blocked-read", "inspect",
+                AgentJsonFlowV1Codec.ID, options, Map.of(), null);
+
+        long startedAt = System.nanoTime();
+        AgentResult result = kernel.run(request);
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+
+        assertThat(elapsedMillis).isLessThan(1_500);
+        assertThat(startedCalls).hasValue(1);
+        assertThat(dependentCalls).hasValue(0);
+        assertThat(toolObservations(result)).extracting(AgentObservation::errorCode)
+                .containsExactly("TOOL_TIMEOUT", null, ToolFlowActionHandler.DEPENDENCY_FAILED);
+    }
+
+    @Test
+    void earlierSubmittedCallDoesNotHideAnotherCallTimeout() {
+        AtomicReference<Runnable> queued = new AtomicReference<>();
+        Executor reordered = task -> {
+            if (queued.compareAndSet(null, task)) {
+                return;
+            }
+            Thread.ofPlatform().daemon(true).start(task);
+        };
+        InMemoryAgentToolRegistry tools = new InMemoryAgentToolRegistry()
+                .register(tool("queued-read", true, (arguments, context) ->
+                        ToolExecutionResult.success("unexpected")))
+                .register(tool("blocked-read", true, (arguments, context) -> {
+                    try {
+                        Thread.sleep(2_000);
+                    } catch (InterruptedException error) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return ToolExecutionResult.success("late");
+                }));
+        AgentLoopKernel kernel = AgentLoopKernel.builder(new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"inspect","tasks":[
+                          {"taskId":"inspect","title":"Inspect","dependsOn":[]}]}
+                        """), envelope("""
+                        {"type":"tool_flow","plan":"inspect","toolCalls":[
+                          {"callId":"first","taskId":"inspect","toolName":"queued-read","arguments":{}},
+                          {"callId":"second","taskId":"inspect","toolName":"blocked-read","arguments":{}}
+                        ]}
+                        """), "done"))
+                .tools(tools).toolExecutor(reordered).readOnlyToolFlow().build();
+        AgentLoopOptions options = new AgentLoopOptions(20, Duration.ofMinutes(5),
+                3, 3, 0, Duration.ofMillis(100), Duration.ofSeconds(3), 8, 2);
+        AgentRequest request = new AgentRequest("flow-reordered-read", "inspect",
+                AgentJsonFlowV1Codec.ID, options, Map.of(), null);
+
+        long startedAt = System.nanoTime();
+        AgentResult result = kernel.run(request);
+        queued.get().run();
+
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)).isLessThan(1_500);
+        assertThat(toolObservations(result)).extracting(AgentObservation::errorCode)
+                .containsExactly("TOOL_TIMEOUT", "TOOL_TIMEOUT");
     }
 
     @Test

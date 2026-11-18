@@ -110,7 +110,7 @@ AgentResult result = kernel.run(request);
 
 标准 `tool_batch` 默认使用 Agent Core 内部共享的有界执行器并行调用独立工具：最多 8 个守护工作线程、64 个排队任务，空闲线程会回收；队列饱和时由当前调用线程执行，批次并行度可能下降。宿主仍可通过 `toolExecutor` 覆盖默认执行器，并负责自定义执行器的生命周期。构建器仅用于启动期组装；`build()` 会冻结工具集合，之后修改原工具注册表不会影响已创建的 Kernel。
 
-只读工具需要先后依赖和前一步结果引用时，可在构建器调用 `readOnlyToolFlow()`，并将请求协议设为 `AgentJsonFlowV1Codec.ID`。可选 `tool_flow` 扩展按依赖分层并行，失败或引用缺失会阻断下游；写入工具会在执行前被整批拒绝。字段与恢复边界见[协议说明](docs/protocols/agent-json-flow-v1.md)。
+只读工具需要先后依赖和前一步结果引用时，可在构建器调用 `readOnlyToolFlow()`，并将请求协议设为 `AgentJsonFlowV1Codec.ID`。可选 `tool_flow` 扩展按依赖分层并行，失败、单调用超时或引用缺失会阻断下游；使用默认或其他异步工具执行器时，即使工具未自行返回，等待方也会按单调用时限结束流程。写入工具会在执行前被整批拒绝。字段与恢复边界见[协议说明](docs/protocols/agent-json-flow-v1.md)。
 
 模型调用默认最多尝试 3 次（首次调用加 2 次重试），仅当模型适配器抛出 `AgentCoreException(AgentErrorCode.MODEL_CALL_FAILED, ..., true, cause)` 时重试。普通异常、`retryable=false`、协议错误和工具错误不会自动重试。可在构建时通过 `modelRetry(new AgentModelRetryOptions(maxAttempts, initialDelay, maxDelay))` 调整次数与退避范围；`maxAttempts` 限 1–10，退避范围限 1 ms–30 s，`maxAttempts=1` 可关闭重试。等待采用有上限的指数退避与抖动，计入本次 `run/resume` 的活动 deadline；取消、线程中断或超时后不会开始下一次模型调用。整个过程仍属于同一个 MODEL step，步骤耗时包含重试等待与全部模型调用。
 
@@ -252,6 +252,8 @@ AgentResult result = kernel.run(request);
 业务方可在 `AgentLoopKernel.builder(model)` 或 `AgentRuntime.builder(modelName, model)` 上调用 `modelCapacity(new ModelCapacity(provider, modelName, contextTokens, maxOutputTokens))`，登记私有模型或覆盖同名内置模型的容量。例如 `AgentRuntime.builder("private-model", model).modelCapacity(new ModelCapacity("Private", "private-model", 32_000, 4_096)).build()`。容量配置在构建时固定到当前实例；重复登记同一 ID（忽略大小写）会报配置错误，不影响其他实例或 `BuiltInModels`。`ModelCapacityCatalog.withOverrides(customModels).list()/find(modelName)` 可查询合并后的只读目录。未登记的 ID 回退内置容量，输出上限为 0 时仍保持不指定；业务容量不能代替适配器对完整供应商请求的 Token 校验。
 
 动态选模适配器的 `modelName(request)` 必须与同一请求传给 `generate(request, context)` 时实际使用的模型一致。正数输出上限被收紧后，Kernel 会以更新后的请求重新查询模型 ID，并继续按最终模型容量收紧；`maxOutputTokens=0` 仍保持未指定。
+
+结构化 Map/List 工具输出在默认 ReAct 摘要中使用 JSON 文本表示，避免 Java 集合的 `toString()` 形式；序列化失败时使用固定的有界 JSON 提示，不展开完整输出。业务工具可在结果上调用 `withModelSummary(text)` 提供按内容提炼的简短摘要；该文本按不可信观察内容转义并受同一长度预算约束，完整 `output` 仍保存在快照中。摘要不应包含秘密或未经脱敏的个人信息。
 
 `AgentLoopOptions.maxOutputTokens` 为正数时，是本次调用对所有推理策略的输出上限：自定义策略提供更大的值或 0 时，Kernel 均先收紧到该上限，再按实际模型容量收紧。选项值为 0 时不增加调用方上限，策略请求中的 0 仍表示未指定。模型适配器须把最终正数上限映射到供应商请求。
 

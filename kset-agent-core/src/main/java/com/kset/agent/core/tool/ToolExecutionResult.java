@@ -3,6 +3,7 @@ package com.kset.agent.core.tool;
 import com.kset.agent.core.AgentErrorCode;
 import com.kset.agent.core.value.AgentValueSnapshot;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -19,6 +20,8 @@ public record ToolExecutionResult(
         String errorCode,
         String errorMessage,
         Map<String, Object> attributes) {
+
+    public static final String MODEL_SUMMARY_ATTRIBUTE = "modelSummary";
 
     public ToolExecutionResult {
         errorCode = normalize(errorCode);
@@ -42,6 +45,16 @@ public record ToolExecutionResult(
 
     public static ToolExecutionResult unchanged(Object output) {
         return new ToolExecutionResult(true, false, output, null, null, Map.of());
+    }
+
+    /** Supplies a concise, untrusted model-visible summary while retaining the full output. */
+    public ToolExecutionResult withModelSummary(String summary) {
+        if (summary == null || summary.isBlank()) {
+            throw new IllegalArgumentException("model summary must not be blank");
+        }
+        Map<String, Object> updated = new LinkedHashMap<>(attributes);
+        updated.put(MODEL_SUMMARY_ATTRIBUTE, summary);
+        return new ToolExecutionResult(success, progress, output, errorCode, errorMessage, updated);
     }
 
     public static ToolExecutionResult failure(String errorCode, String errorMessage) {

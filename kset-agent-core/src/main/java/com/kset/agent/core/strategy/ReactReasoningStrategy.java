@@ -1,5 +1,7 @@
 package com.kset.agent.core.strategy;
 
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.kset.agent.core.action.AgentAction;
@@ -17,7 +19,10 @@ import com.kset.agent.core.protocol.AgentDecision;
 import com.kset.agent.core.protocol.AgentProtocolException;
 import com.kset.agent.core.tool.AgentToolDescriptor;
 import com.kset.agent.core.tool.AgentToolRegistry;
+import com.kset.agent.core.tool.ToolExecutionResult;
 
+import java.io.IOException;
+import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -40,6 +45,9 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
     private static final String OMITTED_OBSERVATIONS_HEADING =
             "\nEarlier observations omitted: ";
     private static final String TRUNCATION_MARKER = "...[truncated]";
+    private static final String UNAVAILABLE_STRUCTURED_OUTPUT =
+            "{\"error\":\"structured output summary unavailable\"}";
+    private static final ObjectMapper OUTPUT_MAPPER = new ObjectMapper();
     private static final List<String> ACTION_ORDER = List.of(
             StandardActionTypes.TASK_PLAN,
             StandardActionTypes.TOOL_CALL,
@@ -316,8 +324,7 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
         if (observation.errorMessage() != null) {
             data.put("errorMessage", prefix(observation.errorMessage(), 96));
         }
-        String output = observation.output() == null
-                ? null : String.valueOf(observation.output());
+        String output = modelVisibleOutput(observation, maxChars);
         if (callId != null && callId.length() > 48 && callId.length() <= maxChars) {
             data.put("callId", callId);
             if (output != null) {
@@ -353,6 +360,111 @@ public final class ReactReasoningStrategy implements AgentReasoningStrategy {
             }
         }
         return best;
+    }
+
+    private String modelVisibleOutput(AgentObservation observation, int maxChars) {
+        Object provided = observation.attributes().get(ToolExecutionResult.MODEL_SUMMARY_ATTRIBUTE);
+        if (provided instanceof String summary && !summary.isBlank()) {
+            return summary;
+        }
+        Object output = observation.output();
+        if (output == null) {
+            return null;
+        }
+        if (output instanceof Map<?, ?> || output instanceof Collection<?>) {
+            return structuredOutput(output, maxChars);
+        }
+        return String.valueOf(output);
+    }
+
+    private String structuredOutput(Object output, int maxChars) {
+        BoundedWriter writer = new BoundedWriter(maxChars);
+        try (JsonGenerator generator = OUTPUT_MAPPER.getFactory().createGenerator(writer)) {
+            writeJsonCompatible(generator, output);
+        } catch (IOException error) {
+            return writer.truncated() ? writer.truncatedContent() : UNAVAILABLE_STRUCTURED_OUTPUT;
+        }
+        return writer.content();
+    }
+
+    private void writeJsonCompatible(JsonGenerator generator, Object value) throws IOException {
+        if (value instanceof Map<?, ?> map) {
+            generator.writeStartObject();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                generator.writeFieldName((String) entry.getKey());
+                writeJsonCompatible(generator, entry.getValue());
+            }
+            generator.writeEndObject();
+            return;
+        }
+        if (value instanceof Collection<?> collection) {
+            generator.writeStartArray();
+            for (Object item : collection) {
+                writeJsonCompatible(generator, item);
+            }
+            generator.writeEndArray();
+            return;
+        }
+        OUTPUT_MAPPER.writeValue(generator, value == null || value instanceof String
+                || value instanceof Number || value instanceof Boolean ? value : String.valueOf(value));
+    }
+
+    private static final class BoundedWriter extends Writer {
+        private final StringBuilder content = new StringBuilder();
+        private final int maxChars;
+        private boolean truncated;
+
+        private BoundedWriter(int maxChars) {
+            this.maxChars = maxChars;
+        }
+
+        @Override
+        public void write(char[] characters, int offset, int length) throws IOException {
+            if (truncated) {
+                throw new IOException("structured output limit reached");
+            }
+            int accepted = Math.min(length, maxChars - content.length());
+            content.append(characters, offset, accepted);
+            if (accepted < length) {
+                truncated = true;
+                throw new IOException("structured output limit reached");
+            }
+        }
+
+        @Override
+        public void write(String value, int offset, int length) throws IOException {
+            if (truncated) {
+                throw new IOException("structured output limit reached");
+            }
+            int accepted = Math.min(length, maxChars - content.length());
+            content.append(value, offset, offset + accepted);
+            if (accepted < length) {
+                truncated = true;
+                throw new IOException("structured output limit reached");
+            }
+        }
+
+        @Override
+        public void flush() { }
+
+        @Override
+        public void close() { }
+
+        private boolean truncated() {
+            return truncated;
+        }
+
+        private String content() {
+            return content.toString();
+        }
+
+        private String truncatedContent() {
+            int length = content.length();
+            if (length > 0 && Character.isHighSurrogate(content.charAt(length - 1))) {
+                length--;
+            }
+            return content.substring(0, length) + TRUNCATION_MARKER;
+        }
     }
 
     private String renderObservationData(ObjectNode data) {

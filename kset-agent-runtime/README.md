@@ -50,7 +50,7 @@ Runtime 默认注册 Core 提供的无状态 `AgentTimingLogListener`，复用�
 
 日志包含 `operation`、阶段、状态、`agentRunId`、`invocationId`、`stepId`、轮次与 `durationMs`。整次调用使用 `runStatus`，步骤使用 `eventStatus`；动作的 `COMPLETED` 只表示该动作调用已返回，不等于工具业务成功。模型耗时包含 Core 的重试等待，整次调用耗时只覆盖 Core 执行，不包含 Runtime 的工具目录组装。日志不记录 Prompt、模型正文、工具参数或 Observation。
 
-需要按身份、租户或业务配置为每次调用选择模型时，可配置 `.modelFactory(context -> selectModel(context))`；未配置时使用 `builder(model)` 的默认模型。需要按工具目录构建策略时，可配置 `.strategyFactory(tools -> createStrategy(tools))`。共享的模型、策略、Codec、工具、检查点和监听器必须符合 Core 的线程安全要求；持有可变单次状态的组件应为每次调用创建独立 Runtime。
+需要按身份、租户或业务配置为每次调用选择模型时，可配置 `.modelFactory(context -> selectModel(context))`；需要结合任务内容时使用 `.modelFactory((request, context) -> selectModel(request.task(), context))`。未配置时使用 `builder(model)` 的默认模型。`.skillSelector((request, context) -> selectSkillIds(request.task(), context))` 可为未显式传 Skill 列表的 `run/resume` 按任务选择工具集合；显式列表优先，空列表表示本次不选 Skill。选择器只控制可见目录，工具执行仍须校验当前身份和权限。恢复调用会重新运行选择器，应保证同一任务在当前业务上下文下选择稳定；需固定目录时显式传入 Skill 列表。需要按工具目录构建策略时，可配置 `.strategyFactory(tools -> createStrategy(tools))`。共享的模型、策略、Codec、工具、检查点和监听器必须符合 Core 的线程安全要求；持有可变单次状态的组件应为每次调用创建独立 Runtime。
 
 恢复时使用相同任务与协议、快照中的 `agentRunId`，并重新提供当前可信的 `AgentBusinessContext` 与所选 Skill；需要核验未知工具结果时，传入 Core 的 `AgentResumeInput`：
 

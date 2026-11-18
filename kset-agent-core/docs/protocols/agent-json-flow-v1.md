@@ -25,7 +25,7 @@
 
 `$toolResult` 必须独占其所在对象，包含直接依赖调用的 `callId` 和 `path`。`path` 是 JSON Pointer，空字符串引用完整输出。引用可放在参数对象或数组的任意层级；引用目标不存在或为 `null` 时，该调用不执行并返回 `TOOL_RESULT_REFERENCE_MISSING`。普通参数中的显式 `null` 不受影响。
 
-执行器按依赖层提交工具调用；同层调用可并行，下一层只在上一层结果确定后启动。前置调用失败时，下游返回 `TOOL_DEPENDENCY_FAILED`，其他独立分支仍可继续。Observation 按 `toolCalls` 原始顺序返回，并携带标准 `callId/taskId/toolName` 字段。批次与单调用沿用已有数量、deadline 和超时选项；超时或取消后不启动后续层。`CompletableFuture` 的取消不保证终止已启动的只读调用。
+执行器按依赖层提交工具调用；同层调用可并行，下一层只在上一层结果确定后启动。前置调用失败时，下游返回 `TOOL_DEPENDENCY_FAILED`，其他独立分支仍可继续。Observation 按 `toolCalls` 原始顺序返回，并携带标准 `callId/taskId/toolName` 字段。批次与单调用沿用已有数量、deadline 和超时选项；使用异步工具执行器时，单调用达到时限后等待方无需等工具自行返回即可结束本次流程，超时或取消后不启动后续层。`FutureTask.cancel(true)` 请求中断，但不保证终止已启动的只读调用。
 
 所有工具在执行前统一检查：必须标记 `readOnly=true` 且 `requiresConfirmation=false`，否则整批返回 `TOOL_FLOW_READ_ONLY_REQUIRED`，不执行任何调用。真实业务工具仍须按当前身份校验权限。该扩展没有标准工具动作的执行前 pending 快照和未知副作用核验，因此不得用于写入、创建、发送或其他有副作用的操作；异常退出后重新读取可能得到较新的数据。
 

@@ -28,7 +28,10 @@
 | `AgentRuntimeContexts` | `require(request/executionContext/toolContext)` | `AgentBusinessContext` | 缺失即抛错 | 从本次 Core 请求或执行上下文读取业务事实 |
 | `AgentRuntime` | `run(request, context, selectedSkillIds)` | `AgentResult` | `context` 必填；Skill ID 列表非 null | 固定工具目录、组装 Kernel、执行新任务 |
 | `AgentRuntime` | `resume(request, snapshot, input, context, selectedSkillIds)` | `AgentResult` | `context` 必填；其余遵循 Core 恢复契约 | 重新取得当前目录并调用 Core 恢复 |
-| `AgentRuntime.Builder` | `modelFactory(context)` | `AgentModel` | 可选；结果非 null | 为每次调用选择当前模型，缺省使用 Builder 模型 |
+| `AgentRuntime` | `resume(request, snapshot, input, context)` | `AgentResult` | `context` 必填；其余遵循 Core 恢复契约 | 使用当前任务及业务上下文重新选择 Skill 后执行核验恢复 |
+| `AgentRuntime.Builder` | `modelFactory(context)` | `Function<AgentBusinessContext,AgentModel>` | 可选；模型结果非 null | 为每次调用选择当前模型，缺省使用 Builder 模型 |
+| `AgentRuntime.Builder` | `modelFactory(request, context)` | `BiFunction<AgentRequest,AgentBusinessContext,AgentModel>` | 可选；模型结果非 null | 按当前任务和可信业务上下文选择模型；覆盖之前配置的模型工厂 |
+| `AgentRuntime.Builder` | `skillSelector(request, context)` | `BiFunction<AgentRequest,AgentBusinessContext,List<String>>` | 可选；选择结果及元素非 null | 未显式传 Skill 列表时选择本次可见 Skill；显式列表优先，恢复时按当前上下文重新选择 |
 | `AgentRuntime.Builder` | `strategyFactory(tools)` | `AgentReasoningStrategy` | 可选；结果非 null | 按本次工具目录创建策略，缺省使用 Core ReAct |
 
 Runtime 将 `AgentBusinessContext` 放入专用 `AgentRequest.attributes` 键，Core 透传至 `AgentExecutionContext.attributes`；该键不进入 `AgentRunSnapshot`，不属于 `agent.*` 或 `react.*` 控制属性。默认 ReAct 不将其投影到 Prompt。它可能包含敏感内容，宿主日志、生命周期上报与错误消息不得直接打印请求属性。

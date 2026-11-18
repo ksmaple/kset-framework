@@ -9,6 +9,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.LongSupplier;
 
 /** Bounded wait shared by action handlers; the caller owns cancellation of the future. */
 final class CancellableActionWait {
@@ -21,11 +22,18 @@ final class CancellableActionWait {
 
     static <T> T await(Future<T> future, AgentExecutionContext context, long deadlineNanos)
             throws InterruptedException, ExecutionException, TimeoutException {
+        return await(future, context, deadlineNanos, () -> deadlineNanos);
+    }
+
+    static <T> T await(Future<T> future, AgentExecutionContext context, long deadlineNanos,
+                       LongSupplier callDeadlineNanos)
+            throws InterruptedException, ExecutionException, TimeoutException {
         while (true) {
             if (context.isCancellationRequested()) {
                 throw new CancellationException("action cancelled");
             }
-            long remaining = deadlineNanos - System.nanoTime();
+            long remaining = Math.min(deadlineNanos, callDeadlineNanos.getAsLong())
+                    - System.nanoTime();
             if (remaining <= 0L) {
                 throw new TimeoutException("action deadline reached");
             }

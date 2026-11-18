@@ -6,6 +6,7 @@ import com.kset.agent.core.api.AgentRunStatus;
 import com.kset.agent.core.event.AgentLifecycleContext;
 import com.kset.agent.core.event.AgentLifecycleEventType;
 import com.kset.agent.core.model.ModelCallMetrics;
+import com.kset.agent.core.model.AgentModel;
 import com.kset.agent.core.model.ModelResponse;
 import com.kset.agent.core.protocol.json.AgentJsonV1Codec;
 import com.kset.agent.core.tool.AgentTool;
@@ -94,6 +95,53 @@ class AgentRuntimeRegistrationTest {
                 .skill("same", context -> List.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("duplicate skill");
+    }
+
+    @Test
+    void selectsModelAndVisibleSkillsFromTaskWithoutOverridingExplicitSkills() {
+        List<String> selectedModels = new ArrayList<>();
+        List<String> prompts = new ArrayList<>();
+        AgentModel fallback = (modelRequest, executionContext) -> ModelResponse.text("fallback");
+        AgentRuntime runtime = AgentRuntime.builder(fallback)
+                .skill("orders", context -> List.of(tool("orders-tool", new ArrayList<>())))
+                .skill("inventory", context -> List.of(tool("inventory-tool", new ArrayList<>())))
+                .skillSelector((request, context) -> request.task().contains("order")
+                        ? List.of("orders") : List.of("inventory"))
+                .modelFactory((request, context) -> {
+                    String selected = request.task().contains("order") ? "orders-model" : "inventory-model";
+                    selectedModels.add(selected);
+                    return (modelRequest, executionContext) -> {
+                        prompts.add(modelRequest.userPrompt());
+                        return ModelResponse.text(selected);
+                    };
+                })
+                .build();
+
+        AgentResult orders = runtime.run(AgentRequest.of("orders-run", "order details",
+                AgentJsonV1Codec.ID), context());
+        AgentResult inventory = runtime.run(AgentRequest.of("inventory-run", "stock details",
+                AgentJsonV1Codec.ID), context());
+        AgentResult explicit = runtime.run(AgentRequest.of("explicit-run", "order details",
+                AgentJsonV1Codec.ID), context(), List.of("inventory"));
+
+        assertThat(orders.answer()).isEqualTo("orders-model");
+        assertThat(inventory.answer()).isEqualTo("inventory-model");
+        assertThat(selectedModels).containsExactly("orders-model", "inventory-model", "orders-model");
+        assertThat(prompts.get(0)).contains("orders-tool").doesNotContain("inventory-tool");
+        assertThat(prompts.get(1)).contains("inventory-tool").doesNotContain("orders-tool");
+        assertThat(explicit.answer()).isEqualTo("orders-model");
+        assertThat(prompts.get(2)).contains("inventory-tool").doesNotContain("orders-tool");
+    }
+
+    @Test
+    void keepsContextOnlyModelFactoryCompatible() {
+        AgentRuntime runtime = AgentRuntime.builder((request, executionContext) ->
+                ModelResponse.text("fallback"))
+                .modelFactory(context -> (request, executionContext) ->
+                        ModelResponse.text(context.principalId()))
+                .build();
+
+        assertThat(runtime.run(request(), context()).answer()).isEqualTo("user-1");
     }
 
     private static AgentTool tool(String name, List<String> executedTools) {
