@@ -22,6 +22,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 
 /** Factory for handlers of the standard protocol-neutral actions. */
 public final class StandardActionHandlers {
@@ -211,18 +212,29 @@ public final class StandardActionHandlers {
             Instant batchDeadline = batchStartedAt.plus(timeout);
             long waitDeadline = CancellableActionWait.deadlineNanos(batchStartedAt, batchDeadline);
 
-            List<FutureTask<AgentObservation>> futures = new ArrayList<>();
+            List<RunningBatchCall> runningCalls = new ArrayList<>();
             try {
                 for (ToolCallAction call : batch.toolCalls()) {
+                    AtomicLong callWaitDeadline = new AtomicLong(Long.MAX_VALUE);
                     FutureTask<AgentObservation> future = new FutureTask<>(
-                            () -> executeCall(call, context, callTimeout, batchDeadline));
-                    futures.add(future);
+                            () -> executeCall(call, context, callTimeout, batchDeadline,
+                                    callWaitDeadline));
+                    runningCalls.add(new RunningBatchCall(future, callWaitDeadline));
                     toolExecutor.execute(future);
                 }
-                List<AgentObservation> observations = new ArrayList<>(futures.size());
-                for (FutureTask<AgentObservation> future : futures) {
-                    observations.add(CancellableActionWait.await(
-                            future, context.executionContext(), waitDeadline));
+                List<AgentObservation> observations = new ArrayList<>(runningCalls.size());
+                for (RunningBatchCall runningCall : runningCalls) {
+                    if (context.executionContext().isCancellationRequested()) {
+                        throw new CancellationException("tool batch execution cancelled");
+                    }
+                    FutureTask<AgentObservation> future = runningCall.future();
+                    AgentObservation observation = future.isDone() ? future.get()
+                            : CancellableActionWait.await(future, context.executionContext(),
+                                    waitDeadline, () -> earliestCallDeadline(runningCalls));
+                    if (context.executionContext().isCancellationRequested()) {
+                        throw new CancellationException("tool batch execution cancelled");
+                    }
+                    observations.add(observation);
                 }
                 if (observations.stream().anyMatch(StandardActionHandlers::isResultUnknown)) {
                     return rememberApprovedOperations(approvedCalls, context,
@@ -237,14 +249,11 @@ public final class StandardActionHandlers {
                                         RECONCILIATION_PENDING,
                                         APPROVAL_PENDING_ACTION)));
             } catch (Exception error) {
-                futures.forEach(future -> future.cancel(true));
+                runningCalls.forEach(call -> call.future().cancel(true));
                 if (error instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
                 }
-                boolean mayHaveSideEffects = batch.toolCalls().stream()
-                        .map(call -> toolRegistry.find(call.toolName()).orElse(null))
-                        .anyMatch(tool -> tool != null && !tool.descriptor().readOnly());
-                if (!futures.isEmpty() && mayHaveSideEffects) {
+                if (!runningCalls.isEmpty()) {
                     return rememberApprovedOperations(approvedCalls, context,
                             suspendUnknownBatch(batch, batchFailureCode(error), error));
                 }
@@ -257,7 +266,7 @@ public final class StandardActionHandlers {
 
         private AgentObservation executeCall(
                 ToolCallAction call, AgentActionContext context,
-                Duration timeout, Instant batchDeadline) {
+                Duration timeout, Instant batchDeadline, AtomicLong callWaitDeadline) {
             AgentTool tool = toolRegistry.find(call.toolName()).orElse(null);
             if (tool == null) {
                 return toolFailure(call,
@@ -266,6 +275,8 @@ public final class StandardActionHandlers {
             try {
                 AgentToolContext toolContext = toolContext(
                         call, context, timeout, batchDeadline);
+                callWaitDeadline.set(CancellableActionWait.deadlineNanos(
+                        context.clock().instant(), toolContext.deadline()));
                 if (toolContext.isCancellationRequested()) {
                     return toolFailure(call,
                             AgentErrorCode.TOOL_CANCELLED, "tool execution cancelled");
@@ -287,6 +298,19 @@ public final class StandardActionHandlers {
                         AgentErrorCode.TOOL_EXECUTION_FAILED, error);
             }
         }
+
+        private static long earliestCallDeadline(List<RunningBatchCall> runningCalls) {
+            long earliest = Long.MAX_VALUE;
+            for (RunningBatchCall call : runningCalls) {
+                if (!call.future().isDone()) {
+                    earliest = Math.min(earliest, call.deadlineNanos().get());
+                }
+            }
+            return earliest;
+        }
+
+        private record RunningBatchCall(FutureTask<AgentObservation> future,
+                                        AtomicLong deadlineNanos) { }
     }
 
     private static final class AnswerChunkHandler implements AgentActionHandler {

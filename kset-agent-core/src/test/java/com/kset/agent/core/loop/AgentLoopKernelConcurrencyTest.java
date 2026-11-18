@@ -249,6 +249,63 @@ class AgentLoopKernelConcurrencyTest {
         assertLifecycleTrace(listener.events(), "timed-out-batch");
     }
 
+    @Test
+    void suspendsBlockedReadAtCallTimeoutBeforeBatchTimeout() {
+        CountDownLatch releaseTool = new CountDownLatch(1);
+        AgentTool tool = new AgentTool() {
+            @Override
+            public AgentToolDescriptor descriptor() {
+                return new AgentToolDescriptor(
+                        "blocked", "blocked read", Map.of(), true, false, Map.of());
+            }
+
+            @Override
+            public ToolExecutionResult execute(
+                    Map<String, Object> arguments, AgentToolContext context) {
+                await(releaseTool);
+                return ToolExecutionResult.success(context.callId());
+            }
+        };
+        AgentTestSupport.ScriptedModel model = new AgentTestSupport.ScriptedModel(
+                envelope("""
+                        {"type":"task_plan","plan":"read","tasks":[
+                          {"taskId":"read","title":"Read","dependsOn":[]}
+                        ]}
+                        """),
+                envelope("""
+                        {"type":"tool_batch","plan":"read both","toolCalls":[
+                          {"callId":"read-1","taskId":"read","toolName":"blocked","arguments":{}},
+                          {"callId":"read-2","taskId":"read","toolName":"blocked","arguments":{}}
+                        ]}
+                        """));
+        AgentLoopOptions options = new AgentLoopOptions(
+                10, Duration.ofSeconds(10), 3, 3, 256,
+                Duration.ofMillis(100), Duration.ofSeconds(3), 8, 8);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        AgentLoopKernel kernel = AgentLoopKernel.builder(model)
+                .tools(new InMemoryAgentToolRegistry().register(tool))
+                .toolExecutor(executor).build();
+
+        AgentResult result;
+        long startedAt = System.nanoTime();
+        try {
+            result = kernel.run(request("call-timeout-batch", options, Map.of(), null));
+        } finally {
+            releaseTool.countDown();
+            executor.shutdownNow();
+        }
+
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt))
+                .isLessThan(1_500);
+        assertThat(result.runStatus()).isEqualTo(AgentRunStatus.SUSPENDED);
+        assertThat(result.stopDecision().stopReason())
+                .isEqualTo(AgentStopReason.RECONCILIATION_REQUIRED);
+        assertThat(result.snapshot().observations().getLast().errorCode())
+                .isEqualTo(AgentErrorCode.TOOL_RESULT_UNKNOWN.name());
+        assertThat(result.snapshot().observations().getLast().attributes())
+                .containsEntry("causeCode", AgentErrorCode.TOOL_TIMEOUT.name());
+    }
+
     @SuppressWarnings("unchecked")
     private static List<String> planTaskIds(AgentResult result) {
         List<Map<String, Object>> tasks = (List<Map<String, Object>>) result.snapshot()
