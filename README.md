@@ -97,7 +97,7 @@ Java 包根路径通常与 Maven 模块目录对应（`src/main/java` 下目录�
 
 ## 优雅启停
 
-全部 KSet 组件统一接入基于 Spring `SmartLifecycle` 相位的启停编排（`kset-common` 内置，默认开启）。
+需要统一启停的 KSet 受管资源组件通过 Spring `SmartLifecycle` 相位编排（`kset-common` 内置，默认开启）；Web 容器、定时任务和数据库连接池遵循各自的 Spring 生命周期。手动构造的 Tuya 客户端和按次构造的 Agent Harness 不属于该编排。
 
 停机优先级（相位越大越先停）：
 
@@ -163,7 +163,7 @@ KsetLifecycleHookAdapter localCacheShutdown() {
 | 组件 | Maven 依赖 | 主要入口 | 最小配置/说明 |
 |------|------------|----------|---------------|
 | 版本基线 | `kset-boot-parent` | Maven parent / BOM | 统一 Java 21、UTF-8、Boot/Cloud/Alibaba/Dubbo 等版本 |
-| 公共工具 | `kset-common` | `ListHelper`、`DateHelper`、`KsetHttp`、`Parallel`、`Retryer`、`KsetContext` | 也会由任意 starter 传递引入 |
+| 公共工具 | `kset-common` | `ListHelper`、`DateHelper`、`KsetHttp`、`Parallel`、`Retryer`、`KsetContext` | 由依赖它的 Starter 传递引入；Schedule、Agent Harness 不传递引入 |
 | 涂鸦客户端 | `kset-tuya` | `TuyaApiClient`、`TuyaDoorLockClient` | 可选的手动构造客户端；不提供 Spring 自动装配 |
 | 事件门面 | `kset-common` / `kset-starter-mq` | `EventFacade`、`EventHandler`、`SendCallback` | 默认 Spring 本地事件；引入 MQ 后自动切换 RocketMQ |
 | Web | `kset-starter-web` | `ApiResponse`、`@OpLog`、Controller | 提供 Web 基础能力与统一响应 |
@@ -224,9 +224,9 @@ KsetLifecycleHookAdapter localCacheShutdown() {
 |------|------|------|
 | BOM | `kset-boot-parent` | 锁定全量三方版本 |
 | 工具聚合 | `kset-common` | Commons / Jackson / TTL 等**仅在此声明**（Guava 已移除，业务需要请自行声明） |
-| 能力 | `kset-cloud`、`kset-starter-*` | **必须**依赖 `kset-common`；只声明领域能力，勿重复工具库；`starter-nacos` / `starter-sentinel` / `starter-web` **解耦**，微服务按需组合 |
+| 能力 | `kset-cloud`、`kset-starter-*` | 按实际使用声明 `kset-common`；Schedule 与 Agent Harness 无此依赖。`starter-nacos` / `starter-sentinel` / `starter-web` **解耦**，微服务按需组合 |
 
-业务项目引入任意 KSet Starter 后，上述工具库会随 `kset-common` **传递**进入 classpath，一般无需再单独声明 `commons-lang3` 等；`guava` 不再传递，业务需要时请自行声明（版本仍由 `kset-boot-parent` 统一管理）。
+业务项目引入依赖 `kset-common` 的 KSet Starter 后，上述工具库会随 `kset-common` **传递**进入 classpath，一般无需再单独声明 `commons-lang3` 等；仅引入 Schedule 或 Agent Harness 时不会传递这些工具库。`guava` 不再传递，业务需要时请自行声明（版本仍由 `kset-boot-parent` 统一管理）。
 
 若未使用 KSet Starter、仅继承 `kset-boot-parent`，可按需从 BOM 引用（**无需写 version**）：
 

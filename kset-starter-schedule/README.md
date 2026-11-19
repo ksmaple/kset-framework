@@ -11,7 +11,7 @@
 </dependency>
 ```
 
-业务应用仍需通过 `@EnableScheduling` 开启 Spring 调度。唯一运行锁使用现有 `DataSource` 和 `JdbcTemplate`，不会额外创建数据源。
+Starter 会传递引入 Spring AOP，以使 `@KsetTaskLock` 切面生效。业务应用仍需通过 `@EnableScheduling` 开启 Spring 调度。唯一运行锁使用应用提供的 `DataSource` 和 `JdbcTemplate`，不会额外创建数据源。
 
 ## 快速接入
 
