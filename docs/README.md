@@ -37,6 +37,7 @@
 |------|------|----------|
 | `kset-boot-parent` | [模块 README](../kset-boot-parent/README.md) | Maven parent / BOM、Java 与依赖版本基线 |
 | `kset-common` | [模块 README](../kset-common/README.md) | 公共工具、事件门面、上下文、线程池、重试与日志 |
+| `kset-tuya` | [模块 README](../kset-tuya/README.md) | 可选涂鸦 API 与门锁临时密码客户端，不含 Spring 自动装配 |
 | `kset-cloud` | [模块 README](../kset-cloud/README.md) | 云服务公共配置、Nacos 命名、灰度与规则 SPI |
 | `kset-starter-web` | [模块 README](../kset-starter-web/README.md) | Web 自动配置、统一响应、异常与操作日志 |
 | `kset-starter-auth` | [模块 README](../kset-starter-auth/README.md) | 登录态、多套鉴权与上下文透传 |

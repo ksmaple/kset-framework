@@ -164,6 +164,7 @@ KsetLifecycleHookAdapter localCacheShutdown() {
 |------|------------|----------|---------------|
 | 版本基线 | `kset-boot-parent` | Maven parent / BOM | 统一 Java 21、UTF-8、Boot/Cloud/Alibaba/Dubbo 等版本 |
 | 公共工具 | `kset-common` | `ListHelper`、`DateHelper`、`KsetHttp`、`Parallel`、`Retryer`、`KsetContext` | 也会由任意 starter 传递引入 |
+| 涂鸦客户端 | `kset-tuya` | `TuyaApiClient`、`TuyaDoorLockClient` | 可选的手动构造客户端；不提供 Spring 自动装配 |
 | 事件门面 | `kset-common` / `kset-starter-mq` | `EventFacade`、`EventHandler`、`SendCallback` | 默认 Spring 本地事件；引入 MQ 后自动切换 RocketMQ |
 | Web | `kset-starter-web` | `ApiResponse`、`@OpLog`、Controller | 提供 Web 基础能力与统一响应 |
 | Auth | `kset-starter-auth` | `LoginContext`、`@RequireLogin`、`@RequirePermission`、`LoginSessionStore` | 默认 `app + session + X-Session-Token`；`web.mode` 默认 `redis` |
@@ -181,6 +182,7 @@ KsetLifecycleHookAdapter localCacheShutdown() {
 | Gateway | `kset-starter-gateway` | Gateway 路由、灰度、鉴权 SPI | 独立进程，勿与 `starter-web` 同用 |
 | MQ | `kset-starter-mq` | RocketMQ V5 Client Spring Boot Starter | 自动提供 RocketMQ 版 `EventFacade` |
 | Cloud SPI | `kset-cloud` | `CloudRuleProvider`、`GrayTagResolver` | starter 内部共享，也可业务扩展 |
+| Agent Harness | `kset-starter-agent-harness` | `AgentHarnessFactory`、`AgentHarnessToolkitFactory` | 基于 AgentScope Java 2.0.5；按次提供模型、工具与状态存储 |
 
 ## 版本矩阵
 
