@@ -42,7 +42,20 @@ public class SignatureAuthenticator implements Authenticator {
     private boolean verify(AuthRequest request,
                            KsetAuthProperties.AppKey appKeyProperties,
                            KsetAuthProperties.App app) {
-        if (!validTimestamp(request, appKeyProperties)) {
+        KsetSignUtil signer = KsetSignUtil.of(app.getSecret(), appKeyProperties.getSignField());
+        String sign = resolveSign(request, appKeyProperties);
+        if (request.getBodySha256() != null && validTimestamp(request, appKeyProperties, true)) {
+            Map<String, String> signedHeaders = new LinkedHashMap<>();
+            putHeader(signedHeaders, request, appKeyProperties.getAppKeyHeader());
+            putHeader(signedHeaders, request, appKeyProperties.getTimestampHeader());
+            putHeader(signedHeaders, request, appKeyProperties.getNonceHeader());
+            if (signer.verifyV2(sign, request.getMethod(), request.getPath(),
+                    request.getBodySha256(), request.getParams(), signedHeaders)) {
+                return true;
+            }
+        }
+        if (!appKeyProperties.isLegacySignatureEnabled()
+                || !validTimestamp(request, appKeyProperties, appKeyProperties.isTimestampRequired())) {
             return false;
         }
         Map<String, String> params = new LinkedHashMap<>(request.getParams());
@@ -51,11 +64,16 @@ public class SignatureAuthenticator implements Authenticator {
         putIfPresent(params, appKeyProperties.getTimestampHeader(), request.header(appKeyProperties.getTimestampHeader()));
         putIfPresent(params, appKeyProperties.getNonceHeader(), request.header(appKeyProperties.getNonceHeader()));
         putIfPresent(params, appKeyProperties.getSignField(), resolveSign(request, appKeyProperties));
-        KsetSignUtil signer = KsetSignUtil.of(app.getSecret(), appKeyProperties.getSignField());
         if ("md5".equalsIgnoreCase(appKeyProperties.getAlgorithm())) {
             return signer.verifyMd5(params);
         }
         return signer.verifySha1(params);
+    }
+
+    private static void putHeader(Map<String, String> headers, AuthRequest request, String name) {
+        if (AppKeySupport.hasText(name) && request.header(name) != null) {
+            headers.put(name.toLowerCase(java.util.Locale.ROOT), request.header(name));
+        }
     }
 
     private static void putIfPresent(Map<String, String> params, String key, String value) {
@@ -72,18 +90,25 @@ public class SignatureAuthenticator implements Authenticator {
         return sign;
     }
 
-    private static boolean validTimestamp(AuthRequest request, KsetAuthProperties.AppKey properties) {
+    private static boolean validTimestamp(AuthRequest request, KsetAuthProperties.AppKey properties,
+                                          boolean required) {
         String timestamp = request.header(properties.getTimestampHeader());
         if (!AppKeySupport.hasText(timestamp)) {
             timestamp = request.param(properties.getTimestampHeader());
         }
         if (!AppKeySupport.hasText(timestamp)) {
-            return !properties.isTimestampRequired();
+            return !required;
         }
         try {
             long value = Long.parseLong(timestamp.trim());
+            if (value < 0) {
+                return false;
+            }
             long millis = value < 10_000_000_000L ? value * 1000L : value;
             Duration ttl = properties.getTimestampTtl() != null ? properties.getTimestampTtl() : Duration.ofMinutes(5);
+            if (ttl.isNegative()) {
+                return false;
+            }
             return Math.abs(System.currentTimeMillis() - millis) <= ttl.toMillis();
         } catch (NumberFormatException ex) {
             return false;

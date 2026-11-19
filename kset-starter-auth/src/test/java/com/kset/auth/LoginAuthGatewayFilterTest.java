@@ -7,6 +7,7 @@ import com.kset.auth.core.DefaultLoginUserHeaderCodec.BasicLoginContext;
 import com.kset.auth.core.LoginAuthService;
 import com.kset.auth.core.NoneAuthenticator;
 import com.kset.auth.core.SessionAuthenticator;
+import com.kset.auth.core.SignatureAuthenticator;
 import com.kset.auth.core.TrustedHeaderAuthenticator;
 import com.kset.auth.gateway.DefaultGatewayAuthFailureHandler;
 import com.kset.auth.gateway.LoginAuthGatewayFilter;
@@ -15,15 +16,19 @@ import com.kset.common.auth.AuthHeaders;
 import com.kset.common.auth.LoginUser;
 import com.kset.common.trace.TraceHeaders;
 import com.kset.common.utils.JsonUtil;
+import com.kset.common.utils.sign.KsetSignUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.util.Optional;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -160,6 +165,45 @@ class LoginAuthGatewayFilterTest {
         assertThat(exchange.getResponse().getBodyAsString().block()).contains("\"traceId\":\"gateway-trace\"");
     }
 
+    @Test
+    void signatureRuleReplaysSignedBody() {
+        KsetAuthProperties properties = new KsetAuthProperties();
+        KsetAuthProperties.App app = new KsetAuthProperties.App();
+        app.setAppKey("partner-app");
+        app.setSecret("app-secret");
+        app.setUserId("partner-user");
+        properties.getAppKey().setApps(List.of(app));
+        KsetAuthProperties.AuthRule rule = new KsetAuthProperties.AuthRule();
+        rule.setName("partner-sign");
+        rule.setPaths(List.of("/openapi/**"));
+        rule.setScheme("signature");
+        properties.setRules(List.of(rule));
+        String body = "{\"id\":1}";
+        String timestamp = Long.toString(System.currentTimeMillis());
+        String signature = KsetSignUtil.of("app-secret").signV2("POST", "/openapi/orders",
+                KsetSignUtil.sha256(body.getBytes(java.nio.charset.StandardCharsets.UTF_8)), Map.of(),
+                Map.of("X-App-Key", "partner-app", "X-Timestamp", timestamp));
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.post("/openapi/orders")
+                .header("X-App-Key", "partner-app")
+                .header("X-Timestamp", timestamp)
+                .header("X-Sign", signature)
+                .body(body));
+        AtomicReference<String> receivedBody = new AtomicReference<>();
+
+        filter(properties, mock(LoginSessionStore.class)).filter(exchange, signed ->
+                DataBufferUtils.join(signed.getRequest().getBody()).doOnNext(buffer -> {
+                    try {
+                        byte[] bytes = new byte[buffer.readableByteCount()];
+                        buffer.read(bytes);
+                        receivedBody.set(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+                    } finally {
+                        DataBufferUtils.release(buffer);
+                    }
+                }).then()).block();
+
+        assertThat(receivedBody).hasValue(body);
+    }
+
     private LoginAuthGatewayFilter filter(LoginSessionStore store) {
         return filter(new KsetAuthProperties(), store);
     }
@@ -169,7 +213,8 @@ class LoginAuthGatewayFilterTest {
         return new LoginAuthGatewayFilter(properties,
                 new LoginAuthService(store,
                         new AuthRuleResolver(properties),
-                        List.of(new SessionAuthenticator(store), new TrustedHeaderAuthenticator(codec), new NoneAuthenticator())),
+                        List.of(new SessionAuthenticator(store), new TrustedHeaderAuthenticator(codec),
+                                new SignatureAuthenticator(properties), new NoneAuthenticator())),
                 new DefaultLoginUserHeaderCodec(),
                 new DefaultGatewayAuthFailureHandler());
     }

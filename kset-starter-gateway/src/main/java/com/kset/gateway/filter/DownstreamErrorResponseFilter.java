@@ -42,6 +42,9 @@ public class DownstreamErrorResponseFilter implements GlobalFilter, Ordered {
 
             @Override
             public Mono<Void> writeAndFlushWith(Publisher<? extends Publisher<? extends DataBuffer>> body) {
+                if (!shouldSanitize()) {
+                    return super.writeAndFlushWith(body);
+                }
                 return writeWith(Flux.from(body).concatMap(Flux::from));
             }
 

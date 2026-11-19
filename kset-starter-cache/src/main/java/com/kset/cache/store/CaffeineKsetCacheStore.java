@@ -8,12 +8,11 @@ import com.kset.cache.core.KsetCacheStore;
 import com.kset.cache.core.KsetCacheValue;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
 
 public class CaffeineKsetCacheStore implements KsetCacheStore {
 
-    private final Cache<String, TimedValue> cache;
+    private final Cache<CacheKey, TimedValue> cache;
 
     public CaffeineKsetCacheStore(long maximumSize) {
         this(maximumSize, 128, false);
@@ -36,7 +35,16 @@ public class CaffeineKsetCacheStore implements KsetCacheStore {
 
     @Override
     public Optional<KsetCacheValue> get(KsetCacheSpec spec) {
-        String key = spec.fullKey();
+        return read(spec, null);
+    }
+
+    @Override
+    public Optional<KsetCacheValue> get(KsetCacheSpec spec, long generation) {
+        return read(spec, generation);
+    }
+
+    private Optional<KsetCacheValue> read(KsetCacheSpec spec, Long generation) {
+        CacheKey key = new CacheKey(spec.cacheName(), spec.key(), generation);
         TimedValue timed = cache.getIfPresent(key);
         if (timed == null) {
             return Optional.empty();
@@ -50,20 +58,34 @@ public class CaffeineKsetCacheStore implements KsetCacheStore {
 
     @Override
     public void put(KsetCacheSpec spec, KsetCacheValue value, Duration ttl) {
-        cache.put(spec.fullKey(), new TimedValue(value, expiresAt(ttl)));
+        write(spec, value, ttl, null);
+    }
+
+    @Override
+    public void put(KsetCacheSpec spec, KsetCacheValue value, Duration ttl, long generation) {
+        write(spec, value, ttl, generation);
+    }
+
+    private void write(KsetCacheSpec spec, KsetCacheValue value, Duration ttl, Long generation) {
+        cache.put(new CacheKey(spec.cacheName(), spec.key(), generation),
+                new TimedValue(value, expiresAt(ttl)));
     }
 
     @Override
     public void evict(KsetCacheSpec spec) {
-        cache.invalidate(spec.fullKey());
+        cache.invalidate(new CacheKey(spec.cacheName(), spec.key(), null));
+    }
+
+    @Override
+    public void evict(KsetCacheSpec spec, long generation) {
+        cache.invalidate(new CacheKey(spec.cacheName(), spec.key(), generation));
     }
 
     @Override
     public void clear(String cacheName) {
-        String prefix = cacheName + "::";
-        for (Map.Entry<String, TimedValue> entry : cache.asMap().entrySet()) {
-            if (entry.getKey().startsWith(prefix)) {
-                cache.invalidate(entry.getKey());
+        for (CacheKey key : cache.asMap().keySet()) {
+            if (key.cacheName().equals(cacheName)) {
+                cache.invalidate(key);
             }
         }
     }
@@ -77,5 +99,8 @@ public class CaffeineKsetCacheStore implements KsetCacheStore {
         boolean expired() {
             return System.nanoTime() >= expiresAtNanos;
         }
+    }
+
+    private record CacheKey(String cacheName, String key, Long generation) {
     }
 }

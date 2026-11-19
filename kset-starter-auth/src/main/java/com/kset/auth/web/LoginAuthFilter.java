@@ -6,12 +6,14 @@ import com.kset.auth.core.AuthRequest;
 import com.kset.auth.core.AuthResult;
 import com.kset.auth.core.AuthRuleMatch;
 import com.kset.auth.core.AuthRuleResolver;
+import com.kset.auth.core.AuthSchemes;
 import com.kset.auth.core.LoginAuthService;
 import com.kset.common.auth.LoginContext;
 import com.kset.common.auth.LoginContextSnapshot;
 import com.kset.common.logging.LogMaskingUtil;
 import com.kset.common.monitor.Monitor;
 import com.kset.common.trace.TraceHeaders;
+import com.kset.common.utils.sign.KsetSignUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -70,22 +72,48 @@ public class LoginAuthFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        AuthRequest authRequest = new AuthRequest(
+        AuthRequest routeRequest = new AuthRequest(
                 request.getRequestURI(),
                 request::getHeader,
                 AuthRuleResolver.SOURCE_WEB,
                 request.getMethod(),
-                queryParams(request));
-        AuthRuleMatch match = authService.resolve(authRequest);
+                Map.of());
+        AuthRuleMatch match = authService.resolve(routeRequest);
         if (shouldSkipAuthScheme(handlerMethod, match)) {
             filterChain.doFilter(request, response);
             return;
+        }
+        HttpServletRequest effectiveRequest = request;
+        AuthRequest authRequest;
+        if (match != null && AuthSchemes.SIGNATURE.equalsIgnoreCase(match.getScheme())) {
+            if (request.getContentType() != null
+                    && request.getContentType().toLowerCase(java.util.Locale.ROOT).startsWith("multipart/")) {
+                response.sendError(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE);
+                return;
+            }
+            try {
+                SignedBodyRequestWrapper signedRequest = new SignedBodyRequestWrapper(request,
+                        properties.getAppKey().getMaxSignedBodyBytes());
+                effectiveRequest = signedRequest;
+                Map<String, String> params = signedRequest.queryParameters();
+                authRequest = new AuthRequest(request.getRequestURI(), signedRequest::getHeader,
+                        AuthRuleResolver.SOURCE_WEB, request.getMethod(), params, KsetSignUtil.sha256(signedRequest.body()));
+            } catch (SignedBodyRequestWrapper.BodyTooLargeException error) {
+                response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+                return;
+            } catch (IllegalArgumentException error) {
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+                return;
+            }
+        } else {
+            authRequest = new AuthRequest(request.getRequestURI(), request::getHeader,
+                    AuthRuleResolver.SOURCE_WEB, request.getMethod(), queryParams(request));
         }
         LoginContextSnapshot previous = LoginContext.capture();
         try {
             AuthResult result = authService.authenticate(authRequest, match);
             if (result.isPermitAll()) {
-                filterChain.doFilter(request, response);
+                filterChain.doFilter(effectiveRequest, response);
                 return;
             }
             if (!result.isAuthenticated() || result.getUser().isEmpty()) {
@@ -103,7 +131,7 @@ public class LoginAuthFilter extends OncePerRequestFilter {
             LoginContext.bind(user);
             request.setAttribute(TraceHeaders.LOGIN_USER_ID_ATTRIBUTE, user.getUserId());
             request.setAttribute(TraceHeaders.LOGIN_SUBJECT_TYPE_ATTRIBUTE, user.getSubjectType());
-            filterChain.doFilter(request, response);
+            filterChain.doFilter(effectiveRequest, response);
         } finally {
             LoginContext.restore(previous);
         }

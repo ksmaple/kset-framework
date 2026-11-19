@@ -133,7 +133,7 @@ public void deleteUser(Long id, String phone) {
 规则：
 
 - 读顺序固定为 L1 -> L2 -> 方法加载。
-- L2 命中后自动回填 L1。
+- L2 命中后仅在可获取 L2 剩余 TTL 时回填 L1，回填 TTL 不超过 L2 剩余时间。
 - 方法加载成功后写入声明的所有层级。
 - KSet 注解不声明 `layers` 时使用 `kset.cache.default-layers`。
 - `cacheName`、`value`、`cacheNames` 都可声明缓存名称，`value/cacheNames` 用法兼容 Spring Cache。
@@ -141,6 +141,10 @@ public void deleteUser(Long id, String phone) {
 - `key` 留空时使用 KSet 默认 key 生成器；也可声明 `KsetCacheKeyGenerator` Bean，并通过 `keyGenerator` 指定。
 - `condition` 返回 `true` 时才执行缓存操作；`unless` 返回 `true` 时跳过写缓存。
 - `@KsetCacheEvict(allEntries = true)` 会按注解 `layers` 清理整个缓存命名空间；未指定时使用默认层级。
+- Redis L2 清空通过单条带 TTL 的写入替换缓存命名空间版本号，不扫描 Redis Key；旧版 `cacheName::key` 条目不再命中，按原 TTL 自然过期。清空失败会向调用方抛出异常。L1、L2 在一次写入中使用同一版本号，避免清空与层间写入交错时将旧值写入新版本。
+- 同时使用 L1 和 Redis L2 时，L1 读取先查询 Redis 命名空间版本；其他实例清空后旧版 L1 条目不再命中。每次读取多一次版本查询；版本查询失败时跳过 L1。
+- 自定义 L1 `KsetCacheStore` 如需参与上述多层读取，须实现带 `generation` 的 `get` / `put` / `evict` 方法；默认实现不会保存版本化 L1 条目。
+- 自定义 L2 若通过 `namespaceGeneration` 提供版本号，须实现带 `generation` 的 `put`，确保清理与层间写入交错时仍写入调用开始时的版本。
 - 默认缓存 `null`，使用 `kset.cache.null-ttl`。
 - 开启 `ttl-jitter-enabled` 后，会在最终 TTL 上随机增加不超过 `ttl-jitter-percent` 的抖动，降低同批 key 同时过期概率。
 - key 使用 SpEL，支持 `#id`、`#result`、`#root.methodName`。

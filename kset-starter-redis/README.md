@@ -374,7 +374,7 @@ public class ArenaRankService {
 ```java
 KsetRedisGroupRankBoard guildBoard = rankService.groupBoard(
         KsetRedisRankOptions.builder("guild-war:s1")
-                .redisKey("myapp:rank:guild-war:s1")  // 榜根 key；子 key 为 :groups、:g:{groupId}:members
+                .redisKey("myapp:rank:guild-war:s1")  // 榜根 key；分组子 key 使用同一 Redis Cluster hash tag
                 .ttl(Duration.ofDays(14))
                 .build());
 guildBoard.contribute("guild-1", "player-9", 50, event -> {
@@ -390,6 +390,12 @@ List<KsetRedisRankEntry> mvpInGuild = guildBoard.topMembers("guild-1", 5);
 Optional<Integer> myRank = guildBoard.memberRankInGroup("guild-1", "player-9");
 ```
 
+分组贡献、移除成员和移除分组通过仅限此榜单的 Redis Lua 脚本原子更新组内 ZSET 与总榜 ZSET。两个 Key 使用基于榜根生成的相同 hash tag，以满足 Redis Cluster 同槽要求；不同榜根分散到不同槽。组内成员数、单 Key 大小和写入热点需按实际业务规模评估。
+
+分组榜 TTL 在首次贡献时确定，之后各组成员榜使用总榜的剩余 TTL，不随贡献续期。为避免只延长总榜而丢失组内数据，分组榜 `touchTtl` 对正时长抛出 `UnsupportedOperationException`；需要新周期时使用新榜根。已按旧版滑动 TTL 写入的榜单应核对总榜与组内分数并重建，不会自动修复已过期的成员记录。
+
+旧版无 hash tag 的分组榜 Key 不会自动迁移。若旧总榜 Key 存在，创建该榜会报错；应先按已知的榜根和 groupId 清单迁移总榜及各组成员 ZSET，核对分数后再启用新版。迁移时需暂停对应榜单写入，不能只迁移总榜。单榜 Key 保持原样。
+
 ### 后续可扩展（当前未内置）
 
 | 方向 | 说明 |
@@ -397,7 +403,7 @@ Optional<Integer> myRank = guildBoard.memberRankInGroup("guild-1", "player-9");
 | 多赛季/多榜 | 已支持 `board("不同 boardId")`，可按业务封装赛季枚举 |
 | 并列名次 | 当前为 Redis 连续名次；需「并列跳号」可在业务层二次计算 |
 | 异步通知 | 监听器内发 MQ / Redis Stream，避免阻塞写路径 |
-| Lua 原子排名 | 高并发下可用脚本合并「读旧名次 + 加分 + 读新名次」 |
+| 原子排名快照 | 当前脚本保证两层分数更新原子性；变更事件中的前后名次仍由脚本外读取，高并发下仅供提示 |
 | 成员换组 | 需业务迁移分值（从旧组扣减、新组增加） |
 
 ## 常用 API

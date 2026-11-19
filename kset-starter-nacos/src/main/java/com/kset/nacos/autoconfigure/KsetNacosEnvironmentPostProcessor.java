@@ -2,6 +2,8 @@ package com.kset.nacos.autoconfigure;
 
 import com.kset.cloud.config.KsetCloudProperties;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -19,19 +21,19 @@ public class KsetNacosEnvironmentPostProcessor implements EnvironmentPostProcess
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        KsetCloudProperties properties = new KsetCloudProperties();
+        KsetCloudProperties.Nacos nacos = Binder.get(environment)
+                .bind("kset.cloud.nacos", Bindable.of(KsetCloudProperties.Nacos.class))
+                .orElseGet(KsetCloudProperties.Nacos::new);
 
         Map<String, Object> defaults = new LinkedHashMap<>();
         putIfMissing(environment, defaults, "spring.cloud.nacos.discovery.namespace",
-                properties.getNacos().getNamespace());
+                nacos.getNamespace());
         putIfMissing(environment, defaults, "spring.cloud.nacos.config.namespace",
-                properties.getNacos().getNamespace());
+                nacos.getNamespace());
         putIfMissing(environment, defaults, "spring.cloud.nacos.discovery.group",
-                properties.getNacos().getGroup());
+                nacos.getGroup());
         putIfMissing(environment, defaults, "spring.cloud.nacos.config.group",
-                properties.getNacos().getGroup());
-
-        appendConfigImport(environment, properties.getNacos().getCommonConfigDataId());
+                nacos.getGroup());
 
         if (!defaults.isEmpty()) {
             environment.getPropertySources().addLast(new MapPropertySource(PROPERTY_SOURCE_NAME, defaults));
@@ -43,27 +45,6 @@ public class KsetNacosEnvironmentPostProcessor implements EnvironmentPostProcess
         if (!environment.containsProperty(key) && value != null) {
             defaults.put(key, value);
         }
-    }
-
-    private void appendConfigImport(ConfigurableEnvironment environment, String commonConfigDataId) {
-        String importEntry = "optional:nacos:" + commonConfigDataId;
-        String merged = mergeConfigImport(environment.getProperty("spring.config.import"), importEntry);
-        if (merged == null) {
-            return;
-        }
-        environment.getPropertySources().addFirst(new MapPropertySource(
-                PROPERTY_SOURCE_NAME + "ConfigImport",
-                Map.of("spring.config.import", merged)));
-    }
-
-    private static String mergeConfigImport(String existing, String importEntry) {
-        if (existing == null || existing.isBlank()) {
-            return importEntry;
-        }
-        if (existing.contains(importEntry)) {
-            return null;
-        }
-        return existing + "," + importEntry;
     }
 
     @Override

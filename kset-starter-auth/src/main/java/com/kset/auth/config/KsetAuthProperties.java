@@ -149,6 +149,8 @@ public class KsetAuthProperties {
         private String appKeyField = "appKey";
         private String signField = "sign";
         private String algorithm = "sha1";
+        private boolean legacySignatureEnabled = false;
+        private int maxSignedBodyBytes = 1024 * 1024;
         private boolean timestampRequired = false;
         private Duration timestampTtl = Duration.ofMinutes(5);
         private List<App> apps = new ArrayList<>();
@@ -223,6 +225,25 @@ public class KsetAuthProperties {
 
         public void setAlgorithm(String algorithm) {
             this.algorithm = algorithm;
+        }
+
+        public boolean isLegacySignatureEnabled() {
+            return legacySignatureEnabled;
+        }
+
+        public void setLegacySignatureEnabled(boolean legacySignatureEnabled) {
+            this.legacySignatureEnabled = legacySignatureEnabled;
+        }
+
+        public int getMaxSignedBodyBytes() {
+            return maxSignedBodyBytes;
+        }
+
+        public void setMaxSignedBodyBytes(int maxSignedBodyBytes) {
+            if (maxSignedBodyBytes <= 0) {
+                throw new IllegalArgumentException("maxSignedBodyBytes must be positive");
+            }
+            this.maxSignedBodyBytes = maxSignedBodyBytes;
         }
 
         public boolean isTimestampRequired() {

@@ -9,8 +9,11 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.time.Duration;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class SpringEventFacadeDelayTest {
 
@@ -95,5 +98,46 @@ class SpringEventFacadeDelayTest {
             KsetContext.clear();
             facade.destroy();
         }
+    }
+
+    @Test
+    void rejectedDelayNotifiesFailure() {
+        SpringEventFacade facade = new SpringEventFacade(event -> { }, null);
+        facade.destroy();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        assertThatThrownBy(() -> facade.publishDelay("payload", 10, new SendCallback() {
+            @Override
+            public void onSuccess() {
+            }
+
+            @Override
+            public void onException(Throwable throwable) {
+                failure.set(throwable);
+            }
+        })).isInstanceOf(RejectedExecutionException.class);
+        assertThat(failure.get()).isInstanceOf(RejectedExecutionException.class);
+    }
+
+    @Test
+    void forcedShutdownNotifiesPendingDelay() {
+        SpringEventFacade facade = new SpringEventFacade(event -> { }, null);
+        facade.setShutdownTimeout(Duration.ofMillis(10));
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        facade.start();
+        facade.publishDelay("payload", 60_000, new SendCallback() {
+            @Override
+            public void onSuccess() {
+            }
+
+            @Override
+            public void onException(Throwable throwable) {
+                failure.set(throwable);
+            }
+        });
+
+        facade.stop();
+
+        assertThat(failure.get()).isInstanceOf(RejectedExecutionException.class);
     }
 }

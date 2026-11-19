@@ -28,6 +28,7 @@
 | Gateway 限流规则 | `{gateway-app}-gateway-flow-rules` |
 
 `namespace` / `group` 优先读取 Spring Cloud Nacos 标准配置，未配置时回退到 `kset.cloud.nacos.*`。
+Nacos 配置导入需由应用在 `spring.config.import` 显式声明；`common-config-data-id` 仅用于命名约定，不会自动加载该 dataId。
 
 ## 配置摘要
 

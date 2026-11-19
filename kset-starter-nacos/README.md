@@ -30,10 +30,12 @@ spring:
         namespace: dev
         group: KSET_GROUP
   config:
-    import: optional:nacos:${spring.application.name}.yaml
+    import:
+      - optional:nacos:${spring.application.name}.yaml
+      - optional:nacos:kset-common.yaml
 ```
 
-引入 starter 后，框架会按需补齐 Nacos group / namespace 默认值，并追加公共配置 `optional:nacos:kset-common.yaml`。
+引入 starter 后，框架会按需补齐 Nacos group / namespace 默认值。应用和公共配置必须在 `spring.config.import` 中显式声明；Spring Boot 在环境处理器运行前解析该属性，运行时追加不会加载配置。自定义公共 dataId 时，同步修改第二个 import 条目。配置中心所用 namespace / group 应使用 `spring.cloud.nacos.config.*` 显式配置。
 
 ## 规则监听
 

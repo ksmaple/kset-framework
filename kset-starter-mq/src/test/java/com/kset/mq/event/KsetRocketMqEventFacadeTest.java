@@ -190,6 +190,35 @@ class KsetRocketMqEventFacadeTest {
     }
 
     @Test
+    void callbackFailureDoesNotReplaceSuccessfulAsyncSend() {
+        RocketMQClientTemplate template = mock(RocketMQClientTemplate.class);
+        AtomicReference<CompletableFuture<SendReceipt>> submitted = new AtomicReference<>();
+        doAnswer(invocation -> {
+            submitted.set(invocation.getArgument(2));
+            return null;
+        }).when(template).asyncSendNormalMessage(anyString(), any(), any());
+        RocketMqEventFacade facade = new RocketMqEventFacade(template,
+                new com.fasterxml.jackson.databind.ObjectMapper(), new RocketMQProperties(),
+                new org.springframework.mock.env.MockEnvironment()
+                        .withProperty("spring.application.name", "rocket-demo"));
+
+        facade.publishAsync(new PlainEvent("async"), new SendCallback() {
+            @Override
+            public void onSuccess() {
+                throw new IllegalStateException("callback failed");
+            }
+
+            @Override
+            public void onException(Throwable throwable) {
+                throw new AssertionError("send was successful", throwable);
+            }
+        });
+
+        assertThat(submitted.get().complete(() -> new TestMessageId())).isTrue();
+        assertThat(submitted.get()).isCompleted();
+    }
+
+    @Test
     void rocketMqConsumerDispatchesToEventHandler() throws Exception {
         TestEventHandler handler = new TestEventHandler();
         RocketMqEventConsumer consumer = new RocketMqEventConsumer(List.of(handler),
@@ -203,6 +232,28 @@ class KsetRocketMqEventFacadeTest {
     }
 
     @Test
+    void rocketMqConsumerDispatchesSubclassToBaseHandler() throws Exception {
+        AtomicReference<Object> handled = new AtomicReference<>();
+        EventHandler<Object> handler = new EventHandler<>() {
+            @Override
+            public Class<Object> eventType() {
+                return Object.class;
+            }
+
+            @Override
+            public void handle(Object event) {
+                handled.set(event);
+            }
+        };
+        RocketMqEventConsumer consumer = new RocketMqEventConsumer(List.of(handler),
+                new com.fasterxml.jackson.databind.ObjectMapper());
+
+        assertThat(consumer.consume(new TestMessageView(new TestEvent("subclass"))))
+                .isEqualTo(ConsumeResult.SUCCESS);
+        assertThat(handled.get()).isEqualTo(new TestEvent("subclass"));
+    }
+
+    @Test
     void unhandledMessageCanFailWithoutChangingDefaultSkipBehavior() throws Exception {
         TestMessageView message = new TestMessageView(new TestEvent("unhandled"));
         TestMessageView unknownClass = new TestMessageView(new TestEvent("external"), "external.UnknownEvent");
@@ -212,6 +263,19 @@ class KsetRocketMqEventFacadeTest {
         assertThat(new RocketMqEventConsumer(List.of(), mapper, true).consume(message)).isEqualTo(ConsumeResult.FAILURE);
         assertThat(new RocketMqEventConsumer(List.of(), mapper).consume(unknownClass)).isEqualTo(ConsumeResult.SUCCESS);
         assertThat(new RocketMqEventConsumer(List.of(), mapper, true).consume(unknownClass)).isEqualTo(ConsumeResult.FAILURE);
+    }
+
+    @Test
+    void unregisteredEventTypeIsNeverDeserializedOrDispatched() throws Exception {
+        TestEventHandler handler = new TestEventHandler();
+        TestMessageView message = new TestMessageView(new TestEvent("ignored"), String.class.getName());
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+        assertThat(new RocketMqEventConsumer(List.of(handler), mapper).consume(message))
+                .isEqualTo(ConsumeResult.SUCCESS);
+        assertThat(new RocketMqEventConsumer(List.of(handler), mapper, true).consume(message))
+                .isEqualTo(ConsumeResult.FAILURE);
+        assertThat(handler.values()).isEmpty();
     }
 
     @Test

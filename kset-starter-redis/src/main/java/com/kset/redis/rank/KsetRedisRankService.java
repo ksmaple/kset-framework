@@ -96,6 +96,11 @@ public class KsetRedisRankService {
 
     private KsetRedisGroupRankBoard createGroupBoard(KsetRedisRankOptions options) {
         KsetRedisRankKeys keys = KsetRedisRankKeys.forRoot(options.resolveRedisKey(keyPrefix));
+        if (!keys.groupTotalKey().equals(keys.legacyGroupTotalKey())
+                && Boolean.TRUE.equals(template.hasKey(keys.legacyGroupTotalKey()))) {
+            throw new IllegalStateException("legacy group rank data requires migration: "
+                    + keys.legacyGroupTotalKey());
+        }
         KsetRedisGroupRankBoard board = new KsetRedisZSetGroupRankBoard(
                 options.boardId(),
                 keys,

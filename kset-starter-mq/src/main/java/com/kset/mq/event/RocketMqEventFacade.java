@@ -18,6 +18,8 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -25,6 +27,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations {
+
+    private static final Logger log = LoggerFactory.getLogger(RocketMqEventFacade.class);
 
     private final RocketMQClientTemplate rocketMqTemplate;
     private final ObjectMapper objectMapper;
@@ -88,9 +92,7 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
         try {
             rocketMqTemplate.asyncSendNormalMessage(destinationResolver.destination(payload), message(payload, trace), future);
         } catch (RuntimeException | Error e) {
-            if (callback != null) {
-                callback.onException(e);
-            }
+            notifyFailure(callback, e);
             throw e;
         }
         future.whenComplete((receipt, throwable) -> handleAsyncResult(payload, trace, callback, receipt, throwable));
@@ -104,9 +106,7 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
         try {
             rocketMqTemplate.asyncSendNormalMessage(destinationResolver.destination(topic, tag), message(payload, trace), future);
         } catch (RuntimeException | Error e) {
-            if (callback != null) {
-                callback.onException(e);
-            }
+            notifyFailure(callback, e);
             throw e;
         }
         future.whenComplete((receipt, throwable) -> handleAsyncResult(payload, trace, callback, receipt, throwable));
@@ -130,14 +130,10 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
             RocketMqEventMonitorSupport.addData(transaction, "messageId", receipt.getMessageId().toString());
             RocketMqEventMonitorSupport.addData(transaction, "delayMillis", Long.toString(delayMillis));
             RocketMqEventMonitorSupport.success(transaction);
-            if (callback != null) {
-                callback.onSuccess();
-            }
+            notifySuccess(callback);
         } catch (RuntimeException | Error e) {
             RocketMqEventMonitorSupport.fail(transaction, e, "publishDelay", RocketMqEventMonitorSupport.eventType(payload));
-            if (callback != null) {
-                callback.onException(e);
-            }
+            notifyFailure(callback, e);
             throw e;
         } finally {
             RocketMqEventMonitorSupport.close(transaction);
@@ -259,19 +255,33 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
                 if (throwable == null) {
                     RocketMqEventMonitorSupport.addData(transaction, "messageId", receipt.getMessageId().toString());
                     RocketMqEventMonitorSupport.success(transaction);
-                    if (callback != null) {
-                        callback.onSuccess();
-                    }
+                    notifySuccess(callback);
                 } else {
                     RocketMqEventMonitorSupport.fail(transaction, throwable, "publishAsync",
                             RocketMqEventMonitorSupport.eventType(payload));
-                    if (callback != null) {
-                        callback.onException(throwable);
-                    }
+                    notifyFailure(callback, throwable);
                 }
             } finally {
                 RocketMqEventMonitorSupport.close(transaction);
             }
+        }
+    }
+
+    private void notifySuccess(SendCallback callback) {
+        if (callback == null) return;
+        try {
+            callback.onSuccess();
+        } catch (Throwable error) {
+            log.error("rocketmq success callback failed", error);
+        }
+    }
+
+    private void notifyFailure(SendCallback callback, Throwable failure) {
+        if (callback == null) return;
+        try {
+            callback.onException(failure);
+        } catch (Throwable error) {
+            log.error("rocketmq failure callback failed", error);
         }
     }
 

@@ -313,18 +313,67 @@ class LoginAuthFilterTest {
         properties.setRules(List.of(rule));
         LoginAuthFilter filter = filter(properties, mock(LoginSessionStore.class));
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/openapi/orders");
+        request.setQueryString("orderId=o1");
         request.addParameter("orderId", "o1");
         request.addHeader("X-App-Key", "partner-app");
-        request.addHeader("X-Sign", KsetSignUtil.of("app-secret").signSha1(Map.of(
-                "appKey", "partner-app",
-                "method", "GET",
-                "orderId", "o1")));
+        String timestamp = Long.toString(System.currentTimeMillis());
+        request.addHeader("X-Timestamp", timestamp);
+        request.addHeader("X-Sign", KsetSignUtil.of("app-secret").signV2(
+                "GET", "/openapi/orders", KsetSignUtil.sha256(new byte[0]),
+                Map.of("orderId", "o1"),
+                Map.of("X-App-Key", "partner-app", "X-Timestamp", timestamp)));
         CapturingFilterChain chain = new CapturingFilterChain();
 
         filter.doFilter(request, new MockHttpServletResponse(), chain);
 
         assertThat(chain.userId).isEqualTo("partner-user");
         assertThat(chain.subjectType).isEqualTo("partner");
+    }
+
+    @Test
+    void signatureRuleRejectsTamperedBody() throws Exception {
+        KsetAuthProperties properties = signatureProperties();
+        LoginAuthFilter filter = filter(properties, mock(LoginSessionStore.class));
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/openapi/orders");
+        request.setContentType("application/json");
+        request.setContent("{\"id\":2}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String timestamp = Long.toString(System.currentTimeMillis());
+        request.addHeader("X-App-Key", "partner-app");
+        request.addHeader("X-Timestamp", timestamp);
+        request.addHeader("X-Sign", KsetSignUtil.of("app-secret").signV2("POST", "/openapi/orders",
+                KsetSignUtil.sha256("{\"id\":1}".getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                Map.of(), Map.of("X-App-Key", "partner-app", "X-Timestamp", timestamp)));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getContentAsString()).contains("\"code\":401");
+    }
+
+    @Test
+    void signatureRuleRejectsLegacySignatureByDefault() throws Exception {
+        KsetAuthProperties properties = signatureProperties();
+        LoginAuthFilter filter = filter(properties, mock(LoginSessionStore.class));
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/openapi/orders");
+        request.addHeader("X-App-Key", "partner-app");
+        request.addHeader("X-Sign", KsetSignUtil.of("app-secret").signSha1(
+                Map.of("appKey", "partner-app", "method", "GET")));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getContentAsString()).contains("\"code\":401");
+    }
+
+    private KsetAuthProperties signatureProperties() {
+        KsetAuthProperties properties = appKeyProperties("partner-app", "app-secret", "app-token");
+        KsetAuthProperties.AuthRule rule = new KsetAuthProperties.AuthRule();
+        rule.setName("partner-sign");
+        rule.setPaths(List.of("/openapi/**"));
+        rule.setSubject("partner");
+        rule.setScheme("signature");
+        properties.setRules(List.of(rule));
+        return properties;
     }
 
     private LoginAuthFilter filter(KsetAuthProperties properties, LoginSessionStore store) {

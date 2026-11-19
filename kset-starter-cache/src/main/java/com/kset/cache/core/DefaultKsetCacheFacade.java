@@ -15,6 +15,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.FutureTask;
@@ -41,12 +42,18 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
     @Override
     public Optional<KsetCacheValue> get(KsetCacheSpec spec) {
         List<KsetCacheLayer> layers = effectiveLayers(spec.layers());
+        CacheGeneration generation = cacheGeneration(spec.cacheName(), layers);
         for (KsetCacheLayer layer : readOrder(layers)) {
-            Optional<KsetCacheValue> value = getFromLayer(layer, spec);
+            if (layer == KsetCacheLayer.L1 && !generation.available()) {
+                continue;
+            }
+            Optional<KsetCacheValue> value = layer == KsetCacheLayer.L1 && generation.value().isPresent()
+                    ? getFromVersionedL1(spec, generation.value().getAsLong())
+                    : getFromLayer(layer, spec);
             if (value.isPresent()) {
                 metrics.hit(layer);
                 if (layer == KsetCacheLayer.L2 && layers.contains(KsetCacheLayer.L1)) {
-                    putToLayer(KsetCacheLayer.L1, spec, value.get());
+                    backfillL1(spec, value.get(), generation);
                 }
                 return value;
             }
@@ -61,21 +68,33 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
             return;
         }
         KsetCacheValue cacheValue = KsetCacheValue.of(value);
-        for (KsetCacheLayer layer : effectiveLayers(spec.layers())) {
-            putToLayer(layer, spec, cacheValue);
+        List<KsetCacheLayer> layers = effectiveLayers(spec.layers());
+        CacheGeneration generation = cacheGeneration(spec.cacheName(), layers);
+        for (KsetCacheLayer layer : layers) {
+            if (layer != KsetCacheLayer.L1 || generation.available()) {
+                putToLayer(layer, spec, cacheValue, null, generation.value());
+            }
         }
         metrics.put();
     }
 
     @Override
     public void evict(KsetCacheSpec spec) {
-        for (KsetCacheLayer layer : effectiveLayers(spec.layers())) {
+        List<KsetCacheLayer> layers = effectiveLayers(spec.layers());
+        CacheGeneration generation = cacheGeneration(spec.cacheName(), layers);
+        for (KsetCacheLayer layer : layers) {
             KsetCacheStore store = stores.get(layer);
             if (store == null) {
                 continue;
             }
             try (MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.CACHE, "evict." + layer)) {
-                store.evict(spec);
+                if (layer == KsetCacheLayer.L1 && !generation.available()) {
+                    store.clear(spec.cacheName());
+                } else if (layer == KsetCacheLayer.L1 && generation.value().isPresent()) {
+                    store.evict(spec, generation.value().getAsLong());
+                } else {
+                    store.evict(spec);
+                }
                 tx.setStatus(MonitorStatus.SUCCESS);
                 metrics.evict();
             } catch (RuntimeException | Error e) {
@@ -107,6 +126,7 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
                 log.warn("cache clear failed layer={} cacheName={}", layer, cacheName, e);
                 Monitor.logError(e, "cache clear failed");
                 metrics.error();
+                throw e;
             }
         }
     }
@@ -179,7 +199,9 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
             metrics.error();
             throw new IllegalStateException(cause);
         } finally {
-            loadingTasks.remove(loadKey, task);
+            if (task == newTask) {
+                loadingTasks.remove(loadKey, task);
+            }
         }
     }
 
@@ -217,14 +239,62 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
         }
     }
 
-    private void putToLayer(KsetCacheLayer layer, KsetCacheSpec spec, KsetCacheValue value) {
+    private Optional<KsetCacheValue> getFromVersionedL1(KsetCacheSpec spec, long generation) {
+        try (MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.CACHE, "get.L1")) {
+            Optional<KsetCacheValue> value = stores.get(KsetCacheLayer.L1).get(spec, generation);
+            tx.setStatus(MonitorStatus.SUCCESS);
+            return value;
+        } catch (RuntimeException | Error error) {
+            log.warn("cache get failed layer=L1 cacheName={} key={}", spec.cacheName(), spec.key(), error);
+            Monitor.logError(error, "cache get failed");
+            metrics.error();
+            return Optional.empty();
+        }
+    }
+
+    private CacheGeneration cacheGeneration(String cacheName, List<KsetCacheLayer> layers) {
+        if (!layers.contains(KsetCacheLayer.L1) || !layers.contains(KsetCacheLayer.L2)) {
+            return new CacheGeneration(true, OptionalLong.empty());
+        }
+        try {
+            return new CacheGeneration(true, stores.get(KsetCacheLayer.L2).namespaceGeneration(cacheName));
+        } catch (RuntimeException | Error error) {
+            log.warn("cache namespace generation lookup failed cacheName={}", cacheName, error);
+            metrics.error();
+            return new CacheGeneration(false, OptionalLong.empty());
+        }
+    }
+
+    private void backfillL1(KsetCacheSpec spec, KsetCacheValue value, CacheGeneration generation) {
+        KsetCacheStore l2 = stores.get(KsetCacheLayer.L2);
+        if (l2 == null || !generation.available()) {
+            return;
+        }
+        try {
+            l2.remainingTtl(spec).filter(ttl -> !ttl.isZero() && !ttl.isNegative())
+                    .ifPresent(ttl -> putToLayer(KsetCacheLayer.L1, spec, value, ttl, generation.value()));
+        } catch (RuntimeException | Error e) {
+            log.warn("cache remaining TTL lookup failed cacheName={} key={}", spec.cacheName(), spec.key(), e);
+            metrics.error();
+        }
+    }
+
+    private void putToLayer(KsetCacheLayer layer, KsetCacheSpec spec,
+                            KsetCacheValue value, Duration maximumTtl, OptionalLong generation) {
         KsetCacheStore store = stores.get(layer);
         if (store == null) {
             return;
         }
         Duration ttl = jitter(effectiveTtl(layer, spec, value));
+        if (maximumTtl != null && (ttl == null || ttl.compareTo(maximumTtl) > 0)) {
+            ttl = maximumTtl;
+        }
         try (MonitorTransaction tx = Monitor.newTransaction(MonitorTypes.CACHE, "put." + layer)) {
-            store.put(spec, value, ttl);
+            if (generation.isPresent()) {
+                store.put(spec, value, ttl, generation.getAsLong());
+            } else {
+                store.put(spec, value, ttl);
+            }
             tx.setStatus(MonitorStatus.SUCCESS);
         } catch (RuntimeException | Error e) {
             log.warn("cache put failed layer={} cacheName={} key={}", layer, spec.cacheName(), spec.key(), e);
@@ -319,5 +389,8 @@ public class DefaultKsetCacheFacade implements KsetCacheFacade {
     @Override
     public KsetCacheMetrics metrics() {
         return metrics.snapshot();
+    }
+
+    private record CacheGeneration(boolean available, OptionalLong value) {
     }
 }

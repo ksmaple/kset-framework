@@ -53,9 +53,9 @@ public class OrderAuditConsumer extends RocketMqTagEventConsumer<OrderCreatedEve
 
 内置 `RocketMqEventConsumer` 默认继续订阅默认 Topic 的 `*` Tag，并按事件类型分发给所有 `EventHandler`。应用将 MQ 业务处理迁到独立监听器后，设置 `kset.mq.event.default-consumer-enabled=false` 关闭通配订阅，避免双重消费；该配置不影响事件发布和专属监听器。单个通配订阅内的多个 `EventHandler` 不具备业务间失败隔离。
 
-通配消费者先判断消息类型是否有匹配的 `EventHandler`，只反序列化需要处理的事件；默认确认未匹配或本应用没有对应事件类的消息，以便共享 Topic 跳过无关事件。若该 Group 应处理订阅中的每一种事件，可设置 `kset.mq.event.fail-on-unhandled=true`，未匹配时返回 `FAILURE` 并进入该 Group 的重试/死信流程；共享 Topic 含其他业务消息时不要开启。`kset.event.enabled=false` 会关闭 KSet 自动装配的 MQ 发布门面与通配消费者，但不会关闭业务自行声明的 `@RocketMQMessageListener`。
+通配消费者仅分发给 `EventHandler.eventType()` 可接收消息事件类的处理器，包括基类或接口处理器；按消息事件类反序列化，默认确认未匹配或本应用没有对应事件类的消息，以便共享 Topic 跳过无关事件。若该 Group 应处理订阅中的每一种事件，可设置 `kset.mq.event.fail-on-unhandled=true`，未匹配时返回 `FAILURE` 并进入该 Group 的重试/死信流程；共享 Topic 含其他业务消息时不要开启。`kset.event.enabled=false` 会关闭 KSet 自动装配的 MQ 发布门面与通配消费者，但不会关闭业务自行声明的 `@RocketMQMessageListener`。
 
-发布业务只注入 `EventFacade`。需要编程式指定 topic/tag 时再注入 `RocketMqEventOperations`。`publish(topic, event)` 只覆盖 Topic，保留事件注解的 Tag；`publish(topic, tag, event)` 以显式 Tag 为准，传空 Tag 表示不附加 Tag。MQ 异步发送回调恢复调用时的 Trace，退出后还原客户端线程原有 Trace。
+发布业务只注入 `EventFacade`。需要编程式指定 topic/tag 时再注入 `RocketMqEventOperations`。`publish(topic, event)` 只覆盖 Topic，保留事件注解的 Tag；`publish(topic, tag, event)` 以显式 Tag 为准，传空 Tag 表示不附加 Tag。MQ 异步发送回调恢复调用时的 Trace，退出后还原客户端线程原有 Trace；回调自身抛出的异常单独记录，不改变已完成的发送结果。
 
 ## 监控
 

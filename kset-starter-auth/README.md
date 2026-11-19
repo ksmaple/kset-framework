@@ -387,6 +387,8 @@ kset:
       algorithm: sha1
       timestamp-required: false
       timestamp-ttl: 5m
+      legacy-signature-enabled: false
+      max-signed-body-bytes: 1048576
       apps:
         - app-key: partner-app
           secret: app-secret
@@ -408,7 +410,10 @@ kset:
         scheme: app-token
 ```
 
-- `signature`：按 `KsetSignUtil` 规则验签，默认从 `X-App-Key` / `X-Sign` 读取，也支持 query 中的 `appKey` / `sign`。
+- `signature`：默认使用 `KsetSignUtil.signV2` 的 HMAC-SHA256 签名；从 `X-App-Key` / `X-Sign` 读取，也支持 query 中的 `appKey` / `sign`。v2 必须提供有效的 `X-Timestamp`（或同名 query 参数），允许秒或毫秒时间戳，偏差不超过 `timestamp-ttl`。
+- v2 原文以 `kset-sign-v2` 开头，依次追加 HTTP 方法（大写）、原始请求路径、请求正文 SHA-256 小写十六进制摘要、按名称排序的 query 参数（排除 `sign-field`）、按小写名称排序的 `app-key-header` / `timestamp-header` / `nonce-header` 中实际存在的请求头。每个字段编码为 `UTF-8 字节数:字段值`，参数和请求头列表各先追加 `条目数:`；最后对 UTF-8 原文计算 HMAC-SHA256，并输出小写十六进制字符串。空正文也计算 SHA-256。表单字段只计入正文摘要，URL 查询参数单独计入参数列表。
+- 签名请求最多读取 `max-signed-body-bytes` 字节；超限返回 413，重复 query 参数返回 400，multipart 返回 415。Web 与 Gateway 都会回放已读取的正文供下游继续处理。
+- `legacy-signature-enabled` 默认关闭。迁移期间显式设为 `true` 才接受旧 SHA-1/MD5 参数签名；旧格式不绑定路径和正文，迁移完成后应关闭开关。
 - `app-token`：按 `X-App-Key` + `X-App-Token` 匹配配置中的 app。
 
 自定义认证器示例：

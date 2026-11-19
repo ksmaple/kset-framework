@@ -19,14 +19,17 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Duration;
 import java.util.Objects;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 进程内 Spring 事件实现。同 {@code hashKey} 按 64 槽串行；delay/async 会恢复调用线程的上下文。
@@ -43,6 +46,7 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
     private final TaskExecutor asyncExecutor;
     private final ExecutorService ownedAsyncExecutor;
     private final ScheduledExecutorService delayExecutor;
+    private final Set<DelayedEventTask> pendingDelayed = ConcurrentHashMap.newKeySet();
     private final Object[] orderlyStripes;
 
     private volatile Duration shutdownTimeout = DEFAULT_SHUTDOWN_TIMEOUT;
@@ -116,7 +120,15 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
         }
         Object payload = requireEvent(event);
         EventMonitorSupport.logScheduled(payload, delayMillis);
-        delayExecutor.schedule(withCapturedContext(() -> publishDelayNow(payload, callback)), delayMillis, TimeUnit.MILLISECONDS);
+        DelayedEventTask task = new DelayedEventTask(payload, callback,
+                withCapturedContext(() -> publishDelayNow(payload, callback)));
+        pendingDelayed.add(task);
+        try {
+            delayExecutor.schedule(task, delayMillis, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException error) {
+            task.failBeforeStart(error);
+            throw error;
+        }
     }
 
     private Runnable withCapturedContext(Runnable task) {
@@ -135,14 +147,10 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
         try {
             publisher.publishEvent(new SpringEventWrapper(payload));
             EventMonitorSupport.success(transaction);
-            if (callback != null) {
-                callback.onSuccess();
-            }
+            notifySuccess(callback, payload);
         } catch (Throwable throwable) {
             EventMonitorSupport.fail(transaction, throwable, "publishAsync", payload);
-            if (callback != null) {
-                callback.onException(throwable);
-            }
+            notifyFailure(callback, throwable, payload);
             if (throwable instanceof Error error) {
                 throw error;
             }
@@ -156,17 +164,31 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
         try {
             publisher.publishEvent(new SpringEventWrapper(payload));
             EventMonitorSupport.success(transaction);
-            if (callback != null) {
-                callback.onSuccess();
-            }
+            notifySuccess(callback, payload);
         } catch (Throwable throwable) {
             EventMonitorSupport.fail(transaction, throwable, "publishDelay", payload);
             log.error("publishDelay failed eventType={}", EventMonitorSupport.eventType(payload), throwable);
-            if (callback != null) {
-                callback.onException(throwable);
-            }
+            notifyFailure(callback, throwable, payload);
         } finally {
             EventMonitorSupport.close(transaction);
+        }
+    }
+
+    private void notifySuccess(SendCallback callback, Object payload) {
+        if (callback == null) return;
+        try {
+            callback.onSuccess();
+        } catch (Throwable error) {
+            log.error("event success callback failed eventType={}", EventMonitorSupport.eventType(payload), error);
+        }
+    }
+
+    private void notifyFailure(SendCallback callback, Throwable failure, Object payload) {
+        if (callback == null) return;
+        try {
+            callback.onException(failure);
+        } catch (Throwable error) {
+            log.error("event failure callback failed eventType={}", EventMonitorSupport.eventType(payload), error);
         }
     }
 
@@ -239,6 +261,8 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
             ownedAsyncExecutor.shutdown();
         }
         KsetGracefulShutdowns.awaitTermination(delayExecutor, "kset-event-delay", deadlineNanos);
+        pendingDelayed.forEach(task -> task.failBeforeStart(
+                new RejectedExecutionException("delayed event discarded during shutdown")));
         if (ownedAsyncExecutor != null) {
             KsetGracefulShutdowns.awaitTermination(ownedAsyncExecutor, "kset-event-async", deadlineNanos);
         }
@@ -251,5 +275,37 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
 
     private Object requireEvent(Object event) {
         return Objects.requireNonNull(event, "event must not be null");
+    }
+
+    private final class DelayedEventTask implements Runnable {
+        private final Object payload;
+        private final SendCallback callback;
+        private final Runnable delegate;
+        private final AtomicBoolean started = new AtomicBoolean();
+
+        private DelayedEventTask(Object payload, SendCallback callback, Runnable delegate) {
+            this.payload = payload;
+            this.callback = callback;
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void run() {
+            if (!started.compareAndSet(false, true)) {
+                return;
+            }
+            try {
+                delegate.run();
+            } finally {
+                pendingDelayed.remove(this);
+            }
+        }
+
+        private void failBeforeStart(RejectedExecutionException error) {
+            if (started.compareAndSet(false, true)) {
+                pendingDelayed.remove(this);
+                notifyFailure(callback, error, payload);
+            }
+        }
     }
 }

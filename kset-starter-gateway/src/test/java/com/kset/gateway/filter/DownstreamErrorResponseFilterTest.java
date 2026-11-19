@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Flux;
 
 import java.nio.charset.StandardCharsets;
 
@@ -48,5 +49,23 @@ class DownstreamErrorResponseFilterTest {
         }).block();
 
         assertThat(exchange.getResponse().getBodyAsString().block()).isEqualTo("custom auth response");
+    }
+
+    @Test
+    void replacesFlushedDownstreamFailureBody() {
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest.get("/events"));
+        exchange.getAttributes().put(CLIENT_RESPONSE_ATTR, new Object());
+        DownstreamErrorResponseFilter filter = new DownstreamErrorResponseFilter("X-Request-Trace");
+
+        filter.filter(exchange, routed -> {
+            routed.getResponse().setStatusCode(HttpStatus.BAD_GATEWAY);
+            return routed.getResponse().writeAndFlushWith(Flux.just(
+                    Mono.just(routed.getResponse().bufferFactory().wrap("private".getBytes(StandardCharsets.UTF_8))),
+                    Mono.just(routed.getResponse().bufferFactory().wrap(" detail".getBytes(StandardCharsets.UTF_8)))));
+        }).block();
+
+        String body = exchange.getResponse().getBodyAsString().block();
+        assertThat(body).doesNotContain("private detail");
+        assertThat(JsonUtil.readTree(body).get("code").asInt()).isEqualTo(502);
     }
 }

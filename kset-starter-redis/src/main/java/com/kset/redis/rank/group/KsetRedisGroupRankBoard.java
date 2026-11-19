@@ -51,5 +51,6 @@ public interface KsetRedisGroupRankBoard {
 
     KsetRedisGroupRankBoard addListener(KsetRedisGroupRankChangeListener listener);
 
+    /** Group boards use one fixed expiry for all groups; changing it after creation is unsupported. */
     void touchTtl(Duration ttl);
 }

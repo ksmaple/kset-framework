@@ -30,6 +30,7 @@ public class OrderService {
 | `publishTransaction` | 有 Spring 事务时等提交后再发，没有则立刻发；不是 RocketMQ 事务消息 |
 
 表中方法是不同发送方式，不应对同一次业务事件逐个调用。RocketMQ 的顺序、延时消息须使用对应消息类型的 Topic；见 [RocketMQ 使用规范](rocketmq.md)。事件对象不要为 `null`，延迟毫秒数不能为负。
+本地延迟投递在调度器拒绝提交时会抛出异常并调用失败回调；停机排空超时而被丢弃的待执行事件也会调用失败回调。进程内延迟事件不提供跨进程持久化。
 
 ## 消费
 

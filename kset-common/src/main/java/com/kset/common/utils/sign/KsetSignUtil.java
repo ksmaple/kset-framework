@@ -5,10 +5,16 @@ import org.apache.commons.lang3.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.InvalidKeyException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.Objects;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * 常见 OpenAPI 签名：参数按 key 字典序拼接，secret 首尾包裹后做摘要。
@@ -59,6 +65,75 @@ public final class KsetSignUtil {
 
     public boolean verifyMd5(Map<String, String> params) {
         return verify(params, signMd5(params));
+    }
+
+    /** Signs the request target, payload digest, parameters and authentication headers. */
+    public String signV2(String method, String path, String bodySha256,
+                         Map<String, String> params, Map<String, String> headers) {
+        if (method == null || path == null || bodySha256 == null
+                || params == null || headers == null) {
+            throw new IllegalArgumentException("signature v2 request fields must not be null");
+        }
+        StringBuilder canonical = new StringBuilder("kset-sign-v2");
+        appendField(canonical, method.toUpperCase(Locale.ROOT));
+        appendField(canonical, path);
+        appendField(canonical, bodySha256.toLowerCase(Locale.ROOT));
+        appendMap(canonical, params, signField);
+        Map<String, String> normalizedHeaders = new TreeMap<>();
+        headers.forEach((name, value) -> {
+            String normalized = name.toLowerCase(Locale.ROOT);
+            String previous = normalizedHeaders.putIfAbsent(normalized, value);
+            if (previous != null && !Objects.equals(previous, value)) {
+                throw new IllegalArgumentException("conflicting signature headers: " + name);
+            }
+        });
+        appendMap(canonical, normalizedHeaders, null);
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return toHex(mac.doFinal(canonical.toString().getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException | InvalidKeyException error) {
+            throw new IllegalStateException("HmacSHA256 unavailable", error);
+        }
+    }
+
+    public boolean verifyV2(String actual, String method, String path, String bodySha256,
+                            Map<String, String> params, Map<String, String> headers) {
+        if (StringUtils.isBlank(actual)) {
+            return false;
+        }
+        byte[] expected = signV2(method, path, bodySha256, params, headers)
+                .getBytes(StandardCharsets.US_ASCII);
+        byte[] provided = actual.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.US_ASCII);
+        return MessageDigest.isEqual(expected, provided);
+    }
+
+    public static String sha256(byte[] body) {
+        try {
+            return toHex(MessageDigest.getInstance("SHA-256")
+                    .digest(body != null ? body : new byte[0]));
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 unavailable", error);
+        }
+    }
+
+    private static void appendMap(StringBuilder canonical, Map<String, String> values, String excludedKey) {
+        List<String> keys = new ArrayList<>(values.keySet());
+        keys.remove(excludedKey);
+        Collections.sort(keys);
+        canonical.append(keys.size()).append(':');
+        for (String key : keys) {
+            appendField(canonical, key);
+            appendField(canonical, values.get(key));
+        }
+    }
+
+    private static void appendField(StringBuilder canonical, String value) {
+        if (value == null) {
+            canonical.append("-1:");
+        } else {
+            canonical.append(value.getBytes(StandardCharsets.UTF_8).length).append(':').append(value);
+        }
     }
 
     /**

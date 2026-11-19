@@ -51,10 +51,10 @@ public class RocketMqEventConsumer implements RocketMQListener {
                 }
                 Class<?> eventClass;
                 try {
-                    eventClass = Class.forName(eventType);
-                } catch (ClassNotFoundException exception) {
+                    eventClass = Class.forName(eventType, false, getClass().getClassLoader());
+                } catch (ClassNotFoundException error) {
                     if (failOnUnhandled) {
-                        throw exception;
+                        throw error;
                     }
                     return ConsumeResult.SUCCESS;
                 }

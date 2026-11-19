@@ -26,10 +26,12 @@ spring:
         namespace: dev
         group: KSET_GROUP
   config:
-    import: optional:nacos:${spring.application.name}.yaml
+    import:
+      - optional:nacos:${spring.application.name}.yaml
+      - optional:nacos:kset-common.yaml
 ```
 
-框架会补 group / namespace，并追加公共配置 `optional:nacos:kset-common.yaml`。
+框架会补 group / namespace；应用配置和公共配置需在 `spring.config.import` 显式声明。自定义公共 dataId 时同步修改 import 条目；配置中心 namespace / group 使用 `spring.cloud.nacos.config.*` 配置。
 
 ## Sentinel
 

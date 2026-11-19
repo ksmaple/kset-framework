@@ -1,6 +1,7 @@
 package com.kset.redis.rank;
 
 import com.kset.redis.rank.internal.KsetRedisZSetRankBoard;
+import com.kset.redis.rank.group.KsetRedisGroupRankBoard;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +16,7 @@ import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -64,5 +66,14 @@ class KsetRedisRankServiceTest {
     void resolveRedisKeyAllowsColonInBoardId() {
         KsetRedisRankOptions options = KsetRedisRankOptions.builder("arena:2025-w20").build();
         assertEquals("myapp:rank:arena:2025-w20", options.resolveRedisKey(rankService.keyPrefix()));
+    }
+
+    @Test
+    void groupBoardRejectsTtlChanges() {
+        KsetRedisGroupRankBoard board = rankService.groupBoard(
+                KsetRedisRankOptions.builder("guild-war").ttl(Duration.ofDays(1)).build());
+
+        assertThrows(UnsupportedOperationException.class,
+                () -> board.touchTtl(Duration.ofDays(2)));
     }
 }
