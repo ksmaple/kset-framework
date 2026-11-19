@@ -94,6 +94,11 @@
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
+                <artifactId>kset-tuya</artifactId>
+                <version>${kset-framework.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.kset</groupId>
                 <artifactId>kset-cloud</artifactId>
                 <version>${kset-framework.version}</version>
             </dependency>

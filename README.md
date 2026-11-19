@@ -23,7 +23,8 @@ Git 修改、提交与推送约定见 [Git 工作流](docs/git-workflow.md)。
 ```
 kset-framework/
 ├── kset-boot-parent/     # 版本 BOM（Boot 3.5.14 / SC 2025.0.2 / SCA 2025.0.0.0 / Dubbo 3.3.6）
-├── kset-common/          # 公共工具（异常、日志、监控门面 API、DateHelper、HTTP、线程池、Parallel、Retryer）
+├── kset-common/          # 公共工具、分页结果与常量（异常、日志、监控门面 API 等）
+├── kset-tuya/            # 可选涂鸦 API 与门锁客户端
 ├── kset-cloud/           # 云服务规则层（kset.cloud.*、SPI、灰度 LB）
 ├── kset-starter-web/     # Web + 统一异常
 ├── kset-starter-auth/    # 登录态 + 多套鉴权 + 上下文透传
@@ -44,11 +45,12 @@ kset-framework/
 
 ## 包名与模块目录约定
 
-Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录即包路径）：
+Java 包根路径通常与 Maven 模块目录对应（`src/main/java` 下目录即包路径）；`kset-tuya` 沿用迁入前的客户端包名：
 
 | Maven 模块 | 包根路径 | 说明 |
 |------------|----------|------|
-| `kset-common` | `com.kset.common` | 公共工具、异常、日志、`com.kset.common.monitor` 监控门面 API |
+| `kset-common` | `com.kset.common` | 公共工具、异常、日志、分页结果、公共常量及监控门面 API |
+| `kset-tuya` | `com.kset.common.tuya` | 可选涂鸦 API 与门锁客户端 |
 | `kset-cloud` | `com.kset.cloud` | 云服务规范、SPI、共享配置与 Nacos 命名约定 |
 | `kset-starter-web` | `com.kset.web` | Web 自动配置、`@OpLog`、`ApiResponse` |
 | `kset-starter-auth` | `com.kset.auth` | 登录态、默认主体、多套鉴权、Gateway/Web/Dubbo 上下文透传 |
