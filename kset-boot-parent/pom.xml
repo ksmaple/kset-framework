@@ -61,6 +61,7 @@
         <logstash-encoder.version>8.0</logstash-encoder.version>
         <cat-client.version>3.1.0</cat-client.version>
         <maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
+        <agentscope.version>2.0.5</agentscope.version>
 
         <!-- JSON / utilities / HTTP (common third-party) -->
         <guava.version>33.4.0-jre</guava.version>
@@ -158,13 +159,14 @@
             </dependency>
             <dependency>
                 <groupId>com.kset</groupId>
-                <artifactId>kset-agent-core</artifactId>
+                <artifactId>kset-starter-agent-harness</artifactId>
                 <version>${kset-framework.version}</version>
             </dependency>
+            <!-- AgentScope Harness -->
             <dependency>
-                <groupId>com.kset</groupId>
-                <artifactId>kset-agent-runtime</artifactId>
-                <version>${kset-framework.version}</version>
+                <groupId>io.agentscope</groupId>
+                <artifactId>agentscope-harness</artifactId>
+                <version>${agentscope.version}</version>
             </dependency>
 
             <!-- Spring Cloud BOM -->

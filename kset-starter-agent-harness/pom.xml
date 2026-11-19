@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.kset</groupId>
+        <artifactId>kset-boot-parent</artifactId>
+        <version>1.0.17-SNAPSHOT</version>
+        <relativePath>../kset-boot-parent/pom.xml</relativePath>
+    </parent>
+    <artifactId>kset-starter-agent-harness</artifactId>
+    <name>kset-starter-agent-harness</name>
+    <description>KSet AgentScope Harness integration</description>
+    <dependencies>
+        <dependency>
+            <groupId>io.agentscope</groupId>
+            <artifactId>agentscope-harness</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+    </dependencies>
+</project>

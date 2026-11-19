@@ -37,9 +37,10 @@ kset-framework/
 ├── kset-starter-dubbo/   # Dubbo RPC + 标签路由
 ├── kset-starter-gateway/ # Spring Cloud Gateway + 动态路由 + Sentinel
 ├── kset-starter-mq/      # RocketMQ 事件门面实现 + topic/tag 约定
-├── kset-agent-core/      # 框架无关 Agent 循环内核、ReAct 策略与协议扩展
-└── kset-agent-runtime/   # Agent 按次组装、Skill 工具集合与 MCP 适配
+└── kset-starter-agent-harness/ # AgentScope Harness 公共装配与按次构造
 ```
+
+> 原 `kset-agent-core` 与 `kset-agent-runtime` 已由 AgentScope Harness 接入替代并从当前源码移除；旧接口与快照不可直接用于新模块。外部 SNAPSHOT 调用方需迁移。
 
 ## 包名与模块目录约定
 
@@ -61,8 +62,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | `kset-starter-dubbo` | `com.kset.dubbo` | Dubbo 治理与路由 |
 | `kset-starter-gateway` | `com.kset.gateway` | Gateway 过滤器与动态路由 |
 | `kset-starter-mq` | `com.kset.mq` | RocketMQ 事件门面实现与 topic/tag 约定 |
-| `kset-agent-core` | `com.kset.agent.core` | Agent 循环、停止控制、协议/策略/动作扩展 |
-| `kset-agent-runtime` | `com.kset.agent.runtime` | Agent 按次组装、业务上下文与工具源适配 |
+| `kset-starter-agent-harness` | `com.kset.agent.harness` | AgentScope 2.0.5 Harness 工厂、原生工具源与脱敏耗时观测 |
 
 跨模块依赖时，Starter 实现类引用 `kset-cloud` 中的共享 API（如 `com.kset.cloud.spi.CloudRuleProvider`、`com.kset.cloud.nacos.NacosConfigConvention`）。
 
@@ -91,8 +91,7 @@ Java 包根路径与 Maven 模块目录一一对应（`src/main/java` 下目录�
 | `kset-starter-gateway` | 动态路由 diff、灰度、可选鉴权、Gateway Sentinel（Trace 见 monitor） | Spring Cloud Gateway |
 | `kset-starter-schedule` | `@KsetScheduled` 继承原生调度 + `@KsetTaskLock` 唯一运行锁（SQL 锁表，启动自动识别方言建表） | Spring Scheduling |
 | `kset-starter-mq` | RocketMQ 组件依赖入口；事件门面默认在 `kset-common` 提供 Spring 本地实现 | RocketMQ V5 Client Spring Boot Starter |
-| `kset-agent-core` | 稳定 Agent 循环、集中停止控制、默认 ReAct、版本化协议、动作与检查点扩展 | Java 21 / Jackson |
-| `kset-agent-runtime` | 每次调用组装 Agent、Skill 工具集合、业务上下文透传、MCP 工具适配接口 | Java 21 / Agent Core |
+| `kset-starter-agent-harness` | 按次构建 Harness、工具名校验、关闭原生内容追踪并记录脱敏耗时 | AgentScope Java 2.0.5 |
 
 ## 优雅启停
 

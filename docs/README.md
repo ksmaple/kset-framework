@@ -29,8 +29,7 @@
 | 接入 Nacos、Sentinel 与 Dubbo | [云服务](usage/cloud.md) |
 | 配置独立 Gateway 鉴权、CORS 与灰度 | [网关](usage/gateway.md) |
 | 配置集群唯一运行的定时任务 | [Schedule 模块](../kset-starter-schedule/README.md) |
-| 接入 Agent 循环、协议与恢复机制 | [Agent Core](../kset-agent-core/README.md) |
-| 按业务上下文组装 Agent 与 MCP 工具 | [Agent Runtime](../kset-agent-runtime/README.md) |
+| 接入 AgentScope Harness 与按次工具目录 | [Agent Harness](../kset-starter-agent-harness/README.md) |
 
 ## 模块参考
 
@@ -51,8 +50,7 @@
 | `kset-starter-dubbo` | [模块 README](../kset-starter-dubbo/README.md) | Dubbo RPC、标签路由与治理规则 |
 | `kset-starter-gateway` | [模块 README](../kset-starter-gateway/README.md) | Gateway 动态路由、灰度、鉴权与限流 |
 | `kset-starter-mq` | [模块 README](../kset-starter-mq/README.md) | RocketMQ 事件门面与监控 |
-| `kset-agent-core` | [模块 README](../kset-agent-core/README.md) | Agent 循环内核、ReAct、协议与恢复扩展 |
-| `kset-agent-runtime` | [模块 README](../kset-agent-runtime/README.md) | Agent 按次组装、Skill、业务上下文与 MCP 工具适配 |
+| `kset-starter-agent-harness` | [模块 README](../kset-starter-agent-harness/README.md) | AgentScope Harness 装配、按次工具目录与脱敏耗时观测 |
 
 ## 设计与源码契约
 
@@ -60,11 +58,6 @@
 |------|------|
 | [资源权限规范](design/resource-permission.md) | 功能码与资源 ACL 两平面、判定顺序和授权条目；本仓暂无实现 |
 | [当前代码对象与字段](design/current-object-fields.md) | 各模块公开数据对象、配置对象的字段类型、初始值和源码入口 |
-| [Agent 对象与字段契约](../kset-agent-core/docs/core-object-contract.md) | Agent 核心对象职责、所有权、空值与持久化边界 |
-| [Agent Runtime 对象与字段契约](../kset-agent-runtime/docs/runtime-object-contract.md) | 运行时组件、业务上下文与工具适配字段 |
-| [Agent JSON v1 协议](../kset-agent-core/docs/protocols/agent-json-v1.md) | 内置协议的字段、动作与错误码 |
-| [Agent 协议扩展指南](../kset-agent-core/docs/protocol-extension-guide.md) | 自定义 Codec、版本兼容和扩展动作接入 |
-| [kset-rag 接入映射](../kset-agent-core/docs/integration/kset-rag.md) | Agent Core 与宿主 RAG 工程的职责映射 |
 
 ## 项目维护与协作
 
