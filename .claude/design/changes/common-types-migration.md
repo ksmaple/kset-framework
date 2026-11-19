@@ -26,7 +26,7 @@
 - 旧版本正式线上主分支及对比基线 Git SHA：`main`；已发布提交待确认
 - 旧版正式发布版本：待确认
 - 基线 Git ref：`48a168b11cedd1bed80f94e6c79660b40bf66f5c`
-- 结果 Git ref：N/A
+- 结果 Git ref：`f7f86bbf35354ec7dafed2c3fd5e4ca1f65afaf5`
 - 回滚来源：`48a168b11cedd1bed80f94e6c79660b40bf66f5c`
 - 回滚可用性：可用，须同步恢复业务仓的旧模块与契约。
 
