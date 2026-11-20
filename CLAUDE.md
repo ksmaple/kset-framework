@@ -5,6 +5,7 @@
 ## 规则
 
 - 项目规则：[.claude/rules/kset-framework-project-rules.md](.claude/rules/kset-framework-project-rules.md)
+- 项目事实：[project-spec.md](.claude/standards/kset-framework-coder/references/project-spec.md)
 - Git 工作流：[docs/git-workflow.md](docs/git-workflow.md)。直接在主工作树 `main` 修改、提交并推送；不创建任务分支或 worktree。
 
 ## 规范
@@ -25,9 +26,9 @@
 | 环境 | 规范路径 | 索引 |
 |------|----------|------|
 | Claude | `.claude/standards/` | `CLAUDE.md` |
-| Kimi | `.agents/standards/`（链接） | `AGENTS.md` |
-| Codex | `.agents/standards/`（链接） | `AGENTS.md` |
-| Cursor | `.cursor/standards/`（链接） | `.cursor/rules/kset-framework-project-rules.mdc` |
+| Kimi | `.claude/standards/` | `AGENTS.md` |
+| Codex | `.claude/standards/` | `AGENTS.md` |
+| Cursor | `.claude/standards/` | `.cursor/rules/kset-framework-project-rules.mdc` |
 
 ## 使用指引
 

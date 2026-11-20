@@ -1,0 +1,456 @@
+<!doctype html>
+<!-- kaka-requirements-designer:detail -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>项目逻辑与结构图</title>
+<style>
+:root {
+  font-family: system-ui, "Microsoft YaHei", sans-serif;
+  color: #202630;
+  background: #fff;
+  --muted: #606b79;
+  --border: #d9dfe4;
+  --flow: #303943;
+  --focus: #205b8f;
+  --focus-wash: #eff6fb;
+  --error: #b6534b;
+  --error-wash: #fff4f2;
+  --async: #9a7518;
+  --phase-width: 112px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+header.page { width: min(calc(100% - 40px), 1240px); margin-inline: auto; padding: 32px 16px 20px; text-align: center; }
+.back-home { display: inline-block; margin-bottom: 18px; color: var(--focus); font-size: 13px; text-decoration: none; }
+.back-home:hover, .back-home:focus-visible { text-decoration: underline; }
+h1 { margin: 0 0 10px; font-size: 42px; line-height: 1.2; font-weight: 650; }
+.meta { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 20px; margin: 0; color: var(--muted); font-size: 13px; }
+main { width: min(calc(100% - 40px), 1240px); margin: auto; }
+.keywords { max-width: 980px; margin: 0 auto; padding: 0 32px 12px; }
+.keywords h2 { margin: 0 0 10px; font-size: 18px; }
+.keywords-scroll { overflow-x: auto; }
+.keywords table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: 13px; text-align: left; }
+.keywords th, .keywords td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.keywords th { color: var(--muted); font-weight: 600; }
+.controls { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 14px 32px 12px; color: var(--muted); font-size: 13px; }
+select { font: inherit; border: 1px solid var(--border); background: #fff; border-radius: 4px; padding: 6px 10px; color: #202630; }
+select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sequence-scroll { overflow-x: auto; padding: 0 16px 16px; }
+.sequence { width: max(100%, calc(var(--lane-count, 2) * 168px + var(--phase-width))); margin-inline: auto; background: #fff; }
+.participants, .lifelines { display: grid; grid-template-columns: repeat(var(--lane-count), minmax(0, 1fr)); }
+.participants { margin-left: var(--phase-width); }
+.participants.top { position: sticky; top: 0; z-index: 3; padding: 8px 0 12px; background: #fff; }
+.participants.bottom { padding: 12px 0 4px; }
+.participant { display: flex; flex-direction: column; justify-content: center; min-height: 62px; margin-inline: 7px; padding: 8px 10px; border: 1.5px solid #414951; border-radius: 8px; background: color-mix(in srgb, var(--identity, #91b9db) 55%, white); text-align: center; }
+.participant small { display: block; color: #3b4650; font-size: 11px; }
+.participant strong { display: block; margin-top: 2px; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.timeline { position: relative; }
+.lifelines { position: absolute; inset: 0 0 0 var(--phase-width); pointer-events: none; }
+.lifelines span { position: relative; }
+.lifelines span::before { content: ""; position: absolute; inset-block: 0; left: 50%; border-left: 1.5px dashed #b8c0c7; }
+.phase { position: relative; border-top: 1px solid #e8ecf0; padding-block: 4px 10px; }
+.phase[hidden], .interaction[hidden] { display: none; }
+.phase-label { position: absolute; top: 22px; left: 4px; width: calc(var(--phase-width) - 16px); color: var(--phase-color, #426785); line-height: 1.35; }
+.phase-label span { display: block; margin-bottom: 3px; font-size: 18px; font-weight: 700; }
+.phase-label strong { display: block; font-size: 15px; font-weight: 600; }
+.interaction { position: relative; min-height: 74px; margin-left: var(--phase-width); scroll-margin-top: 110px; }
+.interaction:hover, .interaction:focus-within { background: var(--focus-wash); }
+.interaction[data-category~="error"]:hover, .interaction[data-category~="error"]:focus-within { background: var(--error-wash); }
+.time { position: absolute; top: calc(var(--line-top, 53px) - 13px); left: var(--source); z-index: 2; display: grid; place-items: center; width: 27px; height: 27px; transform: translateX(-50%); border: 1px solid #be933c; border-radius: 50%; background: #f8cf69; box-shadow: 0 0 0 3px var(--source-color); color: #342b1b; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.message { position: absolute; top: 0; left: var(--left); width: var(--width); height: 100%; z-index: 1; min-width: 0; }
+.message .label { position: absolute; top: 5px; left: 50%; display: block; width: min(100%, 220px); transform: translateX(-50%); padding: 2px 4px; border: 0; background: #fff; color: #202630; font: inherit; font-size: 14px; font-weight: 600; line-height: 1.35; text-align: center; cursor: pointer; overflow-wrap: anywhere; }
+.message .label:hover, .message .label[aria-expanded="true"] { color: var(--focus); text-decoration: underline; }
+.message .label:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.message .line { position: absolute; top: var(--line-top, 53px); left: 0; right: 0; display: block; border-top: 1.5px solid var(--flow); }
+.message .line::before { content: ""; position: absolute; top: -6px; right: 12px; width: 3px; height: 11px; border-radius: 1px; background: var(--target-color); }
+.message .line::after { content: ""; position: absolute; top: -5px; right: 0; width: 8px; height: 8px; border-top: 1.5px solid var(--flow); border-right: 1.5px solid var(--flow); transform: rotate(45deg); }
+.message.reverse .line::before { right: auto; left: 12px; }
+.message.reverse .line::after { right: auto; left: 0; transform: rotate(-135deg); }
+.message.async .line { border-top-style: dashed; border-color: var(--async); }
+.interaction[data-category~="error"] .line, .interaction[data-category~="error"] .line::after { border-color: var(--error); }
+.message.self { width: max(105px, calc(100% / var(--lane-count) * .65)); }
+.message.self .label { left: 38px; width: 115px; }
+.message.self .line { top: calc(var(--line-top, 53px) - 8px); left: 0; right: auto; width: 40px; height: 22px; border-top: 1.5px solid var(--flow); border-right: 1.5px solid var(--flow); border-bottom: 1.5px solid var(--flow); }
+.message.self .line::after { top: auto; right: 0; bottom: -5px; transform: rotate(135deg); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-left: var(--phase-width); padding: 16px 0 6px; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 17px; height: 8px; margin-right: 6px; border-top: 2px solid var(--flow); }
+.legend .async::before { border-top-style: dashed; border-color: var(--async); }
+.legend .error::before { border-color: var(--error); }
+.legend .identity::before { border-color: var(--identity); }
+.model-views { width: 100%; min-width: 0; max-width: 980px; margin: 18px auto 0; padding: 0 32px; }
+.model-views h2 { margin: 0 0 14px; font-size: 20px; }
+.model-block { min-width: 0; padding: 18px 0 22px; border-top: 1px solid var(--border); scroll-margin-top: 100px; }
+.model-block h3 { margin: 0 0 4px; font-size: 16px; }
+.model-caption { max-width: 100%; margin: 0 0 14px; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.model-caption a { color: var(--focus); }
+.model-scroll { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; padding: 4px 2px 16px; }
+.model-diagram { display: flex; align-items: center; min-width: max-content; }
+.model-node { width: 230px; min-height: 132px; border: 1.5px solid #637587; border-radius: 4px; background: #fff; }
+.model-node h4 { margin: 0; padding: 9px 11px; border-bottom: 1px solid #b9c7d0; background: #edf3f6; font-size: 14px; overflow-wrap: anywhere; }
+.model-node small { display: block; margin: 2px 0 0; color: var(--muted); font-weight: 400; }
+.model-node ul { margin: 0; padding: 10px 12px 10px 26px; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.model-node.table { border-color: #63816e; }
+.model-node.table h4 { border-color: #b8cfbd; background: #edf5ef; }
+.model-link { position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: center; width: 150px; height: 68px; padding: 0 8px; color: #344452; text-align: center; font-size: 12px; }
+.model-link::before { content: ""; position: absolute; top: 34px; left: 0; right: 0; border-top: 1.5px solid currentColor; }
+.model-link::after { content: ""; position: absolute; top: 30px; right: 1px; width: 7px; height: 7px; border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); }
+.model-link strong, .model-link span { position: relative; z-index: 1; max-width: 100%; padding: 0 4px; background: #fff; font-weight: 500; overflow-wrap: anywhere; }
+.model-link.er::after { display: none; }
+.class-design { max-width: 980px; margin: 24px auto 0; padding: 24px 32px; border-top: 1px solid var(--border); }
+.class-design h2 { margin: 0 0 6px; font-size: 20px; }
+.class-design > p { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.class-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; }
+.class-box { min-width: 0; border: 1px solid var(--border); border-top: 4px solid var(--identity); border-radius: 6px; background: #fff; scroll-margin-top: 24px; }
+.class-box header, .class-box .members, .class-box footer { padding: 10px 14px; }
+.class-box header { background: color-mix(in srgb, var(--identity) 20%, white); }
+.class-box header small { display: block; color: #43505b; font-size: 11px; line-height: 1.45; }
+.class-box h3 { margin: 4px 0 0; font-size: 16px; overflow-wrap: anywhere; }
+.class-box .members { border-top: 1px solid var(--border); }
+.class-box h4 { margin: 0 0 5px; font-size: 12px; color: var(--muted); }
+.class-box ul { margin: 0 0 9px; padding-left: 0; list-style: none; font: 12px/1.55 ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.class-box ul:last-child { margin-bottom: 0; }
+.class-box footer { border-top: 1px solid var(--border); font-size: 12px; line-height: 1.5; }
+.class-design a { color: var(--focus); }
+.class-design a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.class-relations { margin-top: 22px; }
+.class-relations h3 { margin: 0 0 8px; font-size: 15px; }
+.class-relations-scroll { overflow-x: auto; }
+.class-relation { display: grid; grid-template-columns: minmax(145px, 1fr) minmax(150px, 1.1fr) minmax(145px, 1fr); align-items: center; gap: 14px; min-width: 520px; padding: 11px 0; border-top: 1px solid var(--border); font-size: 13px; scroll-margin-top: 24px; }
+.class-relation > a::before { content: ""; display: inline-block; width: 12px; margin-right: 6px; border-top: 3px solid var(--source-identity); vertical-align: middle; }
+.class-relation > a:last-child::before { border-color: var(--target-identity); }
+.class-relation > a:last-child { text-align: right; }
+.relation-middle { display: grid; justify-items: center; gap: 4px; color: var(--muted); font-size: 12px; text-align: center; }
+.relation-line { position: relative; width: 100%; border-top: 1.5px solid var(--flow); }
+.relation-line::after { content: ""; position: absolute; top: -5px; right: 0; width: 8px; height: 8px; border-top: 1.5px solid var(--flow); border-right: 1.5px solid var(--flow); transform: rotate(45deg); }
+.class-relation[data-kind="implements"] .relation-line { border-top-style: dashed; }
+.notes { max-width: 980px; margin-inline: auto; padding: 26px 32px 64px; }
+.notes h2 { font-size: 20px; }
+.notes article { padding: 18px 0; border-top: 1px solid var(--border); scroll-margin-top: 110px; }
+.notes h3 { font-size: 15px; margin: 0 0 6px; }
+.notes p { margin: 7px 0; line-height: 1.65; }
+.notes a { color: var(--focus); }
+.preview-data { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 6px 12px; margin: 10px 0; font-size: 13px; line-height: 1.5; }
+.preview-data dt { color: var(--muted); }
+.preview-data dd { margin: 0; overflow-wrap: anywhere; }
+.detail-popover { position: fixed; z-index: 10; width: min(360px, calc(100vw - 24px)); max-height: min(420px, calc(100vh - 24px)); overflow: auto; padding: 16px; border: 1px solid var(--border); border-top: 3px solid var(--focus); border-radius: 6px; background: #fff; box-shadow: 0 12px 34px #20263029; }
+.detail-popover[hidden] { display: none; }
+.detail-popover h2 { margin: 0 42px 10px 0; font-size: 15px; }
+.detail-popover .preview-data { border-top: 1px solid var(--border); padding-top: 10px; }
+.detail-popover footer { display: flex; justify-content: flex-end; gap: 16px; margin-top: 12px; font-size: 13px; }
+.detail-popover footer[hidden] { display: none; }
+.detail-popover button { position: absolute; top: 11px; right: 12px; padding: 4px; border: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+.detail-popover a { color: var(--focus); }
+@media (max-width: 640px) {
+  :root { --phase-width: 92px; }
+  header.page { padding: 24px 16px 12px; }
+  h1 { font-size: 30px; }
+  .meta { font-size: 12px; }
+  .keywords { padding: 0 16px 12px; }
+  .controls { justify-content: flex-start; padding: 12px 16px; }
+  .sequence-scroll { padding: 0 16px 12px; }
+  .phase-label strong { font-size: 13px; }
+  .model-views { padding: 0 16px; }
+  .class-design { padding: 20px 16px; }
+  .class-relation { min-width: 0; grid-template-columns: 1fr; gap: 6px; }
+  .class-relation > a:last-child { text-align: left; }
+  .relation-middle { justify-items: start; text-align: left; }
+  .relation-line { width: 2px; height: 20px; margin-left: 10px; border-top: 0; border-left: 1.5px solid var(--flow); }
+  .relation-line::after { top: auto; right: auto; bottom: 0; left: -5px; transform: rotate(135deg); }
+  .class-relation[data-kind="implements"] .relation-line { border-left-style: dashed; }
+  .notes { padding: 20px 16px 40px; }
+  .detail-popover { inset: auto 12px 12px !important; width: auto; max-height: min(55vh, 420px); }
+}
+</style>
+</head>
+<body>
+<header class="page">
+  <a class="back-home" href="../index.html">← 返回设计文档</a>
+  <h1>项目逻辑与结构图</h1>
+  <p class="meta"><span>需求设计</span><span>项目 A / 项目 B</span><span>示例流程</span></p>
+</header>
+<main>
+  <section class="keywords" aria-labelledby="keywords-title">
+    <h2 id="keywords-title">关键词定义</h2>
+    <div class="keywords-scroll">
+      <table>
+        <thead><tr><th scope="col">关键词</th><th scope="col">定义</th><th scope="col">适用功能或场景</th><th scope="col">需求或功能设计依据</th><th scope="col">同名定义的区别</th></tr></thead>
+        <tbody><tr><td>实际业务术语</td><td>待确认</td><td>相关流程</td><td>待确认</td><td>无或具体区别</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+  <div class="controls">
+    <label for="category">类别</label>
+    <select id="category"><option value="all">全部</option><option value="main">主流程</option><option value="error">异常与恢复</option></select>
+  </div>
+  <div class="sequence-scroll">
+    <section class="sequence" aria-label="项目交互时序图">
+      <div class="participants top">
+        <div class="participant" style="--identity:#a9c9eb"><small>项目 A</small><strong>入口模块</strong></div>
+        <div class="participant" style="--identity:#f1d675"><small>项目 A</small><strong>处理模块</strong></div>
+        <div class="participant" style="--identity:#e6b6a6"><small>项目 B</small><strong>依赖模块</strong></div>
+        <div class="participant" style="--identity:#acd4b6"><small>项目 B</small><strong>数据模块</strong></div>
+      </div>
+      <div class="timeline">
+        <div class="lifelines" aria-hidden="true"></div>
+        <div class="phase" style="--phase-color:#52799a">
+          <div class="phase-label"><span>01</span><strong>输入阶段</strong></div>
+          <div class="interaction" id="E01" data-from="1" data-to="2" data-category="main">
+            <span class="time">01</span>
+            <div class="message"><button class="label" type="button" data-note="note-E01" aria-controls="detail-popover" aria-expanded="false">E01 发起请求 · 同步</button><span class="line"></span></div>
+          </div>
+          <div class="interaction" id="E02" data-from="2" data-to="2" data-category="main">
+            <span class="time">02</span>
+            <div class="message"><button class="label" type="button" data-note="note-E02" aria-controls="detail-popover" aria-expanded="false">E02 核对输入</button><span class="line"></span></div>
+          </div>
+        </div>
+        <div class="phase" style="--phase-color:#9a812e">
+          <div class="phase-label"><span>02</span><strong>处理阶段</strong></div>
+          <div class="interaction" id="E03" data-from="2" data-to="3" data-category="main">
+            <span class="time">03</span>
+            <div class="message"><button class="label" type="button" data-note="note-E03" aria-controls="detail-popover" aria-expanded="false">E03 请求处理 · 同步</button><span class="line"></span></div>
+          </div>
+        </div>
+        <div class="phase" style="--phase-color:#ad655a">
+          <div class="phase-label"><span>03</span><strong>结果阶段</strong></div>
+          <div class="interaction" id="E04" data-from="3" data-to="4" data-category="main">
+            <span class="time">04</span>
+            <div class="message"><button class="label" type="button" data-note="note-E04" aria-controls="detail-popover" aria-expanded="false">E04 读取数据 · 同步</button><span class="line"></span></div>
+          </div>
+          <div class="interaction" id="E05" data-from="4" data-to="3" data-category="error">
+            <span class="time">05</span>
+            <div class="message reverse"><button class="label" type="button" data-note="note-E05" aria-controls="detail-popover" aria-expanded="false">E05 异常结果 · 待处理</button><span class="line"></span></div>
+          </div>
+        </div>
+        <div class="phase" style="--phase-color:#588266">
+          <div class="phase-label"><span>04</span><strong>返回阶段</strong></div>
+          <div class="interaction" id="E06" data-from="3" data-to="2" data-category="main">
+            <span class="time">06</span>
+            <div class="message reverse"><button class="label" type="button" data-note="note-E06" aria-controls="detail-popover" aria-expanded="false">E06 汇总结果 · 响应</button><span class="line"></span></div>
+          </div>
+          <div class="interaction" id="E07" data-from="2" data-to="1" data-category="main">
+            <span class="time">07</span>
+            <div class="message reverse"><button class="label" type="button" data-note="note-E07" aria-controls="detail-popover" aria-expanded="false">E07 返回结果 · 响应</button><span class="line"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="participants bottom" aria-hidden="true">
+        <div class="participant" style="--identity:#a9c9eb"><small>项目 A</small><strong>入口模块</strong></div>
+        <div class="participant" style="--identity:#f1d675"><small>项目 A</small><strong>处理模块</strong></div>
+        <div class="participant" style="--identity:#e6b6a6"><small>项目 B</small><strong>依赖模块</strong></div>
+        <div class="participant" style="--identity:#acd4b6"><small>项目 B</small><strong>数据模块</strong></div>
+      </div>
+      <div class="legend"><span>同步消息</span><span class="async">异步消息</span><span class="error">异常路径</span></div>
+    </section>
+  </div>
+  <!-- 按本次范围保留需要的结构图；两张都不需要时删除整个 model-views 区域。 -->
+  <section class="model-views" aria-label="结构关系图">
+    <h2>结构关系</h2>
+    <div class="model-block" id="U01">
+      <h3>U01 UML 组件图</h3>
+      <p class="model-caption">示例结构，确有需要时按实际类、组件或状态替换；否则删除此图。关联主时序 <a href="#E03">E03</a> 与 <a href="#note-E03">说明</a>。</p>
+      <div class="model-scroll"><div class="model-diagram" role="img" aria-label="示例组件关系：处理模块调用依赖模块公开的接口">
+        <div class="model-node"><h4>处理模块<small>项目 A · 调用方</small></h4><ul><li>职责：编排本模块流程</li><li>依赖：依赖模块公开接口</li></ul></div>
+        <div class="model-link"><strong>调用公开接口</strong><span>单向依赖 →</span></div>
+        <div class="model-node"><h4>依赖模块<small>项目 B · 实现方</small></h4><ul><li>职责：处理所属业务</li><li>接口：实际契约待填写</li></ul></div>
+      </div></div>
+    </div>
+    <div class="model-block" id="D01">
+      <h3>D01 SQL 表关系图</h3>
+      <p class="model-caption">示例关系，确有需要时按实际 schema 与查询替换；否则删除此图。关联读写消息 <a href="#E04">E04</a>。</p>
+      <div class="model-scroll"><div class="model-diagram" role="img" aria-label="示例表关系：主表通过业务键关联明细表，基数一对多">
+        <div class="model-node table"><h4>主表<small>实际逻辑库与表名待填写</small></h4><ul><li>PK：主键待填写</li><li>业务键：关联值待填写</li></ul></div>
+        <div class="model-link er"><strong>1 · 业务键关联 · 0..N</strong><span>非物理外键示例</span></div>
+        <div class="model-node table"><h4>明细表<small>实际逻辑库与表名待填写</small></h4><ul><li>PK：主键待填写</li><li>关联键：实际字段待填写</li></ul></div>
+      </div></div>
+    </div>
+  </section>
+  <section class="class-design" aria-labelledby="class-design-title">
+    <h2 id="class-design-title">设计类图</h2>
+    <p>以下类与关系均为示例，成稿时按本次需求与项目事实替换。</p>
+    <div class="class-grid">
+      <article class="class-box" id="CLS-01" style="--identity:#f1d675">
+        <header><small>CLS-01 · 项目 A / 处理模块 / 示例包 · 拟议 · 修改</small><h3>ProcessService</h3></header>
+        <div class="members"><h4>关键属性</h4><ul><li>- gateway: DependencyGateway</li></ul><h4>关键方法</h4><ul><li>+ handle(input): Result</li></ul></div>
+        <footer>职责：处理输入并组织结果 · 关联流程 <a href="#E03">E03</a> · 依据：待填入需求或源码位置</footer>
+      </article>
+      <article class="class-box" id="CLS-02" style="--identity:#e6b6a6">
+        <header><small>CLS-02 · 项目 B / 依赖模块 / 示例包 · 拟议 · 新增</small><h3>DependencyGateway</h3></header>
+        <div class="members"><h4>关键属性</h4><ul><li>不适用</li></ul><h4>关键方法</h4><ul><li>+ fetch(key): Result</li></ul></div>
+        <footer>职责：提供依赖数据入口 · 关联流程 <a href="#E03">E03</a>、<a href="#E04">E04</a> · 依据：待填入需求或源码位置</footer>
+      </article>
+    </div>
+    <div class="class-relations" aria-label="类关系">
+      <h3>类关系</h3>
+      <div class="class-relations-scroll">
+        <div class="class-relation" id="REL-01" data-kind="dependency" style="--source-identity:#f1d675;--target-identity:#e6b6a6">
+          <a href="#CLS-01">CLS-01 ProcessService</a>
+          <div class="relation-middle"><span>REL-01 · 依赖 · 拟议 · 多重性不适用</span><span class="relation-line" aria-hidden="true"></span></div>
+          <a href="#CLS-02">CLS-02 DependencyGateway</a>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section class="notes" aria-label="图下说明">
+    <h2>项目说明</h2>
+    <article id="note-E01" data-category="main"><h3><a href="#E01">E01 发起请求</a></h3><dl class="preview-data"><dt>调用</dt><dd>入口模块 → 处理模块</dd><dt>数据</dt><dd>输入</dd><dt>结果</dt><dd>收到请求</dd></dl><p>填写实际入口和依据。</p></article>
+    <article id="note-E02" data-category="main"><h3><a href="#E02">E02 核对输入</a></h3><dl class="preview-data"><dt>动作</dt><dd>处理模块内部核对</dd><dt>数据</dt><dd>输入</dd><dt>结果</dt><dd>进入后续处理</dd></dl><p>填写实际条件和依据。</p></article>
+    <article id="note-E03" data-category="main"><h3><a href="#E03">E03 请求处理</a></h3><dl class="preview-data"><dt>调用</dt><dd>处理模块 → 依赖模块</dd><dt>数据</dt><dd>请求摘要</dd><dt>结果</dt><dd>进入依赖处理</dd><dt>设计类</dt><dd><a href="#CLS-01">CLS-01</a>、<a href="#CLS-02">CLS-02</a>；关系 <a href="#REL-01">REL-01</a></dd></dl><p>填写实际调用和依据。</p></article>
+    <article id="note-E04" data-category="main"><h3><a href="#E04">E04 读取数据</a></h3><dl class="preview-data"><dt>调用</dt><dd>依赖模块 → 数据模块</dd><dt>数据</dt><dd>查询条件</dd><dt>结果</dt><dd>得到数据</dd></dl><p>填写实际读写关系和依据。</p></article>
+    <article id="note-E05" data-category="error"><h3><a href="#E05">E05 异常结果</a></h3><dl class="preview-data"><dt>调用</dt><dd>数据模块 → 依赖模块</dd><dt>数据</dt><dd>失败信息</dd><dt>结果</dt><dd>待处理</dd></dl><p>仅在实际存在异常路径时保留，并填写处置与最终结果。</p></article>
+    <article id="note-E06" data-category="main"><h3><a href="#E06">E06 汇总结果</a></h3><dl class="preview-data"><dt>调用</dt><dd>依赖模块 → 处理模块</dd><dt>数据</dt><dd>处理结果</dd><dt>结果</dt><dd>形成响应</dd></dl><p>填写实际响应和依据。</p></article>
+    <article id="note-E07" data-category="main"><h3><a href="#E07">E07 返回结果</a></h3><dl class="preview-data"><dt>调用</dt><dd>处理模块 → 入口模块</dd><dt>数据</dt><dd>响应</dd><dt>结果</dt><dd>流程结束</dd></dl><p>填写最终结果和依据。</p></article>
+  </section>
+</main>
+<aside id="detail-popover" class="detail-popover" role="dialog" aria-label="消息详情" hidden><button type="button" class="close-detail" aria-label="关闭详情">关闭</button><h2></h2><div class="detail-content"></div><footer><a href="#">查看完整说明</a></footer></aside>
+<script>
+(() => {
+  const sequence = document.querySelector('.sequence');
+  const participants = [...sequence.querySelectorAll('.participants.top .participant')];
+  const count = participants.length;
+  sequence.style.setProperty('--lane-count', count);
+  const lifelines = sequence.querySelector('.lifelines');
+  for (let i = 0; i < count; i += 1) lifelines.append(document.createElement('span'));
+  const legend = sequence.querySelector('.legend');
+  for (const participant of participants) {
+    const entry = document.createElement('span');
+    entry.className = 'identity';
+    entry.style.setProperty('--identity', getComputedStyle(participant).getPropertyValue('--identity'));
+    entry.textContent = `${participant.querySelector('small').textContent} / ${participant.querySelector('strong').textContent}`;
+    legend.append(entry);
+  }
+  for (const row of sequence.querySelectorAll('.interaction')) {
+    const from = Number(row.dataset.from);
+    const to = Number(row.dataset.to);
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < 1 || from > count || to > count) {
+      row.dataset.invalid = 'true';
+      row.hidden = true;
+      console.error('Invalid sequence participant:', row.id);
+      continue;
+    }
+    const message = row.querySelector('.message');
+    row.style.setProperty('--source', `${(from - .5) / count * 100}%`);
+    message.style.setProperty('--left', `${(Math.min(from, to) - .5) / count * 100}%`);
+    message.style.setProperty('--width', `${Math.abs(from - to) / count * 100}%`);
+    row.style.setProperty('--source-color', getComputedStyle(participants[from - 1]).getPropertyValue('--identity'));
+    row.style.setProperty('--target-color', getComputedStyle(participants[to - 1]).getPropertyValue('--identity'));
+    message.classList.toggle('reverse', from > to);
+    message.classList.toggle('self', from === to);
+  }
+  const layoutRows = () => {
+    for (const row of sequence.querySelectorAll('.interaction')) {
+      const label = row.querySelector('.label');
+      const lineTop = Math.max(53, label.offsetTop + label.offsetHeight + 12);
+      row.style.setProperty('--line-top', `${lineTop}px`);
+      row.style.minHeight = `${lineTop + 21}px`;
+    }
+  };
+  layoutRows();
+  window.addEventListener('resize', layoutRows);
+  const detail = document.getElementById('detail-popover');
+  const detailContent = detail.querySelector('.detail-content');
+  let activeButton = null;
+  let pinned = false;
+  let closeTimer = null;
+  let detailScrollX = window.scrollX;
+  let detailScrollY = window.scrollY;
+  let detailChartScroll = sequence.parentElement.scrollLeft;
+  const cancelClose = () => { clearTimeout(closeTimer); closeTimer = null; };
+  const closeDetail = () => {
+    cancelClose();
+    if (activeButton) activeButton.setAttribute('aria-expanded', 'false');
+    activeButton = null;
+    pinned = false;
+    detail.hidden = true;
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    if (!pinned) closeTimer = setTimeout(closeDetail, 140);
+  };
+  const openDetail = (button, pin = false) => {
+    const note = document.getElementById(button.dataset.note);
+    const preview = note?.querySelector('.preview-data');
+    if (!preview) return;
+    cancelClose();
+    if (activeButton && activeButton !== button) activeButton.setAttribute('aria-expanded', 'false');
+    activeButton = button;
+    pinned = pin;
+    detailScrollX = window.scrollX;
+    detailScrollY = window.scrollY;
+    detailChartScroll = sequence.parentElement.scrollLeft;
+    button.setAttribute('aria-expanded', 'true');
+    detail.querySelector('h2').textContent = note.querySelector('h3').textContent;
+    detailContent.replaceChildren(preview.cloneNode(true));
+    detail.querySelector('footer a').href = `#${note.id}`;
+    detail.hidden = false;
+    if (window.matchMedia('(max-width: 640px)').matches) return;
+    const rect = button.getBoundingClientRect();
+    const width = detail.offsetWidth;
+    const height = detail.offsetHeight;
+    const rightFits = rect.right + 12 + width <= window.innerWidth - 12;
+    const leftFits = rect.left - width - 12 >= 12;
+    const left = rightFits ? rect.right + 12 : leftFits ? rect.left - width - 12 : Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    const preferredTop = rightFits || leftFits ? rect.top : rect.bottom + 12;
+    const top = preferredTop + height <= window.innerHeight - 12 ? preferredTop : rect.top - height - 12;
+    detail.style.left = `${left}px`;
+    detail.style.top = `${Math.max(12, top)}px`;
+  };
+  for (const button of sequence.querySelectorAll('.label[data-note]')) {
+    button.addEventListener('pointerenter', event => { if (event.pointerType === 'mouse') openDetail(button, false); });
+    button.addEventListener('pointerleave', scheduleClose);
+    button.addEventListener('focus', () => openDetail(button, false));
+    button.addEventListener('blur', scheduleClose);
+    button.addEventListener('click', () => {
+      if (activeButton === button && pinned) closeDetail();
+      else openDetail(button, true);
+    });
+  }
+  detail.addEventListener('pointerenter', cancelClose);
+  detail.addEventListener('pointerleave', scheduleClose);
+  detail.querySelector('.close-detail').addEventListener('click', closeDetail);
+  detail.querySelector('footer a').addEventListener('click', closeDetail);
+  document.addEventListener('pointerdown', event => {
+    if (activeButton && !detail.contains(event.target) && event.target !== activeButton) closeDetail();
+  });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeDetail(); });
+  window.addEventListener('scroll', () => {
+    if (window.scrollX !== detailScrollX || window.scrollY !== detailScrollY) closeDetail();
+  }, { passive: true });
+  sequence.parentElement.addEventListener('scroll', () => {
+    if (sequence.parentElement.scrollLeft !== detailChartScroll) closeDetail();
+  }, { passive: true });
+  document.getElementById('category').addEventListener('change', event => {
+    closeDetail();
+    const selected = event.target.value;
+    const rows = [...sequence.querySelectorAll('.interaction')];
+    const visible = new Set(rows.filter(row => row.dataset.invalid !== 'true' && (selected === 'all' || row.dataset.category.split(/\s+/).includes(selected))));
+    if (selected !== 'all' && selected !== 'main') {
+      for (const row of [...visible]) {
+        const index = rows.indexOf(row);
+        const before = rows.slice(0, index).reverse().find(item => item.dataset.category.split(/\s+/).includes('main'));
+        const after = rows.slice(index + 1).find(item => item.dataset.category.split(/\s+/).includes('main'));
+        if (before) visible.add(before);
+        if (after) visible.add(after);
+      }
+    }
+    for (const row of rows) row.hidden = !visible.has(row);
+    for (const phase of sequence.querySelectorAll('.phase')) {
+      phase.hidden = !phase.querySelector('.interaction:not([hidden])');
+    }
+    for (const note of document.querySelectorAll('.notes article')) {
+      note.hidden = ![...visible].some(row => note.id === `note-${row.id}`);
+    }
+  });
+  for (const link of document.querySelectorAll('.class-design a[href^="#E"]')) {
+    link.addEventListener('click', () => {
+      const category = document.getElementById('category');
+      if (category.value === 'all') return;
+      category.value = 'all';
+      category.dispatchEvent(new Event('change'));
+    });
+  }
+})();
+</script>
+</body>
+</html>

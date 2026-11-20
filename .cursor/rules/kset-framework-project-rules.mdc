@@ -1,0 +1,11 @@
+---
+description: "kset-framework 项目开发执行边界"
+globs:
+alwaysApply: true
+---
+
+# kset-framework Cursor 规则适配
+
+读取并遵守 [项目规则](../../.claude/rules/kset-framework-project-rules.md)。
+
+项目规则默认适用。按任务范围从 [项目主索引](../../.claude/AGENTS.md) 定位项目规范与适用的 Kset 全局技能；项目规范正文从 `.claude/standards/` 读取。执行操作遵守项目规则与用户授权。
