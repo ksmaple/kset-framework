@@ -18,6 +18,25 @@ Git 修改、提交与推送约定见 [Git 工作流](docs/git-workflow.md)。
 
 当前构件版本以 `kset-boot-parent` 的 `<version>` 为准（现为 `1.0.17-SNAPSHOT`）。
 
+## 代码质量门禁
+
+在仓库根目录执行 `mvn validate` 检查全仓静态规则；执行不带跳过测试参数的 `mvn verify` 还会编译并运行单测与 ArchUnit。`.mvn/maven.config` 仅在本仓库默认启用父 POM 的 `code-quality` profile，其他仓库继承父 POM 时不会自动启用。
+
+完整规则、执行命令和发布边界见[Java/Maven 代码质量门禁](docs/code-quality-gates.md)。
+
+| 阶段 | 门禁 | 当前规则与范围 | 配置入口 |
+| --- | --- | --- | --- |
+| `validate` | Maven Enforcer | JDK 21、Maven 3.9+、POM 重复依赖声明；适用继承 `kset-boot-parent` 的模块 | `kset-boot-parent/pom.xml` |
+| `validate` | Checkstyle | Java 源码和测试源码的文件格式、导入、命名、控制流大括号、空语句及空白 | `.mvn/checkstyle.xml` |
+| `validate` | PMD | Java 源码和测试源码的捕获空指针异常、无说明的空 catch、`finally` 中的 `return`；带注释的空 catch 允许保留 | `.mvn/pmd-ruleset.xml` |
+| `compile` | Maven Compiler | 按父 POM 的 Java 21 `release` 配置编译生产源码 | `kset-boot-parent/pom.xml` |
+| `test` | Maven Surefire | 运行各模块测试；`kset.skipModuleTests` 默认 `false` | `kset-boot-parent/pom.xml` |
+| `test` | ArchUnit | 检查顶层 `com.kset` 包的循环依赖，以及 `common`、`cloud` 共享包对 Starter 实现包的反向依赖；仅扫描生产类 | `kset-architecture-tests` |
+
+上述检查失败会使相应的 Maven 命令失败。`mvn validate` 不编译或运行测试；`mvn verify` 会经过上述阶段，但没有另外绑定在 `verify` 阶段的质量插件。`mvn -pl kset-architecture-tests -am test` 可单独选择架构测试模块，`-am` 同时构建并测试其依赖模块；只选择个别模块运行 `validate` 不等于全仓检查。
+
+ArchUnit 当前按包名检查，`kset-tuya` 和 `kset-starter-monitor` 的生产类也位于 `com.kset.common.*`，因此包级规则不能替代 Maven 模块依赖边的核对。发布插件当前传入 `-DskipTests -Dmaven.test.skip=true`，不会运行单测和 ArchUnit；发布前需单独执行未跳过测试的 `mvn verify`。仓库目前没有自动运行这些门禁的 CI 工作流，`kset-architecture-tests` 模块也不安装或发布。
+
 ## 模块结构
 
 ```
@@ -38,7 +57,8 @@ kset-framework/
 ├── kset-starter-dubbo/   # Dubbo RPC + 标签路由
 ├── kset-starter-gateway/ # Spring Cloud Gateway + 动态路由 + Sentinel
 ├── kset-starter-mq/      # RocketMQ 事件门面实现 + topic/tag 约定
-└── kset-starter-agent-harness/ # AgentScope Harness 公共装配与按次构造
+├── kset-starter-agent-harness/ # AgentScope Harness 公共装配与按次构造
+└── kset-architecture-tests/ # 跨模块 ArchUnit 架构测试，不发布
 ```
 
 > 原 `kset-agent-core` 与 `kset-agent-runtime` 已由 AgentScope Harness 接入替代并从当前源码移除；旧接口与快照不可直接用于新模块。外部 SNAPSHOT 调用方需迁移。

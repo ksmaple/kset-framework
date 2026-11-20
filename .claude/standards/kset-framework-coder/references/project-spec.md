@@ -29,7 +29,7 @@
 | Orchestration | 按模块 | Dubbo、Gateway、Nacos、Sentinel 分别位于对应 starter |
 | Distributed | 已确认 | `kset-starter-schedule` 使用 SQL 锁表与 fencing token；Redis 锁能力位于 `kset-starter-redis` |
 | Log | 按模块 | Web、Gateway 与 Monitor 的链路处理分别位于对应 starter |
-| Engineering   | 按需               | 容量、熔断与发布约定                         |
+| Engineering   | 已确认             | 仓库内 `mvn validate` 执行 Enforcer、Checkstyle 与 PMD；`mvn verify` 另执行包括包级 ArchUnit 在内的测试，规则清单见 `docs/code-quality-gates.md` |
 
 
 
@@ -61,6 +61,10 @@
 | --- | --- | --- |
 | `docs` | 项目文档 | 自动探测 |
 | `pom.xml` | Maven 构建与依赖入口 | 自动探测 |
+| `.mvn/maven.config` | 仓库内默认启用代码质量检查 | `mvn validate` 不编译或执行测试 |
+| `.mvn/checkstyle.xml` | Checkstyle 项目规则集 | 由 `kset-boot-parent/pom.xml` 引用 |
+| `.mvn/pmd-ruleset.xml` | PMD 项目规则集 | 由 `kset-boot-parent/pom.xml` 引用 |
+| `docs/code-quality-gates.md` | Java/Maven 代码质量门禁规范 | 规则范围、命令及发布边界 |
 | `README.md` | 项目入口说明 | 自动探测 |
 | `kset-boot-parent` | 子项目或模块 | 检测到 pom.xml |
 | `kset-cloud` | 子项目或模块 | 检测到 pom.xml |
@@ -78,6 +82,7 @@
 | `kset-starter-redis` | 子项目或模块 | 检测到 pom.xml |
 | `kset-starter-sentinel` | 子项目或模块 | 检测到 pom.xml |
 | `kset-starter-agent-harness` | AgentScope Harness 的 Spring 装配与按次构造入口 | 1.0.17-SNAPSHOT 开发 |
+| `kset-architecture-tests` | 跨模块 ArchUnit 架构测试 | 测试模块，不安装或发布 |
 
 ## 5. 外部引用（轻量记录）
 

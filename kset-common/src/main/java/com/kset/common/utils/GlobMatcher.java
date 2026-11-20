@@ -20,7 +20,9 @@ public class GlobMatcher {
         String[] parts = patterns.split(",");
         for (String part : parts) {
             String pattern = part.trim();
-            if (pattern.isEmpty()) continue;
+            if (pattern.isEmpty()) {
+                continue;
+            }
             // 支持以 / 结尾的目录匹配：如 .git/ 匹配 .git 目录下所有内容
             if (pattern.endsWith("/")) {
                 String dirPrefix = pattern.substring(0, pattern.length() - 1);

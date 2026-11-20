@@ -19,6 +19,8 @@ public record AgentHarnessSpec(String name, String agentId, Model model, String 
         Objects.requireNonNull(toolkit, "toolkit");
         Objects.requireNonNull(stateStore, "stateStore");
         Objects.requireNonNull(workspace, "workspace");
-        if (maxIters <= 0) throw new IllegalArgumentException("maxIters must be positive");
+        if (maxIters <= 0) {
+            throw new IllegalArgumentException("maxIters must be positive");
+        }
     }
 }

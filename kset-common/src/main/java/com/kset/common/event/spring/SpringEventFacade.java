@@ -175,7 +175,9 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
     }
 
     private void notifySuccess(SendCallback callback, Object payload) {
-        if (callback == null) return;
+        if (callback == null) {
+            return;
+        }
         try {
             callback.onSuccess();
         } catch (Throwable error) {
@@ -184,7 +186,9 @@ public class SpringEventFacade extends AbstractKsetLifecycleComponent implements
     }
 
     private void notifyFailure(SendCallback callback, Throwable failure, Object payload) {
-        if (callback == null) return;
+        if (callback == null) {
+            return;
+        }
         try {
             callback.onException(failure);
         } catch (Throwable error) {

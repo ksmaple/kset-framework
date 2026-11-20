@@ -268,7 +268,9 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
     }
 
     private void notifySuccess(SendCallback callback) {
-        if (callback == null) return;
+        if (callback == null) {
+            return;
+        }
         try {
             callback.onSuccess();
         } catch (Throwable error) {
@@ -277,7 +279,9 @@ public class RocketMqEventFacade implements EventFacade, RocketMqEventOperations
     }
 
     private void notifyFailure(SendCallback callback, Throwable failure) {
-        if (callback == null) return;
+        if (callback == null) {
+            return;
+        }
         try {
             callback.onException(failure);
         } catch (Throwable error) {

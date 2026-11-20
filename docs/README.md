@@ -65,6 +65,7 @@
 | 文档 | 说明 |
 |------|------|
 | [项目根 README](../README.md) | 仓库结构、能力总览、版本矩阵、快速开始与构建 |
+| [代码质量门禁](code-quality-gates.md) | Java/Maven 规则、执行命令、模块边界与发布前校验 |
 | [版本发布说明](../CHANGELOG.md) | 版本变更、升级指引与发布流程 |
 | [Git 工作流](git-workflow.md) | 主工作树、提交范围、提交信息与推送约定 |
 | [本地 Docker 公共组件](../env/README.md) | Nacos、Redis、MySQL、PostgreSQL、RocketMQ 的连接、资源约定与操作命令 |

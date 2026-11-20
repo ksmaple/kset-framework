@@ -1,6 +1,5 @@
 package com.kset.redis.config;
 
-import com.kset.redis.config.KsetRedisProperties;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.client.codec.StringCodec;

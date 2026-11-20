@@ -1,6 +1,5 @@
 package com.kset.redis.config;
 
-import com.kset.redis.config.KsetRedisProperties;
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.SocketOptions;
 import io.lettuce.core.api.StatefulConnection;

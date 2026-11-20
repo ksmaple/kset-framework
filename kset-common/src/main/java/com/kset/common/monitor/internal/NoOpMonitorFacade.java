@@ -8,7 +8,6 @@ import com.kset.common.monitor.TraceSnapshot;
 import com.kset.common.monitor.facade.MetricKind;
 import com.kset.common.monitor.facade.MonitorStatus;
 import com.kset.common.monitor.facade.MonitorTransaction;
-import com.kset.common.monitor.internal.NoOpMonitorTransaction;
 
 import java.util.Optional;
 import java.util.UUID;

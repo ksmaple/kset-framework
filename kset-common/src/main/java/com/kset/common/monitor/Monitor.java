@@ -9,7 +9,6 @@ import com.kset.common.monitor.facade.MonitorFacade;
 import com.kset.common.monitor.facade.MonitorStatus;
 import com.kset.common.monitor.facade.MonitorTransaction;
 import com.kset.common.monitor.internal.DefaultMonitorFacade;
-import com.kset.common.monitor.internal.NoOpMonitorFacade;
 import com.kset.common.monitor.internal.NoOpMonitorTransaction;
 import com.kset.common.monitor.reporter.NoOpMetricAggregator;
 import com.kset.common.monitor.sampler.RateSampler;

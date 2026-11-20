@@ -584,6 +584,7 @@
                                         <version>[3.9.0,)</version>
                                         <message>Project requires Maven 3.9+.</message>
                                     </requireMavenVersion>
+                                    <banDuplicatePomDependencyVersions />
                                 </rules>
                             </configuration>
                         </execution>
@@ -600,6 +601,61 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>code-quality</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-checkstyle-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <dependencies>
+                            <dependency>
+                                <groupId>com.puppycrawl.tools</groupId>
+                                <artifactId>checkstyle</artifactId>
+                                <version>10.26.1</version>
+                            </dependency>
+                        </dependencies>
+                        <configuration>
+                            <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                            <consoleOutput>true</consoleOutput>
+                            <configLocation>${maven.multiModuleProjectDirectory}/.mvn/checkstyle.xml</configLocation>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>checkstyle</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-pmd-plugin</artifactId>
+                        <version>3.28.0</version>
+                        <configuration>
+                            <includeTests>true</includeTests>
+                            <linkXRef>false</linkXRef>
+                            <printFailingErrors>true</printFailingErrors>
+                            <rulesets combine.self="override">
+                                <ruleset>${maven.multiModuleProjectDirectory}/.mvn/pmd-ruleset.xml</ruleset>
+                            </rulesets>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>pmd</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <profile>
             <id>nexus</id>
             <distributionManagement>

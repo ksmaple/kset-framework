@@ -2,11 +2,17 @@ package com.kset.common.tuya;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.alibaba.fastjson2.TypeReference;
-import com.kset.common.tuya.model.*;
+import com.kset.common.tuya.model.PasswordTicket;
+import com.kset.common.tuya.model.ScheduleItem;
+import com.kset.common.tuya.model.TempPasswordParam;
+import com.kset.common.tuya.model.TuyaResponse;
 import com.kset.common.tuya.util.PasswordEncryptUtil;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 涂鸦智能门锁API客户端

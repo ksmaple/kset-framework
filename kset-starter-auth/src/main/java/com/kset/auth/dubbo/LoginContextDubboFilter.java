@@ -13,7 +13,6 @@ import org.apache.dubbo.rpc.RpcContext;
 import org.apache.dubbo.rpc.RpcException;
 
 import java.util.Map;
-import java.util.Optional;
 
 public class LoginContextDubboFilter implements Filter {
 

@@ -26,7 +26,9 @@ public final class AgentHarnessFactory {
                 .disableTranscript().disableSessionPersistence().disableToolResultEviction()
                 .enableAgentTracingLog(false)
                 .middleware(new AgentHarnessTimingMiddleware());
-        for (AgentHarnessCustomizer customizer : customizers) customizer.customize(builder);
+        for (AgentHarnessCustomizer customizer : customizers) {
+            customizer.customize(builder);
+        }
         return builder;
     }
 }

@@ -8,7 +8,21 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.RunnableFuture;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -224,31 +238,53 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
     }
 
     private static String getTraceId(Runnable r) {
-        if (r instanceof PriorityRunnable) return ((PriorityRunnable) r).traceId;
-        if (r instanceof PriorityFutureTask) return ((PriorityFutureTask<?>) r).traceId;
-        if (r instanceof TimedRunnable) return ((TimedRunnable) r).traceId;
-        if (r instanceof TimedFutureTask) return ((TimedFutureTask<?>) r).traceId;
+        if (r instanceof PriorityRunnable) {
+            return ((PriorityRunnable) r).traceId;
+        }
+        if (r instanceof PriorityFutureTask) {
+            return ((PriorityFutureTask<?>) r).traceId;
+        }
+        if (r instanceof TimedRunnable) {
+            return ((TimedRunnable) r).traceId;
+        }
+        if (r instanceof TimedFutureTask) {
+            return ((TimedFutureTask<?>) r).traceId;
+        }
         return null;
     }
 
     private static KsetContextSnapshot getContextSnapshot(Runnable r) {
-        if (r instanceof PriorityRunnable) return ((PriorityRunnable) r).contextSnapshot;
-        if (r instanceof PriorityFutureTask) return ((PriorityFutureTask<?>) r).contextSnapshot;
-        if (r instanceof TimedRunnable) return ((TimedRunnable) r).contextSnapshot;
-        if (r instanceof TimedFutureTask) return ((TimedFutureTask<?>) r).contextSnapshot;
+        if (r instanceof PriorityRunnable) {
+            return ((PriorityRunnable) r).contextSnapshot;
+        }
+        if (r instanceof PriorityFutureTask) {
+            return ((PriorityFutureTask<?>) r).contextSnapshot;
+        }
+        if (r instanceof TimedRunnable) {
+            return ((TimedRunnable) r).contextSnapshot;
+        }
+        if (r instanceof TimedFutureTask) {
+            return ((TimedFutureTask<?>) r).contextSnapshot;
+        }
         return null;
     }
 
     private static Runnable unwrapOriginal(Runnable r) {
-        if (r instanceof PriorityRunnable) return ((PriorityRunnable) r).delegate;
-        if (r instanceof TimedRunnable) return ((TimedRunnable) r).delegate;
+        if (r instanceof PriorityRunnable) {
+            return ((PriorityRunnable) r).delegate;
+        }
+        if (r instanceof TimedRunnable) {
+            return ((TimedRunnable) r).delegate;
+        }
         return r;
     }
 
     private String captureTraceId() {
         if (traceContextAdapter != null) {
             String traceId = traceContextAdapter.getTraceId();
-            if (traceId != null) return traceId;
+            if (traceId != null) {
+                return traceId;
+            }
         }
         if (traceIdSupplier != null) {
             return traceIdSupplier.get();
@@ -350,14 +386,22 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
     }
 
     private static int getPriority(Runnable r) {
-        if (r instanceof PriorityRunnable) return ((PriorityRunnable) r).priority;
-        if (r instanceof PriorityFutureTask) return ((PriorityFutureTask<?>) r).priority;
+        if (r instanceof PriorityRunnable) {
+            return ((PriorityRunnable) r).priority;
+        }
+        if (r instanceof PriorityFutureTask) {
+            return ((PriorityFutureTask<?>) r).priority;
+        }
         return 0;
     }
 
     private static long getSequence(Runnable r) {
-        if (r instanceof PriorityRunnable) return ((PriorityRunnable) r).sequence;
-        if (r instanceof PriorityFutureTask) return ((PriorityFutureTask<?>) r).sequence;
+        if (r instanceof PriorityRunnable) {
+            return ((PriorityRunnable) r).sequence;
+        }
+        if (r instanceof PriorityFutureTask) {
+            return ((PriorityFutureTask<?>) r).sequence;
+        }
         return 0;
     }
 
@@ -882,9 +926,15 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
                 count++;
                 totalExecTime += rec.executionTimeMs;
                 totalWaitTime += rec.waitTimeMs;
-                if (rec.executionTimeMs > maxExec) maxExec = rec.executionTimeMs;
-                if (rec.executionTimeMs < minExec) minExec = rec.executionTimeMs;
-                if (rec.success) successCount++;
+                if (rec.executionTimeMs > maxExec) {
+                    maxExec = rec.executionTimeMs;
+                }
+                if (rec.executionTimeMs < minExec) {
+                    minExec = rec.executionTimeMs;
+                }
+                if (rec.success) {
+                    successCount++;
+                }
             }
         }
 

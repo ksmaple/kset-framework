@@ -145,7 +145,7 @@ class KsetRocketMqEventFacadeTest {
             sentMessage.set(invocation.getArgument(1));
             submitted.set(invocation.getArgument(2));
             return null;
-        }).when(template).asyncSendNormalMessage(anyString(), any(), any());
+        }).when(template).asyncSendNormalMessage(anyString(), any(Message.class), any());
         RocketMqEventFacade facade = new RocketMqEventFacade(template, new com.fasterxml.jackson.databind.ObjectMapper(),
                 new RocketMQProperties(), new org.springframework.mock.env.MockEnvironment()
                 .withProperty("spring.application.name", "rocket-demo"));
@@ -196,7 +196,7 @@ class KsetRocketMqEventFacadeTest {
         doAnswer(invocation -> {
             submitted.set(invocation.getArgument(2));
             return null;
-        }).when(template).asyncSendNormalMessage(anyString(), any(), any());
+        }).when(template).asyncSendNormalMessage(anyString(), any(Message.class), any());
         RocketMqEventFacade facade = new RocketMqEventFacade(template,
                 new com.fasterxml.jackson.databind.ObjectMapper(), new RocketMQProperties(),
                 new org.springframework.mock.env.MockEnvironment()
