@@ -28,7 +28,7 @@ Git 修改、提交与推送约定见 [Git 工作流](docs/git-workflow.md)。
 | --- | --- | --- | --- |
 | `validate` | Maven Enforcer | JDK 21、Maven 3.9+、POM 重复依赖声明；适用继承 `kset-boot-parent` 的模块 | `kset-boot-parent/pom.xml` |
 | `validate` | Checkstyle | Java 源码和测试源码的文件格式、导入、命名、控制流大括号、空语句及空白 | `.mvn/checkstyle.xml` |
-| `validate` | PMD | Java 源码和测试源码的捕获空指针异常、无说明的空 catch、`finally` 中的 `return`；带注释的空 catch 允许保留 | `.mvn/pmd-ruleset.xml` |
+| `validate` | PMD | Java 源码和测试源码的异常处理、`BigDecimal` 字面量构造与控制台打印等错误写法；空 catch 不因注释豁免 | `.mvn/pmd-ruleset.xml` |
 | `compile` | Maven Compiler | 按父 POM 的 Java 21 `release` 配置编译生产源码 | `kset-boot-parent/pom.xml` |
 | `test` | Maven Surefire | 运行各模块测试；`kset.skipModuleTests` 默认 `false` | `kset-boot-parent/pom.xml` |
 | `test` | ArchUnit | 检查顶层 `com.kset` 包的循环依赖，以及 `common`、`cloud` 共享包对 Starter 实现包的反向依赖；仅扫描生产类 | `kset-architecture-tests` |

@@ -841,7 +841,10 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
                         } catch (ExecutionException ee) {
                             success = false;
                         } catch (InterruptedException | CancellationException e) {
-                            // ignore
+                            if (e instanceof InterruptedException) {
+                                Thread.currentThread().interrupt();
+                            }
+                            log.debug("[Pool-{}] Future result unavailable", poolName, e);
                         }
                     }
                 } else if (r instanceof PriorityFutureTask) {
@@ -852,7 +855,10 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
                         } catch (ExecutionException ee) {
                             success = false;
                         } catch (InterruptedException | CancellationException e) {
-                            // ignore
+                            if (e instanceof InterruptedException) {
+                                Thread.currentThread().interrupt();
+                            }
+                            log.debug("[Pool-{}] Future result unavailable", poolName, e);
                         }
                     }
                 } else if (r instanceof TimedFutureTask) {
@@ -863,7 +869,10 @@ public class KsetThreadPoolExecutor extends ThreadPoolExecutor {
                         } catch (ExecutionException ee) {
                             success = false;
                         } catch (InterruptedException | CancellationException e) {
-                            // ignore
+                            if (e instanceof InterruptedException) {
+                                Thread.currentThread().interrupt();
+                            }
+                            log.debug("[Pool-{}] Future result unavailable", poolName, e);
                         }
                     }
                 }

@@ -37,7 +37,7 @@ public class GlobMatcher {
                     return true;
                 }
             } catch (Exception e) {
-                // 非法模式，跳过
+                continue;
             }
         }
         return false;

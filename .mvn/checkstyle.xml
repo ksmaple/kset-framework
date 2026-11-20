@@ -9,8 +9,14 @@
         <module name="AvoidStarImport" />
         <module name="RedundantImport" />
         <module name="UnusedImports" />
+        <module name="PackageName" />
         <module name="TypeName" />
         <module name="MethodName" />
+        <module name="MemberName" />
+        <module name="ParameterName" />
+        <module name="LocalVariableName" />
+        <module name="ModifierOrder" />
+        <module name="StringLiteralEquality" />
         <module name="NeedBraces" />
         <module name="EmptyStatement" />
         <module name="OneStatementPerLine" />

@@ -2,10 +2,9 @@
 <ruleset name="KSet Java quality rules" xmlns="http://pmd.sourceforge.net/ruleset/2.0.0">
     <description>High-signal Java checks for the KSet framework.</description>
     <rule ref="category/java/errorprone.xml/AvoidCatchingNPE" />
-    <rule ref="category/java/errorprone.xml/EmptyCatchBlock">
-        <properties>
-            <property name="allowCommentedBlocks" value="true" />
-        </properties>
-    </rule>
+    <rule ref="category/java/errorprone.xml/EmptyCatchBlock" />
     <rule ref="category/java/errorprone.xml/ReturnFromFinallyBlock" />
+    <rule ref="category/java/errorprone.xml/AvoidDecimalLiteralsInBigDecimalConstructor" />
+    <rule ref="category/java/bestpractices.xml/AvoidPrintStackTrace" />
+    <rule ref="category/java/bestpractices.xml/SystemPrintln" />
 </ruleset>
