@@ -1,32 +1,19 @@
 package com.kset.web.response;
 
 /**
- * 统一 API 响应体
+ * Servlet 侧响应体。字段与 {@link com.kset.common.response.ApiResponse} 相同，静态方法仍返回本类型。
  */
-public class ApiResponse<T> {
-
-    private int code;
-
-    private String message;
-
-    private T data;
-
-    private String traceId;
+public class ApiResponse<T> extends com.kset.common.response.ApiResponse<T> {
 
     public ApiResponse() {
     }
 
     public ApiResponse(int code, String message, T data) {
-        this.code = code;
-        this.message = message;
-        this.data = data;
+        super(code, message, data);
     }
 
     public ApiResponse(int code, String message, T data, String traceId) {
-        this.code = code;
-        this.message = message;
-        this.data = data;
-        this.traceId = traceId;
+        super(code, message, data, traceId);
     }
 
     public static <T> ApiResponse<T> success(T data) {
@@ -43,37 +30,5 @@ public class ApiResponse<T> {
 
     public static <T> ApiResponse<T> fail(String message) {
         return fail(-1, message);
-    }
-
-    public int getCode() {
-        return code;
-    }
-
-    public void setCode(int code) {
-        this.code = code;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
-    }
-
-    public T getData() {
-        return data;
-    }
-
-    public void setData(T data) {
-        this.data = data;
-    }
-
-    public String getTraceId() {
-        return traceId;
-    }
-
-    public void setTraceId(String traceId) {
-        this.traceId = traceId;
     }
 }

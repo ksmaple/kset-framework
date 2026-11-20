@@ -53,3 +53,4 @@
 
 ## 使用指引
 - 成套文档交付：先用 `kset-framework-delivery-config` 核对项目配置，再依次使用 `kset-framework-scenario-analysis`、`kset-framework-product-spec`、`kset-framework-ui-ux-spec`、`kset-framework-technical-spec`；静态前端由 `kset-framework-coder` 制作，反馈由 `kset-framework-delivery-feedback` 处理。
+
