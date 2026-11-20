@@ -40,3 +40,7 @@
 ## 现有逻辑说明
 
 - 生成前端页面文件关联报告 → `kset-framework-file-relations`
+
+## Kset 全局规范接入
+
+本项目初始化与已安装 Kset 全局技能的任务映射见 [项目主索引](.claude/AGENTS.md#kset-全局规范接入)。

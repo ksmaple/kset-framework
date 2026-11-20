@@ -8,7 +8,6 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
-import java.util.Base64;
 
 /**
  * AES-GCM 对称加密工具，用于持久化敏感数据（项目环境变量 secret 等）。
@@ -32,7 +31,7 @@ public class CryptoUtil {
             this.keySpec = null;
             return;
         }
-        byte[] keyBytes = Base64.getDecoder().decode(base64Key);
+        byte[] keyBytes = Base64Codec.decode(base64Key);
         if (keyBytes.length != 32) {
             throw new IllegalStateException(
                     "kset.security.env-secret-key 必须为 Base64 编码的 32 字节(256 位)密钥,当前长度: " + keyBytes.length);
@@ -55,7 +54,7 @@ public class CryptoUtil {
             byte[] cipherBytes = cipher.doFinal(plain.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             ByteBuffer buf = ByteBuffer.allocate(iv.length + cipherBytes.length);
             buf.put(iv).put(cipherBytes);
-            return Base64.getEncoder().encodeToString(buf.array());
+            return Base64Codec.encode(buf.array());
         } catch (Exception e) {
             throw new IllegalStateException("加密失败", e);
         }
@@ -69,7 +68,7 @@ public class CryptoUtil {
             throw new IllegalStateException("加密密钥未配置");
         }
         try {
-            byte[] all = Base64.getDecoder().decode(cipherBase64);
+            byte[] all = Base64Codec.decode(cipherBase64);
             byte[] iv = new byte[GCM_IV_LENGTH];
             byte[] cipherBytes = new byte[all.length - GCM_IV_LENGTH];
             System.arraycopy(all, 0, iv, 0, GCM_IV_LENGTH);

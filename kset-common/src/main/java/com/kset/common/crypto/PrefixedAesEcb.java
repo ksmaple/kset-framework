@@ -4,7 +4,6 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
-import java.util.Base64;
 
 /**
  * 带 {@code ENC:} 前缀的 AES/ECB/PKCS5Padding。
@@ -33,7 +32,7 @@ public final class PrefixedAesEcb {
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, keySpec(cryptoKey));
             byte[] encrypted = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
-            return PREFIX + Base64.getEncoder().encodeToString(encrypted);
+            return PREFIX + Base64Codec.encode(encrypted);
         } catch (GeneralSecurityException error) {
             throw new IllegalStateException("应用密钥加密失败", error);
         }
@@ -50,7 +49,7 @@ public final class PrefixedAesEcb {
         try {
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, keySpec(cryptoKey));
-            byte[] encrypted = Base64.getDecoder().decode(value.substring(PREFIX.length()));
+            byte[] encrypted = Base64Codec.decode(value.substring(PREFIX.length()));
             return new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
         } catch (GeneralSecurityException | IllegalArgumentException error) {
             throw new IllegalStateException("应用密钥解密失败", error);
