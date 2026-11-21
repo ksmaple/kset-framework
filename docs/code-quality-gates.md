@@ -45,4 +45,54 @@ ArchUnit 在 `kset-architecture-tests` 模块的 `test` 阶段运行，仅扫描
 
 根 POM 的发布插件传入 `-DskipTests -Dmaven.test.skip=true`，发布过程不会运行模块测试或 ArchUnit。发布前须单独执行未跳过测试的 `mvn verify`。仓库目前未配置自动运行这些命令的 CI 工作流，也未接入 SpotBugs 或覆盖率阈值门禁。
 
-调整规则时，先核对全仓存量违反项与误报，再更新规则配置和本文档，并从根目录验证对应阶段；不要用全局跳过参数掩盖违反项。
+`kset-boot-parent/pom.xml` 在 `code-quality` 之后有一段注释掉的 `api-compat` profile，使用 japicmp `0.27.0` 对照已发布版本 `1.0.16`。该段不进入默认构建，也未写入 `.mvn/maven.config`。
+
+## 门禁目录
+
+质量插件定义在 `kset-boot-parent/pom.xml`。`.mvn/maven.config` 只在本仓库激活 `code-quality`。其他仓库继承该 parent 时不自动打开这套检查。
+
+| 期次 | 工具 | 配置 | 命令 | 默认 |
+| --- | --- | --- | --- | --- |
+| 第一期 | Maven Enforcer | `kset-boot-parent/pom.xml`，JDK `[21,22)`、Maven 3.9+、禁止重复声明依赖版本 | `mvn validate` | 开，已生效 |
+| 第一期 | Checkstyle 10.26.1 | `.mvn/checkstyle.xml`，由 `code-quality` 绑定到 `validate` | `mvn validate` | 开，已生效 |
+| 第一期 | PMD，现行 6 条 | `.mvn/pmd-ruleset.xml`，由 `code-quality` 绑定到 `validate` | `mvn validate` | 开，已生效 |
+| 第一期 | Surefire | 父 POM `pluginManagement`，`kset.skipModuleTests` 默认 `false` | `mvn verify` | 开，已生效 |
+| 第一期 | ArchUnit 1.5.1 | `kset-architecture-tests` 的 `FrameworkArchitectureTest` | `mvn verify` | 开，已生效 |
+| 第二期 | japicmp 0.27.0 | `kset-boot-parent/pom.xml` 中注释掉的 `api-compat`，对照 `1.0.16` | 启用前不执行 | 关 |
+| 第三期 | 无 | 无 | 无 | — |
+
+未进入上表的工具不配置。Spotless 会改写现有格式。JaCoCo 失败阈值的存量预估为高。SpotBugs 与已生效的 PMD 同组，默认规则预估为中，且尚未实际扫描。
+
+## 存量修复优先级
+
+1. 第一期没有待修的存量违反。根目录 `mvn validate` 已通过，Enforcer、现行 Checkstyle 和现行 PMD 保持现状。
+2. 改动测试或包边界后，以及每次发布前，从仓库根目录执行不带跳过测试参数的 `mvn verify`，确认 Surefire 和 ArchUnit 的循环依赖规则。门禁定稿时没有重新运行测试，因此这里没有已知失败项。
+3. 取消 `api-compat` 注释之前，先保持两个 `breakBuild` 为 `false`，对照 `1.0.16` 出一份差异报告。只有报告里确认的二进制不兼容才进入修复。`kset-tuya`、`kset-starter-sentinel`、`kset-starter-agent-harness` 没有测试源码，但不因此安排覆盖率修复。SpotBugs 不进入修复队列。
+
+## 豁免原则
+
+豁免写在对应规则配置或本文档里，并写明范围和原因。不用 `checkstyle.skip`、`pmd.skip`、`-DskipTests` 这类全局开关掩盖违反项。
+
+- Checkstyle 继续允许空匿名类型体，不扩大到行长、导入排序或全仓格式化。
+- PMD 的空 `catch` 不因注释豁免。
+- ArchUnit 仍按包名判断，不能代替 Maven 模块依赖检查。
+- 发布插件可以继续带 `-DskipTests -Dmaven.test.skip=true`。发布前单独执行 `mvn verify`。
+- japicmp 排除 `kset-architecture-tests`，不解析 `1.0.16` 中不存在的构件，只比较 public 成员。两个 `breakBuild` 在差异确认为低之前保持 `false`。
+
+存量预估为高，或还没有测量结果的规则，不设为默认阻断。
+
+## 规则调整流程
+
+1. 写明新增规则检查什么，以及它和现有 Enforcer、Checkstyle、PMD、Surefire、ArchUnit 是否重复。
+2. 用当前全仓代码估计存量违反和最可能的误报。预估为高时保持关闭，不做全仓重格式化。
+3. 同组已有工具时沿用现有工具，不并行加第二套。
+4. 修改规则配置和本文档，再从仓库根目录执行对应命令。
+5. `api-compat` 保持注释。只有差异报告确认影响面为低，并先改本文档，才取消注释。不把它写入 `.mvn/maven.config`。
+
+## 提交前清单
+
+- 改了 Java 源码、测试或质量插件时，在仓库根目录执行 `mvn validate`。
+- 改了包之间的依赖、ArchUnit 规则或测试行为时，再执行不带跳过测试参数的 `mvn verify`。
+- 日常提交不附带 `checkstyle.skip`、`pmd.skip`、`-DskipTests` 或 `-Dmaven.test.skip=true`。
+- 不取消 `kset-boot-parent/pom.xml` 里 `api-compat` 的注释，除非本文档已经写成启用。
+- 发布仍走现有发布参数；发布前另执行一次 `mvn verify`。

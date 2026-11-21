@@ -9,6 +9,12 @@
 - **升级版本**：先读[版本发布说明](../CHANGELOG.md)中的行为变化与升级指引。
 - **查找配置或 API**：进入对应模块 README；公开对象字段可检索[当前代码对象与字段](design/current-object-fields.md)。
 
+## 模块说明与业务设计
+
+正式模块说明按 `docs/{module}/overview/README.md` 组织，记录职责、能力边界和关键入口；对应业务设计按 `docs/{module}/design/{feature-key}.md` 组织。跨模块设计归 `docs/overview/design/`，并链接参与模块。`{module}` 使用已核实的模块名，`{feature-key}` 使用稳定的业务主题键；新增文档在本页登记权威入口，同一主题更新原文档。具体约束见[项目规则 R178–R180](../.claude/rules/kset-framework-project-rules.md)。
+
+现有模块 README 继续承载紧邻源码的接入与构建说明；下方 `usage/` 和 `design/` 文档保持原有入口，按内容变化更新。仅在实际形成文档时创建对应目录。
+
 ## 场景使用文档
 
 | 我要做的事 | 文档 |
@@ -65,7 +71,7 @@
 | 文档 | 说明 |
 |------|------|
 | [项目根 README](../README.md) | 仓库结构、能力总览、版本矩阵、快速开始与构建 |
-| [代码质量门禁](code-quality-gates.md) | Java/Maven 规则、执行命令、模块边界与发布前校验 |
+| [代码质量门禁](code-quality-gates.md) | Java/Maven 规则、执行命令、模块边界、发布前校验、存量修复与提交前清单 |
 | [版本发布说明](../CHANGELOG.md) | 版本变更、升级指引与发布流程 |
 | [Git 工作流](git-workflow.md) | 主工作树、提交范围、提交信息与推送约定 |
 | [本地 Docker 公共组件](../env/README.md) | Nacos、Redis、MySQL、PostgreSQL、RocketMQ 的连接、资源约定与操作命令 |

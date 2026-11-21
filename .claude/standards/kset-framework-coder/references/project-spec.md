@@ -202,6 +202,8 @@
 
 本机 Docker 公共组件的适用范围、连接方式、数据保留与操作步骤以 `env/README.md` 为准；该环境不承载业务应用或预置业务数据。
 
+AI 默认可读本机 Docker 的 `env/README.md`、`env/compose.yaml` 与本索引（2026-11-21 初始化确认）。不默认连接运行中的容器，也不默认读取其中的数据。其他环境待用户点名后才进入可读范围。
+
 ## 9. 部署入口与回滚索引
 
 > 仅记录经项目发布配置或部署资料确认的非敏感入口和版本来源；部署授权仍以当前对话与项目规则为准。未登记或未核验不代表可以执行部署，禁止写入凭据、私有令牌、完整发布日志或临时产物路径。
@@ -210,6 +212,9 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 未登记 | N/A | 按项目当前发布流程定位 | N/A | N/A | N/A | 未核验 |
 | 本机 Docker | Nacos / Redis / MySQL / PostgreSQL / RocketMQ | `docker compose -f env/compose.yaml up -d --build --wait`；`env/compose.legacy.yaml` 仅留作配置参考 | `env/single/Dockerfile` 构建本地镜像 `kset-local-infra:latest` | 容器内 `kset-local-healthcheck` 与 `docker compose -f env/compose.yaml ps` | 旧数据卷已删除；当前数据需从单容器卷备份恢复 | 2026-11-06：旧容器及旧卷已清理，单容器健康已核验 |
+| Maven 构件发布 | 根聚合与各可发布模块 | 根 `pom.xml` profile `nexus`；仓库 id `kset-nexus-releases`、`kset-nexus-snapshots` | 版本以 `kset-boot-parent/pom.xml` 为准；步骤见 `CHANGELOG.md` | 本次未执行发布 | 回滚步骤见 `CHANGELOG.md` | 2026-11-21：仅登记发布配置入口，未执行发布 |
+
+无常设改配置或部署授权（2026-11-21 初始化确认）。修改配置、部署或服务启停仍须在当前对话点名目标，并遵守项目规则 R043、R044、R128、R129。本索引不授予这些操作。
 
 ## 10. 测试公共配置基线
 
