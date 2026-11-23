@@ -65,6 +65,7 @@
 |------|------|
 | [资源权限规范](design/resource-permission.md) | 功能码与资源 ACL 两平面、判定顺序和授权条目；本仓暂无实现 |
 | [当前代码对象与字段](design/current-object-fields.md) | 各模块公开数据对象、配置对象的字段类型、初始值和源码入口 |
+| [Agent Harness 变更记录](kset-starter-agent-harness/changes/agent-harness.md) | 原生构造参数修复、调用方边界与验证状态 |
 
 ## 项目维护与协作
 

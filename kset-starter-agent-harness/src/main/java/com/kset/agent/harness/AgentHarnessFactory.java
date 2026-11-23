@@ -18,7 +18,8 @@ public final class AgentHarnessFactory {
         var builder = HarnessAgent.builder().name(spec.name()).agentId(spec.agentId())
                 .model(spec.model()).sysPrompt(spec.systemPrompt()).toolkit(spec.toolkit())
                 .stateStore(spec.stateStore()).workspace(spec.workspace()).maxIters(spec.maxIters())
-                .maxRetries(0).enablePendingToolRecovery(false)
+                // AgentScope 2.0.5 rejects a zero retry limit.
+                .maxRetries(1).enablePendingToolRecovery(false)
                 .disableFilesystemTools().disableShellTool().disableWebTools()
                 .disableMemoryTools().disableMemoryHooks().disableSubagents()
                 .disableDynamicSubagents().disableDynamicSkills().disableDefaultWorkspaceSkills()
