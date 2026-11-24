@@ -16,7 +16,7 @@ Git 修改、提交与推送约定见 [Git 工作流](docs/git-workflow.md)。
 
 > 自 `kset-comm` 更名为 `kset-framework`：根聚合 `artifactId`、BOM `kset-boot-parent`、Starter `kset-starter-*`；子模块 `kset-common` 名称不变。
 
-当前构件版本以 `kset-boot-parent` 的 `<version>` 为准（本次发布 `1.0.17`）。
+当前开发版本以 `kset-boot-parent` 的 `<version>` 为准（现为 `1.0.18-SNAPSHOT`）；最新正式发布版为 `1.0.17`。
 
 ## 代码质量门禁
 
@@ -292,7 +292,7 @@ mvn dependency:tree -Dverbose | findstr "omitted for conflict"
 <parent>
     <groupId>com.kset</groupId>
     <artifactId>kset-boot-parent</artifactId>
-    <version>1.0.17</version>
+    <version>1.0.18-SNAPSHOT</version>
 </parent>
 ```
 

@@ -81,8 +81,8 @@
 | `kset-starter-nacos` | 子项目或模块 | 检测到 pom.xml |
 | `kset-starter-redis` | 子项目或模块 | 检测到 pom.xml |
 | `kset-starter-sentinel` | 子项目或模块 | 检测到 pom.xml |
-| `kset-starter-agent-harness` | AgentScope Harness 的 Spring 装配与按次构造入口 | 1.0.17-SNAPSHOT 开发 |
-| `kset-starter-image` | 图片 AI 能力：多模态理解（转文字/参数提取）与图片生成，OpenAI 兼容协议 | 1.0.17-SNAPSHOT 开发 |
+| `kset-starter-agent-harness` | AgentScope Harness 的 Spring 装配与按次构造入口 | 1.0.17 已发布，标签 v1.0.17 |
+| `kset-starter-image` | 图片 AI 能力：多模态理解（转文字/参数提取）与图片生成，OpenAI 兼容协议 | 1.0.17 已发布，标签 v1.0.17 |
 | `kset-architecture-tests` | 跨模块 ArchUnit 架构测试 | 测试模块，不安装或发布 |
 
 ## 5. 外部引用（轻量记录）
@@ -113,7 +113,7 @@
 | Redis 客户端 | Jedis 5.1.2、Redisson 3.40.2 | `kset-boot-parent/pom.xml` |
 | ORM | MyBatis 3.5.15、MyBatis-Plus 3.5.5 | `kset-boot-parent/pom.xml` |
 | MySQL JDBC | MySQL Connector/J 8.3.0 | `kset-boot-parent/pom.xml` |
-| 父 POM / BOM | `com.kset:kset-boot-parent:1.0.17-SNAPSHOT` | `kset-boot-parent/pom.xml`、各模块 `pom.xml` |
+| 父 POM / BOM | 当前开发 `com.kset:kset-boot-parent:1.0.18-SNAPSHOT`；最新发布 1.0.17 | `kset-boot-parent/pom.xml`、各模块 `pom.xml`；v1.0.17 标签及 Nexus POM |
 | AgentScope Harness | `io.agentscope:agentscope-harness:2.0.5`，由父 POM 管理 | `kset-boot-parent/pom.xml`、`kset-starter-agent-harness/pom.xml` |
 
 - `kset-starter-web` 为 Servlet MVC，`kset-starter-gateway` 为 WebFlux Gateway，二者异常入口独立。
@@ -224,7 +224,7 @@ AI 默认可读本机 Docker 的 `env/README.md`、`env/compose.yaml` 与本索�
 | --- | --- | --- | --- | --- | --- | --- |
 | 未登记 | N/A | 按项目当前发布流程定位 | N/A | N/A | N/A | 未核验 |
 | 本机 Docker | Nacos / Redis / MySQL / PostgreSQL / RocketMQ | `docker compose -f env/compose.yaml up -d --build --wait`；`env/compose.legacy.yaml` 仅留作配置参考 | `env/single/Dockerfile` 构建本地镜像 `kset-local-infra:latest` | 容器内 `kset-local-healthcheck` 与 `docker compose -f env/compose.yaml ps` | 旧数据卷已删除；当前数据需从单容器卷备份恢复 | 2026-11-06：旧容器及旧卷已清理，单容器健康已核验 |
-| Maven 构件发布 | 根聚合与各可发布模块 | 根 `pom.xml` profile `nexus`；仓库 id `kset-nexus-releases`、`kset-nexus-snapshots` | 版本以 `kset-boot-parent/pom.xml` 为准；步骤见 `CHANGELOG.md` | 本次未执行发布 | 回滚步骤见 `CHANGELOG.md` | 2026-11-21：仅登记发布配置入口，未执行发布 |
+| Maven 构件发布 | 根聚合与各可发布模块 | 根 `pom.xml` profile `nexus`；仓库 id `kset-nexus-releases`、`kset-nexus-snapshots` | 正式版 1.0.17 / 标签 v1.0.17；当前开发版本以父 POM 为准 | 18 个模块的 Nexus POM 及适用 JAR 均返回 200，版本与内部依赖属性核对通过 | 回滚步骤见 `CHANGELOG.md`；已发布版本禁止覆盖 | 2026-11-24：release:prepare / release:perform 成功，全仓 verify 通过 |
 
 无常设改配置或部署授权（2026-11-21 初始化确认）。修改配置、部署或服务启停仍须在当前对话点名目标，并遵守项目规则 R043、R044、R128、R129。本索引不授予这些操作。
 
