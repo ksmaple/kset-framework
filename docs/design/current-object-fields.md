@@ -85,6 +85,7 @@
 | `Vision` | `timeout` | `Duration` | `Duration.ofSeconds(60)`；连接与读取各自超时，启用时须在 `1ms` 至 `2147483647ms` 之间。 |
 | `Vision` | `maxTokens` | `int` | `2048`，启用时须为正数。 |
 | `Generation` | `enabled` | `boolean` | `true`。 |
+| `Generation` | `provider` | `Generation.Provider` | `Provider.OPENAI`；可选 `OPENAI` / `SILICONFLOW`，启用生成装配时不可为 null。 |
 | `Generation` | `model` | `String` | `gpt-image-2.5-flare`，启用时非空白。 |
 | `Generation` | `defaultSize` | `String` | `1024x1024`，启用时非空白，规格由目标服务校验。 |
 | `Generation` | `timeout` | `Duration` | `Duration.ofSeconds(120)`，约束同 `Vision.timeout`。 |
@@ -120,7 +121,7 @@
 | `prompt` | `String` | 非空白的画面或编辑指令。 |
 | `size` | `String` | 可选；缺失或空白时使用配置值，规格由供应商决定。 |
 | `count` | `Integer` | 可选；提供时须为正数，否则默认 1。 |
-| `referenceImageUrl` | `String` | 可选；提供时禁止空白，使用 `/images/edits` 的 JSON `images[].image_url`。 |
+| `referenceImageUrl` | `String` | 可选；提供时禁止空白。OpenAI 使用 `/images/edits` 的 `images[].image_url`；SiliconFlow 使用 `/images/generations` 的 `image`，请求不指定 size，模型须支持参考图。 |
 
 ### `ImageGenerationResult` / `GeneratedImage`
 

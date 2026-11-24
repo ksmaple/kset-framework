@@ -55,6 +55,8 @@ public class ImageProperties {
 
     /** 图片生成配置。 */
     public static class Generation {
+        /** 图片生成供应商协议，默认保持 OpenAI JSON 协议。 */
+        private Provider provider = Provider.OPENAI;
         /** 图片生成开关。 */
         private boolean enabled = true;
         /** 生成模型名。 */
@@ -64,6 +66,8 @@ public class ImageProperties {
         /** 连接与读取各自的超时，须在 1ms 至 Integer.MAX_VALUE ms 之间。 */
         private Duration timeout = Duration.ofSeconds(120);
 
+        public Provider getProvider() { return provider; }
+        public void setProvider(Provider provider) { this.provider = provider; }
         public boolean isEnabled() { return enabled; }
         public void setEnabled(boolean enabled) { this.enabled = enabled; }
         public String getModel() { return model; }
@@ -72,5 +76,11 @@ public class ImageProperties {
         public void setDefaultSize(String defaultSize) { this.defaultSize = defaultSize; }
         public Duration getTimeout() { return timeout; }
         public void setTimeout(Duration timeout) { this.timeout = timeout; }
+
+        /** 图片生成协议选择；理解接口均使用兼容的 chat/completions。 */
+        public enum Provider {
+            OPENAI,
+            SILICONFLOW
+        }
     }
 }

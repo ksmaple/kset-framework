@@ -2,7 +2,7 @@ package com.kset.image.generation;
 
 /**
  * 图片生成请求：prompt 为画面描述；size 为供应商尺寸规格（如 1024x1024）；count 为生成张数；
- * referenceImageUrl 为可选参考图，使用 OpenAI JSON 图片编辑协议。
+ * referenceImageUrl 为可选参考图，具体传输格式与限制由所选供应商客户端决定。
  */
 public record ImageGenerationRequest(String prompt, String size, Integer count, String referenceImageUrl) {
 

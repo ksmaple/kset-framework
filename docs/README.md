@@ -67,7 +67,7 @@
 | `kset-starter-gateway` | [模块 README](../kset-starter-gateway/README.md) | Gateway 动态路由、灰度、鉴权与限流 |
 | `kset-starter-mq` | [模块 README](../kset-starter-mq/README.md) | RocketMQ 事件门面与监控 |
 | `kset-starter-agent-harness` | [模块 README](../kset-starter-agent-harness/README.md) | AgentScope Harness 装配、按次工具目录与脱敏耗时观测 |
-| `kset-starter-image` | [模块 README](../kset-starter-image/README.md) | OpenAI 兼容图片理解、生成与 JSON 参考图编辑 |
+| `kset-starter-image` | [模块 README](../kset-starter-image/README.md) | 图片理解、OpenAI / SiliconFlow 生成与参考图处理 |
 
 ## 设计与源码契约
 

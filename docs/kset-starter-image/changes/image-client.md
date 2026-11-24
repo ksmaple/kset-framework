@@ -1,5 +1,48 @@
 # 图片客户端变更记录
 
+## 本轮：硅基流动通义模型接入
+
+- change-id：`image-siliconflow-protocol`；日期：2026-11-24，Asia/Shanghai；状态：`active`，代码与配置已完成，供应商 HTTP 正常路径及模块编译、25 项回归已通过；1.0.18 待发布。
+- 目标：按用户提供的 SiliconFlow 文档及密钥接入平台上的通义视觉与生图模型；不将其称为阿里云百炼直连接入。
+- 基线 Git ref：`06c9977a567566d00db242c6731a8cca246173dc`；结果 Git ref：N/A，未提交。
+- 上线状态与证据：不涉及旧契约替换；历史记录确认 1.0.17 构件已发布，未取得业务部署或生产调用证据。本轮仅增加可选的生成协议，原 OpenAI 默认行为和公开请求/结果签名保留，无调用方迁移要求。
+- 当前入口：`ImageAutoConfiguration#imageGenerator` 固定创建 OpenAI 客户端；现有 `ImageGenerator` 为可复用扩展点。
+- 当前新增入口：`SiliconFlowImageGenerator`，复用 `ImageClientSupport`，通过 `ImageProperties.Generation.provider` 显式选择；默认仍为 `OPENAI`。`ImageAutoConfiguration#imageGenerator` 已按枚举路由。
+- 范围：生成客户端、配置与装配、独立本地供应商配置、模块 README、字段索引及 project-spec 定位索引；不新增 SDK 或模块依赖。
+- 回滚来源：上述基线 Git ref 可恢复本轮涉及的已跟踪源码；新增适配器及配置按本轮文件索引定向移除，保留此前智谱配置及无关本地密钥。
+- 兼容选择：兼容增量，仅新增可选配置和独立实现；历史公开签名及默认客户端保留。未切换既有默认配置，无旧入口移除；正式应用线上版本及旧版对比待确认，本轮不宣称正式线上新旧差异。
+- 验证：供应商 HTTP 最小正常路径及图片模块 verify 已通过；真实宿主端到端与发布状态分开记录。
+
+| 文件与符号 | 职责 | 动作 | 状态 |
+| --- | --- | --- | --- |
+| `kset-starter-image/src/main/java/com/kset/image/client/SiliconFlowImageGenerator.java` | SiliconFlow 图片生成与参考图变体协议 | add | active |
+| `kset-starter-image/src/main/java/com/kset/image/config/ImageProperties.java#Generation` | 可选生成供应商，默认 OPENAI | modify | active |
+| `kset-starter-image/src/main/java/com/kset/image/autoconfigure/ImageAutoConfiguration.java#imageGenerator` | 按配置选择客户端 | modify | active |
+| `kset-starter-image/src/main/java/com/kset/image/client/OpenAiCompatibleImageGenerator.java` | 保留原 OpenAI 配置路径 | retain | active-compatible |
+| `env/image-siliconflow.properties` | 硅基流动通义模型本地测试配置 | add | active |
+| `kset-starter-image/src/test/java/com/kset/image/client/SiliconFlowImageGeneratorTest.java` | 进程内 HTTP 原生协议与拒绝/失败路径 | add | active |
+| `kset-starter-image/src/test/java/com/kset/image/autoconfigure/ImageAutoConfigurationTest.java` | 配置绑定、默认装配与宿主覆盖回归 | add | active |
+
+### 本轮验收与验证边界
+
+测试时间为 2026-11-24（Asia/Shanghai），级别为供应商 HTTP L1/L2。目标 `https://api.siliconflow.cn/v1`，使用正常 Bearer 鉴权与 JSON POST；测试前 `/models` 返回 HTTP 200、92 个模型，所选模型均在列表中。输入为内存构造的 256x256 PNG：白底、左侧红色色块、右侧蓝色色块；生图提示为橘猫坐在蓝色窗台、晴朗天空、简洁插画。没有 SQL 或本地业务数据变化。
+
+| 用例与接口 | 预期 | 实际与定位依据 | 结果 |
+| --- | --- | --- | --- |
+| L1 `GET /models` | 鉴权成功，存在所选模型 | HTTP 200；92 个模型，包含 `Qwen/Qwen3-VL-32B-Instruct` 与 `Qwen/Qwen-Image` | PASSED |
+| L2 `POST /chat/completions` 图片理解 | 文本说明左红、右蓝 | HTTP 200；返回两个并列色块、左红右蓝、中间白色间隔；约 878ms；trace `ti_edtdvjny4ivr8d96rc` | PASSED |
+| L2 `POST /chat/completions` 结构化提取 | 合法 JSON，红蓝各 1 个、白色背景 | HTTP 200；断言 `red_blocks=1`、`blue_blocks=1`、`background=white` 全部通过；trace `ti_8ucblominoprpzzfw1` | PASSED |
+| L2 `POST /images/generations` 文生图 | `images[]` 返回 1 个可下载 URL | HTTP 200；约 24989ms，trace `ti_i0jcid2m35dcol4uyh`；下载 200，PNG 文件签名及尺寸 1328x1328 通过，约 1.2MB；人工查看符合橘猫、蓝色窗台与简洁插画描述 | PASSED |
+| Java 编译与进程内 HTTP / 自动装配 | 新配置绑定、客户端选择、Java 请求与解析正确 | `mvn -B -pl kset-starter-image -am verify`：父 POM / 图片模块 SUCCESS；25 项测试通过，无失败、错误、跳过；Checkstyle / PMD 通过 | PASSED |
+| 真实宿主端到端 | 在宿主应用加载配置并调用真实供应商 | 未启动宿主应用，进程内测试不代表真实宿主业务链路 | NOT_RUN |
+| 参考图编辑 | 编辑模型与 image 协议成功 | 已实现协议映射，未额外调用计费编辑接口 | NOT_RUN |
+
+图片下载响应的 Content-Type 为 `application/octet-stream`，按 PNG 字节签名及 IHDR 尺寸确认真实文件类型，不因 MIME 声明判定失败；未重复生成图片。生成样图保存于会话可视化产物区，未将带签名的临时图片 URL 写入项目文档。供应商服务端日志不可访问，真实调用仅核对响应、trace 与结果图片；后续进程内 HTTP 测试已观察客户端成功日志，无宿主业务日志证据。无本地临时脚本或测试数据文件需要清理；保留本次生成样图供用户查看及 Git 忽略的本地密钥配置。
+
+静态复核：新增实现复用现有 RestClient、超时和异常工具，无 SDK/版本/模块依赖变更或循环依赖；按供应商协议区分 `image_size` 与 `image`，解析 `images[].url`，空结果明确失败，拒绝多张请求，不自动重试。成功日志仅记录供应商、模型与数量，异常保留 cause，不输出密钥、prompt、图片或响应正文。Spring 属性绑定沿用配置框架，无重复查询，缓存不适用；无数据库、事务、Redis、MQ、任务抢占、跨线程上下文或共享业务状态变更。网络结果未知时由调用方按原调用结果核验，不自动重发计费请求。`git diff --check` 通过；编译和进程内测试另有本轮 verify 证据。
+
+## 历史：OpenAI 协议与发布
+
 - feature-key：`image-client`
 - change-id：`image-openai-protocol-validation`
 - 状态：`active`，代码已提交，全仓 verify 通过；1.0.17 已发布至 Nexus，未调用真实供应商。

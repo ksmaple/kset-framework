@@ -13,16 +13,19 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.core.type.AnnotatedTypeMetadata;
+import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 import com.kset.image.client.OpenAiCompatibleImageGenerator;
 import com.kset.image.client.OpenAiCompatibleVisionClient;
+import com.kset.image.client.SiliconFlowImageGenerator;
 import com.kset.image.config.ImageProperties;
 import com.kset.image.generation.ImageGenerator;
 import com.kset.image.vision.VisionClient;
 
 /**
- * kset 图片 AI 能力装配：配置 kset.image.api-key 后自动启用图片理解与图片生成客户端（OpenAI 兼容协议）；
+ * kset 图片 AI 能力装配：配置 kset.image.api-key 后自动启用图片理解与图片生成客户端；
+ * 图片生成支持显式选择 OpenAI 或 SiliconFlow 协议。
  * 未配置 api-key 时不装配客户端并在启动时告警。
  */
 @AutoConfiguration
@@ -47,7 +50,12 @@ public class ImageAutoConfiguration {
     @Conditional(NonBlankApiKeyCondition.class)
     @ConditionalOnProperty(prefix = "kset.image.generation", name = "enabled", havingValue = "true", matchIfMissing = true)
     public ImageGenerator imageGenerator(ImageProperties properties) {
-        ImageGenerator client = new OpenAiCompatibleImageGenerator(properties.getBaseUrl(), properties.getApiKey(), properties.getGeneration());
+        ImageProperties.Generation config = properties.getGeneration();
+        Assert.notNull(config.getProvider(), "generation.provider 不能为 null");
+        ImageGenerator client = switch (config.getProvider()) {
+            case OPENAI -> new OpenAiCompatibleImageGenerator(properties.getBaseUrl(), properties.getApiKey(), config);
+            case SILICONFLOW -> new SiliconFlowImageGenerator(properties.getBaseUrl(), properties.getApiKey(), config);
+        };
         log.info("[kset-image] 图片生成已启用，model={}", properties.getGeneration().getModel());
         return client;
     }

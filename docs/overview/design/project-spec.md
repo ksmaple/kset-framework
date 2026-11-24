@@ -172,7 +172,7 @@
 ### 图片 AI 能力约定
 
 - 模块：`kset-starter-image`，包根 `com.kset.image`；对外入口为 `vision.VisionClient`（图片理解/转文字/参数提取）与 `generation.ImageGenerator`（文生图/图生图），业务方只依赖接口与请求/结果模型，不依赖供应商客户端。
-- 协议：理解使用 `/chat/completions`，生成使用 `/images/generations`，参考图编辑使用 `/images/edits` 的 JSON `images[].image_url` 格式；默认 base-url 为 OpenAI。其他服务须实现对应协议；不适配万相原生异步任务或 multipart 编辑协议。
+- 协议：理解使用 `/chat/completions`；生成默认 OpenAI，使用 `/images/generations`，编辑使用 `/images/edits` 的 JSON `images[].image_url`。可用 `generation.provider=siliconflow` 选择原生适配：生成/参考图均调用 `/images/generations`，使用 `image_size` / `image`，解析 `images[].url`。默认 base-url 仍为 OpenAI；不适配万相原生异步任务或 multipart 编辑协议。
 - 配置：`kset.image.{enabled,base-url,api-key}` 共用；`kset.image.vision.*` 与 `kset.image.generation.*` 各自独立 `enabled` 开关、模型与超时；未配置 api-key 时不装配客户端并在启动时告警，不阻断应用启动。
 - 结构化参数提取：`VisionRequest.responseSchema` 为提示词结构说明，不执行 JSON Schema 校验；JSON 对象解析进 `VisionResult.structuredParams` 并保留 null 字段，解析失败回退为空 Map 并保留 `rawText`。
 - 失败口径：网络错误、供应商拒绝与响应解析失败统一抛 `ImageException`；日志关键词 `[kset-image]`；图片与 prompt 原值不记日志。
@@ -210,6 +210,8 @@
 | 环境 | 服务 / 组件 | 配置来源或连接别名 | 凭据引用 | 日志入口 | 最近核验 |
 | --- | --- | --- | --- | --- | --- |
 | 未登记 | N/A | 按项目当前配置定位 | N/A | N/A | 未核验 |
+| 本机智谱 API 测试 | `kset-starter-image` / 智谱开放平台 | `env/image-zhipu.properties`；`https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` 环境变量或 Git 忽略的 `env/.env` | 宿主日志关键词 `[kset-image]` | 2026-11-24：直连 HTTP 已到达服务，收费模型返回 1113；不代表业务调用成功 |
+| 本机硅基流动 API 测试 | `kset-starter-image` / SiliconFlow 托管通义模型 | `env/image-siliconflow.properties`；`https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` 环境变量或 Git 忽略的 `env/.env` | 宿主日志关键词 `[kset-image]` | 实际验证状态见 `docs/kset-starter-image/changes/image-client.md` |
 | 本机 Docker | Nacos 2.5.2 / Redis 7.4.9 / MySQL 8.0 / PostgreSQL 17 / RocketMQ 5.5 | `env/compose.yaml`；单容器 `kset-local-infra`；仅 `127.0.0.1`，端口见 `env/README.md` | 本机开发无鉴权 | `docker logs kset-local-infra` | 2026-11-06：单容器及组件健康、数据卷迁移已核验 |
 
 本机 Docker 公共组件的适用范围、连接方式、数据保留与操作步骤以 `env/README.md` 为准；该环境不承载业务应用或预置业务数据。
@@ -239,3 +241,5 @@ AI 默认可读本机 Docker 的 `env/README.md`、`env/compose.yaml` 与本索�
 | 签名或登录态构造方式 | 待核实 | 现有认证配置与测试机制；不记录密钥 | 未核验 | 待核实 |
 | 共用测试数据与业务键 | 待核实 | 真实测试环境有界读取或已授权准备 | 未核验 | 待核实 |
 | 代表性接口连通证据索引 | `NOT_RUN` | 有适用 HTTP 测试时引用用例结果，不保存完整执行记录 | 未执行 | 待运行授权 |
+| 图片模块智谱测试 | `env/image-zhipu.properties`；Bearer 鉴权、JSON POST | 用户指定接口与凭据；官方模型及协议链接、调用结果见 `kset-starter-image/README.md`「智谱测试配置」 | 2026-11-24 | 直连图片理解、文生图均被 1113 阻塞；未验证 Java 客户端端到端 |
+| 图片模块硅基流动测试 | `env/image-siliconflow.properties`；Bearer 鉴权、JSON POST | 用户提供的平台文档和凭据；可用模型由 `/models` 确认；用例及结果见图片客户端变更记录 | 2026-11-24 | 供应商 HTTP 验证与 Java 客户端验收分开记录 |

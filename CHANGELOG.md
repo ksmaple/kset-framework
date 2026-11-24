@@ -2,6 +2,20 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## [v1.0.18] - 2026-11-24
+
+### 新增
+
+- **硅基流动图片生成适配**：`kset-starter-image` 增加 `generation.provider=siliconflow`，支持原生 `image_size` / `image` 请求及 `images[].url` 响应；默认仍使用 OpenAI，公开请求与结果接口保持不变。
+- **供应商配置示例**：增加硅基流动通义模型与智谱的独立配置文件，密钥仅通过环境变量或本地 Git 忽略文件加载。
+- **接入回归测试**：覆盖硅基流动文生图、参考图协议、单张限制、失败不重试、Spring 配置绑定及宿主客户端覆盖。
+
+### 升级指引与验证
+
+- 宿主将 parent / 图片 Starter 升级至 `1.0.18`，按模块 README 配置地址、密钥、模型及生成供应商，即可通过 `VisionClient` / `ImageGenerator` 注入使用。
+- 硅基流动每次图片请求仅支持一张，参考图请求不指定 size；生成 URL 应及时转存，参考图模型须单独选择。
+- 发布前执行 `mvn -B -pl kset-starter-image -am verify`：图片模块 25 项测试通过，Checkstyle / PMD 通过。真实供应商 HTTP 图片理解、JSON 提取及文生图已通过；Java 协议测试使用进程内 HTTP 替身，未验证真实宿主应用或供应商参考图编辑。
+
 ## [v1.0.17] - 2026-11-24
 
 ### 新增
