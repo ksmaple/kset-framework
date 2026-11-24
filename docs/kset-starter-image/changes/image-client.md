@@ -2,11 +2,11 @@
 
 ## 本轮：硅基流动通义模型接入
 
-- change-id：`image-siliconflow-protocol`；日期：2026-11-24，Asia/Shanghai；状态：`active`，代码与配置已完成，供应商 HTTP 正常路径及模块编译、25 项回归已通过；1.0.18 待发布。
+- change-id：`image-siliconflow-protocol`；日期：2026-11-24，Asia/Shanghai；状态：`active`，代码与配置已完成，供应商 HTTP 正常路径及模块编译、25 项回归已通过；1.0.18 已发布至 Nexus。
 - 目标：按用户提供的 SiliconFlow 文档及密钥接入平台上的通义视觉与生图模型；不将其称为阿里云百炼直连接入。
-- 基线 Git ref：`06c9977a567566d00db242c6731a8cca246173dc`；结果 Git ref：N/A，未提交。
+- 基线 Git ref：`06c9977a567566d00db242c6731a8cca246173dc`；结果 Git ref：`d8a9312b652f4408376949c4897603aff8df376c`；发布 Git ref：`v1.0.18` / `5f0f4079ed9e4788c9772a413ebea499935e1964`。
 - 上线状态与证据：不涉及旧契约替换；历史记录确认 1.0.17 构件已发布，未取得业务部署或生产调用证据。本轮仅增加可选的生成协议，原 OpenAI 默认行为和公开请求/结果签名保留，无调用方迁移要求。
-- 当前入口：`ImageAutoConfiguration#imageGenerator` 固定创建 OpenAI 客户端；现有 `ImageGenerator` 为可复用扩展点。
+- 改造前入口：`ImageAutoConfiguration#imageGenerator` 固定创建 OpenAI 客户端；现有 `ImageGenerator` 为可复用扩展点。
 - 当前新增入口：`SiliconFlowImageGenerator`，复用 `ImageClientSupport`，通过 `ImageProperties.Generation.provider` 显式选择；默认仍为 `OPENAI`。`ImageAutoConfiguration#imageGenerator` 已按枚举路由。
 - 范围：生成客户端、配置与装配、独立本地供应商配置、模块 README、字段索引及 project-spec 定位索引；不新增 SDK 或模块依赖。
 - 回滚来源：上述基线 Git ref 可恢复本轮涉及的已跟踪源码；新增适配器及配置按本轮文件索引定向移除，保留此前智谱配置及无关本地密钥。
@@ -40,6 +40,14 @@
 图片下载响应的 Content-Type 为 `application/octet-stream`，按 PNG 字节签名及 IHDR 尺寸确认真实文件类型，不因 MIME 声明判定失败；未重复生成图片。生成样图保存于会话可视化产物区，未将带签名的临时图片 URL 写入项目文档。供应商服务端日志不可访问，真实调用仅核对响应、trace 与结果图片；后续进程内 HTTP 测试已观察客户端成功日志，无宿主业务日志证据。无本地临时脚本或测试数据文件需要清理；保留本次生成样图供用户查看及 Git 忽略的本地密钥配置。
 
 静态复核：新增实现复用现有 RestClient、超时和异常工具，无 SDK/版本/模块依赖变更或循环依赖；按供应商协议区分 `image_size` 与 `image`，解析 `images[].url`，空结果明确失败，拒绝多张请求，不自动重试。成功日志仅记录供应商、模型与数量，异常保留 cause，不输出密钥、prompt、图片或响应正文。Spring 属性绑定沿用配置框架，无重复查询，缓存不适用；无数据库、事务、Redis、MQ、任务抢占、跨线程上下文或共享业务状态变更。网络结果未知时由调用方按原调用结果核验，不自动重发计费请求。`git diff --check` 通过；编译和进程内测试另有本轮 verify 证据。
+
+### 1.0.18 发布结果
+
+2026-11-24 用户要求提交、推送与发布后，完成上述最小模块编译和回归验证；提交 `d8a9312` 已推送 `origin/main`。按项目标准执行 `release:prepare release:perform`，发布版本 `1.0.18`、下一开发版本 `1.0.19-SNAPSHOT`，约 2 分 16 秒后 BUILD SUCCESS。发布构建按项目配置跳过重复测试；没有将此结果扩展为全仓测试通过或业务应用已部署。
+
+发布后核验 Nexus：18 个模块 POM 的版本均为 1.0.18，17 个 JAR 均可读取，父 POM 的内部依赖版本属性为 1.0.18。下载图片模块 JAR（34775 字节）核对 SHA-1 与仓库一致，并确认包含 `SiliconFlowImageGenerator`、`ImageAutoConfiguration` 的自动装配导入及 `kset.image.generation.provider` 配置元数据。宿主可升级至 1.0.18 后按模块 README 接入；真实宿主业务验证和供应商参考图编辑仍为未覆盖项。
+
+主工作树按项目流程进入 1.0.19-SNAPSHOT，已核实 `kset-framework.version` 同步为该版本并更新版本文档。标准发布的 clean 阶段已重建 `target/checkout`；当前保留一份 1.0.18 标签检出及构建输出供发布问题定位，保留边界为下一次标准发布 clean 清理，不追加历史副本。API 密钥继续仅位于 Git 忽略的本地配置中，未提交或打入发布构件。撤回源码可按本轮基线恢复；Nexus 正式构件不覆盖、不删除，宿主如需回退应切换到先前正式版本。
 
 ## 历史：OpenAI 协议与发布
 
