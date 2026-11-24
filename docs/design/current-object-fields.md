@@ -1,6 +1,6 @@
 # 当前代码对象与字段定义
 
-> 基线：当前 `main` 源码；Agent 旧模块的字段索引已随模块退役移除，其他模块字段整理日期为 2026-10-25。
+> 基线：当前 `main` 源码；Agent 旧模块的字段索引已随模块退役移除；图片模块字段更新于 2026-11-24，其他模块字段整理日期为 2026-10-25。
 > 范围：所有模块的公开 record、配置属性类及命名为 Request/Response/Result/Context/Options/Spec/Snapshot 等的公开数据类；包含配置类的嵌套属性对象。
 > 下表记录源码声明的字段类型、初始化表达式与就近注释，并链接所属源码文件。`—` 表示源码未声明初始化值或注释，不代表运行时一定为 null。配置绑定、构造器校验与派生方法可能改变最终值，须以链接源码为准。
 
@@ -66,6 +66,71 @@
 | 字段 | 类型 | 默认值 |
 | --- | --- | --- |
 | `enabled` | `boolean` | `true`，配置前缀 `kset.agent.harness`。 |
+
+## kset-starter-image
+
+### `ImageProperties` 及嵌套配置
+
+类型：配置属性类；前缀：`kset.image`；[源码](../../kset-starter-image/src/main/java/com/kset/image/config/ImageProperties.java)。
+
+| 对象 | 字段 | Java 类型 | 声明初始化值 / 约束 |
+| --- | --- | --- | --- |
+| `ImageProperties` | `enabled` | `boolean` | `true`，总开关。 |
+| `ImageProperties` | `baseUrl` | `String` | `https://api.openai.com/v1`，启用时要求不含凭据、查询或片段的 HTTP(S) 地址。 |
+| `ImageProperties` | `apiKey` | `String` | 未初始化；缺失或全空白时不装配默认客户端。 |
+| `ImageProperties` | `vision` | `Vision` | `new Vision()`。 |
+| `ImageProperties` | `generation` | `Generation` | `new Generation()`。 |
+| `Vision` | `enabled` | `boolean` | `true`。 |
+| `Vision` | `model` | `String` | `gpt-4.1-mini`，启用时非空白。 |
+| `Vision` | `timeout` | `Duration` | `Duration.ofSeconds(60)`；连接与读取各自超时，启用时须在 `1ms` 至 `2147483647ms` 之间。 |
+| `Vision` | `maxTokens` | `int` | `2048`，启用时须为正数。 |
+| `Generation` | `enabled` | `boolean` | `true`。 |
+| `Generation` | `model` | `String` | `gpt-image-2.5-flare`，启用时非空白。 |
+| `Generation` | `defaultSize` | `String` | `1024x1024`，启用时非空白，规格由目标服务校验。 |
+| `Generation` | `timeout` | `Duration` | `Duration.ofSeconds(120)`，约束同 `Vision.timeout`。 |
+
+### `VisionRequest`
+
+类型：record；[源码](../../kset-starter-image/src/main/java/com/kset/image/vision/VisionRequest.java)。
+
+| 字段 | Java 类型 | 约束 |
+| --- | --- | --- |
+| `imageUrl` | `String` | 与 base64、本地路径三选一；非空白时视为已提供。 |
+| `imageBase64` | `String` | 不含 data URL 前缀，与 URL、本地路径三选一。 |
+| `imagePath` | `Path` | 与 URL、base64 三选一；调用时读取本地文件。 |
+| `prompt` | `String` | 非空白的理解或提取指令。 |
+| `responseSchema` | `String` | 可选结构说明提示词，不执行 JSON Schema 校验。 |
+| `maxTokens` | `Integer` | 可选；提供时须为正数，否则沿用配置。 |
+
+### `VisionResult`
+
+类型：record；[源码](../../kset-starter-image/src/main/java/com/kset/image/vision/VisionResult.java)。
+
+| 字段 | Java 类型 | 约束 |
+| --- | --- | --- |
+| `rawText` | `String` | 模型原始回答，构造时禁止 null。 |
+| `structuredParams` | `Map<String, Object>` | JSON 对象解析结果；顶层不可修改，允许 null 字段值；未提取或解析失败时为空 Map。 |
+
+### `ImageGenerationRequest`
+
+类型：record；[源码](../../kset-starter-image/src/main/java/com/kset/image/generation/ImageGenerationRequest.java)。
+
+| 字段 | Java 类型 | 约束 |
+| --- | --- | --- |
+| `prompt` | `String` | 非空白的画面或编辑指令。 |
+| `size` | `String` | 可选；缺失或空白时使用配置值，规格由供应商决定。 |
+| `count` | `Integer` | 可选；提供时须为正数，否则默认 1。 |
+| `referenceImageUrl` | `String` | 可选；提供时禁止空白，使用 `/images/edits` 的 JSON `images[].image_url`。 |
+
+### `ImageGenerationResult` / `GeneratedImage`
+
+类型：record；[结果源码](../../kset-starter-image/src/main/java/com/kset/image/generation/ImageGenerationResult.java) · [图片项源码](../../kset-starter-image/src/main/java/com/kset/image/generation/GeneratedImage.java)。
+
+| 对象 | 字段 | Java 类型 | 约束 |
+| --- | --- | --- | --- |
+| `ImageGenerationResult` | `images` | `List<GeneratedImage>` | 非空列表，构造时复制为不可修改列表。 |
+| `GeneratedImage` | `url` | `String` | 与 base64 至少一个非空白。 |
+| `GeneratedImage` | `base64` | `String` | 与 url 至少一个非空白。 |
 
 ## kset-cloud
 

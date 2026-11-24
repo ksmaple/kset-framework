@@ -105,5 +105,10 @@
             <artifactId>kset-starter-agent-harness</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.kset</groupId>
+            <artifactId>kset-starter-image</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

@@ -44,6 +44,7 @@
 | 配置独立 Gateway 鉴权、CORS 与灰度 | [网关](usage/gateway.md) |
 | 配置集群唯一运行的定时任务 | [Schedule 模块](../kset-starter-schedule/README.md) |
 | 接入 AgentScope Harness 与按次工具目录 | [Agent Harness](../kset-starter-agent-harness/README.md) |
+| 图片理解、结构化参数提取与图片生成 | [Image 模块](../kset-starter-image/README.md) |
 
 ## 模块参考
 
@@ -66,6 +67,7 @@
 | `kset-starter-gateway` | [模块 README](../kset-starter-gateway/README.md) | Gateway 动态路由、灰度、鉴权与限流 |
 | `kset-starter-mq` | [模块 README](../kset-starter-mq/README.md) | RocketMQ 事件门面与监控 |
 | `kset-starter-agent-harness` | [模块 README](../kset-starter-agent-harness/README.md) | AgentScope Harness 装配、按次工具目录与脱敏耗时观测 |
+| `kset-starter-image` | [模块 README](../kset-starter-image/README.md) | OpenAI 兼容图片理解、生成与 JSON 参考图编辑 |
 
 ## 设计与源码契约
 
@@ -74,6 +76,7 @@
 | [资源权限规范](design/resource-permission.md) | 功能码与资源 ACL 两平面、判定顺序和授权条目；本仓暂无实现 |
 | [当前代码对象与字段](design/current-object-fields.md) | 各模块公开数据对象、配置对象的字段类型、初始值和源码入口 |
 | [Agent Harness 变更记录](kset-starter-agent-harness/changes/agent-harness.md) | 原生构造参数修复、调用方边界与验证状态 |
+| [Image 变更记录](kset-starter-image/changes/image-client.md) | 图片协议修正、参数边界与验证状态 |
 
 ## 项目维护与协作
 

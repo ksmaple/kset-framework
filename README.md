@@ -58,6 +58,7 @@ kset-framework/
 ├── kset-starter-gateway/ # Spring Cloud Gateway + 动态路由 + Sentinel
 ├── kset-starter-mq/      # RocketMQ 事件门面实现 + topic/tag 约定
 ├── kset-starter-agent-harness/ # AgentScope Harness 公共装配与按次构造
+├── kset-starter-image/   # 图片 AI 能力（多模态理解 + 图片生成，OpenAI 兼容协议）
 └── kset-architecture-tests/ # 跨模块 ArchUnit 架构测试，不发布
 ```
 
@@ -85,6 +86,7 @@ Java 包根路径通常与 Maven 模块目录对应（`src/main/java` 下目录�
 | `kset-starter-gateway` | `com.kset.gateway` | Gateway 过滤器与动态路由 |
 | `kset-starter-mq` | `com.kset.mq` | RocketMQ 事件门面实现与 topic/tag 约定 |
 | `kset-starter-agent-harness` | `com.kset.agent.harness` | AgentScope 2.0.5 Harness 工厂、原生工具源与脱敏耗时观测 |
+| `kset-starter-image` | `com.kset.image` | 图片理解（转文字/参数提取）与图片生成，OpenAI 兼容协议 |
 
 跨模块依赖时，Starter 实现类引用 `kset-cloud` 中的共享 API（如 `com.kset.cloud.spi.CloudRuleProvider`、`com.kset.cloud.nacos.NacosConfigConvention`）。
 

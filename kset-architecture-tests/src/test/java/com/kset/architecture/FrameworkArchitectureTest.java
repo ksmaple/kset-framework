@@ -21,6 +21,6 @@ class FrameworkArchitectureTest {
                     .should().dependOnClassesThat().resideInAnyPackage(
                             "com.kset.agent..", "com.kset.auth..", "com.kset.cache..",
                             "com.kset.datasource..", "com.kset.dubbo..", "com.kset.gateway..",
-                            "com.kset.mq..", "com.kset.nacos..", "com.kset.redis..",
+                            "com.kset.image..", "com.kset.mq..", "com.kset.nacos..", "com.kset.redis..",
                             "com.kset.schedule..", "com.kset.sentinel..", "com.kset.web..");
 }

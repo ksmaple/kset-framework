@@ -6,6 +6,8 @@
 
 ### 新增
 
+- **图片 AI 能力 Starter**：新增 `kset-starter-image`，提供图片理解（转文字/结构化参数提取，`VisionClient`）、文生图与参考图编辑（`ImageGenerator`）；默认接入 OpenAI，兼容服务须实现对应 JSON 协议。修正编辑路由、空白密钥、超时校验、图片 MIME 与含 null 的结构化结果；未配置有效 `kset.image.api-key` 时不装配客户端并启动告警。万相原生异步接口不在默认实现范围。
+
 - **Agent Harness Starter**：新增 `kset-starter-agent-harness`，基于 AgentScope Java 2.0.5 按次构造原生 Harness Builder 和工具目录，校验工具重名；关闭原生内容追踪并记录脱敏耗时。状态与权限由调用方提供。
 
 - **业务服务引用**：`@KsetReference` 优先注入本地 Spring 服务，缺少本地实现且配置 Dubbo 时使用远端引用，并校验本地与其他进程的提供者冲突。

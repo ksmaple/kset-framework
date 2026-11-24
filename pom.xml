@@ -46,6 +46,7 @@
         <module>kset-starter-monitor</module>
         <module>kset-starter-schedule</module>
         <module>kset-starter-agent-harness</module>
+        <module>kset-starter-image</module>
         <module>kset-architecture-tests</module>
     </modules>
 

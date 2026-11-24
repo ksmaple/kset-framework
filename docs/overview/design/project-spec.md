@@ -82,6 +82,7 @@
 | `kset-starter-redis` | 子项目或模块 | 检测到 pom.xml |
 | `kset-starter-sentinel` | 子项目或模块 | 检测到 pom.xml |
 | `kset-starter-agent-harness` | AgentScope Harness 的 Spring 装配与按次构造入口 | 1.0.17-SNAPSHOT 开发 |
+| `kset-starter-image` | 图片 AI 能力：多模态理解（转文字/参数提取）与图片生成，OpenAI 兼容协议 | 1.0.17-SNAPSHOT 开发 |
 | `kset-architecture-tests` | 跨模块 ArchUnit 架构测试 | 测试模块，不安装或发布 |
 
 ## 5. 外部引用（轻量记录）
@@ -96,6 +97,8 @@
 | 外部源码 | Apache Dubbo 3.3.6 RpcException / AbstractClusterInvoker | `https://github.com/apache/dubbo/tree/dubbo-3.3.6` | 核对无可用提供者及 RPC 故障码 | `kset-starter-dubbo` |
 | 外部文档 | 阿里云 Topic 与 Tag 最佳实践 | `https://help.aliyun.com/zh/apsaramq-for-rocketmq/cloud-message-queue-rocketmq-4-x-series/use-cases/best-practices-of-topics-and-tags` | Topic/Tag 分类原则，按本仓 V5 行为核对适用范围 | `docs/usage/rocketmq.md` |
 | 外部文档 | 阿里云订阅关系一致 | `https://help.aliyun.com/zh/apsaramq-for-rocketmq/cloud-message-queue-rocketmq-4-x-series/use-cases/subscription-consistency` | Consumer Group 订阅一致性参考 | `docs/usage/rocketmq.md` |
+| 外部协议 | OpenAI Images / 官方 OpenAPI | `https://github.com/openai/openai-openapi/blob/master/openapi.yaml` | 2026-11-24 核对 JSON 生成、编辑请求及模型字段 | `kset-starter-image` |
+| 外部文档 | 阿里云万相文生图 API | `https://help.aliyun.com/zh/model-studio/text-to-image-v2-api-reference` | 核对万相原生异步接口与 OpenAI 协议差异 | `kset-starter-image/README.md` |
 
 ## 构建与基础设施兼容基线
 
@@ -165,6 +168,15 @@
 - 锁实现：SQL 锁表 `t_kset_schedule_lock`（UPDATE 过期抢占 → INSERT 兜底，fencing_token 自增，时间以数据库为准）；每次获取使用独立 `locked_by` 标识，同线程释放时仅更新本次持有的锁；**启动时自动识别数据库方言（PostgreSQL/MySQL/MariaDB，其他回退通用 DDL）并自动建表**，无需迁移脚本；如需 Flyway 统一管理可配 `kset.scheduler.lock.auto-create-table=false`。
 - 配置：`kset.scheduler.lock.enabled/table-name/at-most-for/auto-create-table`；全局 at-most-for 默认 10m，注解可 per-task 覆盖。
 - 历史变更记录：Git `d3d133237b7a09decb41f9488d9b4fedc7688cdf` 中的 `.claude/design/changes/scheduled-task-lock.md`；当前工作树未恢复该文件。
+
+### 图片 AI 能力约定
+
+- 模块：`kset-starter-image`，包根 `com.kset.image`；对外入口为 `vision.VisionClient`（图片理解/转文字/参数提取）与 `generation.ImageGenerator`（文生图/图生图），业务方只依赖接口与请求/结果模型，不依赖供应商客户端。
+- 协议：理解使用 `/chat/completions`，生成使用 `/images/generations`，参考图编辑使用 `/images/edits` 的 JSON `images[].image_url` 格式；默认 base-url 为 OpenAI。其他服务须实现对应协议；不适配万相原生异步任务或 multipart 编辑协议。
+- 配置：`kset.image.{enabled,base-url,api-key}` 共用；`kset.image.vision.*` 与 `kset.image.generation.*` 各自独立 `enabled` 开关、模型与超时；未配置 api-key 时不装配客户端并在启动时告警，不阻断应用启动。
+- 结构化参数提取：`VisionRequest.responseSchema` 为提示词结构说明，不执行 JSON Schema 校验；JSON 对象解析进 `VisionResult.structuredParams` 并保留 null 字段，解析失败回退为空 Map 并保留 `rawText`。
+- 失败口径：网络错误、供应商拒绝与响应解析失败统一抛 `ImageException`；日志关键词 `[kset-image]`；图片与 prompt 原值不记日志。
+- 边界：不内嵌本地 OCR 库（图片识别由多模态模型完成）；启用时预检客户端配置，空白密钥不装配客户端；base64 与本地文件按内容识别 MIME。当前配置与接入示例见 `kset-starter-image/README.md`；修复与验证状态见 `docs/kset-starter-image/changes/image-client.md`。
 
 ### RocketMQ Topic/Tag 约定
 
