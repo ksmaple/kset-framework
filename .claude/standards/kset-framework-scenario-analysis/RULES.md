@@ -8,7 +8,7 @@ description: "为 kset-framework 的文档驱动交付梳理可追溯需求场�
 
 > project-init 生成。
 >
-> 项目事实见 [project-spec](../kset-framework-coder/references/project-spec.md)，本流程差异见 [文档交付配置](../kset-framework-delivery-config/references/document-delivery-config.json)。
+> 项目事实见 [project-spec](../../../docs/overview/design/project-spec.md)，本流程差异见 [文档交付配置](../kset-framework-delivery-config/references/document-delivery-config.json)。
 
 ## 触发条件
 

@@ -1,6 +1,6 @@
 # kset-framework UI/UX 规范
 
-> project-init 生成。本文件是项目作用域的界面规范，不是独立规范。执行约束以 [项目规则](../rules/kset-framework-project-rules.md) 为准，技术事实以 [project-spec](../standards/kset-framework-coder/references/project-spec.md) 与实际源码为准；文档状态与证据按 [项目文档规范](../standards/kset-framework-requirements-designer/references/project-documentation.md) 处理。
+> project-init 生成。本文件是项目作用域的界面规范，不是独立规范。执行约束以 [项目规则](../rules/kset-framework-project-rules.md) 为准，技术事实以 [project-spec](../../docs/overview/design/project-spec.md) 与实际源码为准；文档状态与证据按 [项目文档规范](../standards/kset-framework-requirements-designer/references/project-documentation.md) 处理。
 
 ## 适用范围
 
@@ -19,4 +19,4 @@ R008: 交付前按目标视口、长文本、缩放和输入方式核对关键�
 
 ## 文档输出
 
-用户要求保存界面规范时，关联需求或场景编号、关键页面状态与可定位的验收依据；沿用项目已有正式位置。仅属本地协作的文件按项目规则进入 `.claude/design/ui/` 的适用分类，不为无界面任务建立空文档。
+用户要求保存界面规范时，关联需求或场景编号、关键页面状态与可定位的验收依据；沿用项目已有正式位置。正式界面文档按项目规则进入 `docs/{module}/design/ui/` 的适用分类，未定稿草稿进入 `tmp/drafts/ui/`，不为无界面任务建立空文档。

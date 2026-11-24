@@ -6,7 +6,7 @@ description: "面向 kset-framework（kset-framework）的前端页面文件关�
 
 # kset-framework-file-relations
 
-> 执行约束以 [项目规则](../../rules/kset-framework-project-rules.md) 为准；项目事实见 [project-spec.md](../kset-framework-coder/references/project-spec.md)。本规范不得覆盖或放宽项目规则。
+> 执行约束以 [项目规则](../../rules/kset-framework-project-rules.md) 为准；项目事实见 [project-spec.md](../../../docs/overview/design/project-spec.md)。本规范不得覆盖或放宽项目规则。
 
 ## 触发条件
 
@@ -25,7 +25,7 @@ R005: 连线须区分路由指向、渲染、导入、事件与属性、状态�
 R006: 每条连线须注明方向、关系类型和可定位的项目相对路径与行号；证据不足的关系列为待核实，不画成已证实连线
 R007: 默认排除第三方依赖、通用框架内部文件和与页面功能无关的引用；不得为凑满图形扩大扫描范围
 R008: 报告标题使用目标文件名，顶部同时显示项目相对路径、关联范围与整理日期；同名报告使用包含相对路径的唯一文件键
-R009: 按 references/file-relations-format.md 生成 `.claude/design/file-relations/{page-key}.html`；`page-key` 由目标页面的项目相对路径生成，须按项目规则 R140 保持唯一并核对现有文件归属；用户指定正式交付路径时遵从用户要求并按项目规则分类
+R009: 按 references/file-relations-format.md 生成 `docs/{module}/reports/file-relations-{page-key}.html`；`page-key` 由目标页面的项目相对路径生成，须按项目规则 R140 保持唯一并核对现有文件归属；用户指定正式交付路径时遵从用户要求并按项目规则分类
 R010: 以 references/network-page.html 为样式底稿，页面、画布、面板和控件以近黑与深灰为主，功能色仅用于节点与关系强调；主视图为可平移的交互画布，节点有稳定的初始布局且可拖拽，按文件角色用文字标签，连线用箭头和文字标明关系，不仅靠颜色传达含义
 R011: HTML 须支持功能与关系筛选、文件搜索、缩放、画布平移、节点拖拽与点击展开可关闭的详情；桌面与触屏均可操作，拖动节点时实时更新连线，拖拽不得误触详情，复位须恢复初始布局和缩放
 R012: 图下须列出全部纳入的文件、关系依据、未核实项及范围边界，图中编号与说明双向定位；不得将代码可见关系宣称为线上运行事实

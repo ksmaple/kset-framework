@@ -36,14 +36,8 @@ __pycache__/
 # Local AI worktrees
 .claude/worktrees/
 
-# AI standards directory links; .claude/standards is the tracked source.
-.agents/standards/
-.cursor/standards/
-# Cursor skill directory link; .claude/skills is the tracked source.
-.cursor/skills/
-
-# Local AI rule artifacts
-/artifacts/
+# Local AI plans, drafts and preserved migration evidence
+/tmp/
 
 # Local deploy env
 env/.env

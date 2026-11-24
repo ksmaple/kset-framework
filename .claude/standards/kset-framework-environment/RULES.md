@@ -6,7 +6,7 @@ description: "kset-framework 项目环境规范，proj=kset-framework。按任�
 
 # kset-framework-environment
 
-> 执行约束以 [项目规则](../../rules/kset-framework-project-rules.md) 为准；项目事实见 [project-spec.md](../kset-framework-coder/references/project-spec.md) 的「环境连接与日志索引」及「部署入口与回滚索引」。本规范不得覆盖或放宽项目规则。
+> 执行约束以 [项目规则](../../rules/kset-framework-project-rules.md) 为准；项目事实见 [project-spec.md](../../../docs/overview/design/project-spec.md) 的「环境连接与日志索引」及「部署入口与回滚索引」。本规范不得覆盖或放宽项目规则。
 
 ## 触发条件
 
@@ -31,8 +31,8 @@ R011: 多步骤环境任务遵循项目规则的任务清单与完成门禁；�
 R012: 部署前从 project-spec 与当前部署事实确认目标环境、服务及实例、当前版本、待发布版本与产物来源、部署入口、配置差异、健康检查及回滚入口；任一关键映射冲突时停止。
 R013: 仅在用户当前对话明确要求部署并指定目标环境后，按项目现有发布流程执行必要步骤；不能把数据修改、编译或测试授权当作部署授权，也不自动扩大到其他环境或服务。
 R014: 每个发布步骤核对真实结果；部署后核验版本、健康状态和相关日志，失败或结果未知时停止后续发布，回滚仅在已授权部署计划覆盖或另获明确授权时执行。
-R015: 部署计划与环境核验结果默认在对话中交付；用户要求保存文件时按项目规则 R141 分别写入 `.claude/design/plans/deployment/` 与 `.claude/design/reports/environment/`，只记录非敏感目标、步骤和已核实结果；计划文件不构成部署授权
-R016: 按项目规则 R142 区分项目既有可执行部署清单、构建或制品库中的发布包，以及按需保存的非敏感协作文件：清单说明归 `.claude/design/deploy/manifests/`、实际发布记录归 `deploy/releases/`、回滚说明归 `deploy/rollbacks/`；发布记录须有实际核验结果和产物标识，不能从计划推定已部署，也不得复制制品本体或凭据
+R015: 部署计划与环境核验结果默认在对话中交付；用户要求保存文件时按项目规则 R141 分别写入 `tmp/plans/deployment/` 与 `docs/{module}/reports/environment/`，只记录非敏感目标、步骤和已核实结果；计划文件不构成部署授权
+R016: 按项目规则 R142 区分项目既有可执行部署清单、构建或制品库中的发布包，以及按需保存的非敏感协作文件：清单说明归 `docs/{module}/reports/deployment/manifests/`、实际发布记录归 `docs/{module}/reports/deployment/releases/`、回滚说明归 `docs/{module}/reports/deployment/rollbacks/`；发布记录须有实际核验结果和产物标识，不能从计划推定已部署，也不得复制制品本体或凭据
 R017: Redis Cluster 查询须按项目规则 R160–R164 核对目标节点、DB 0、槽归属与只读命令边界；普通排查不得执行高影响命令，专门维护仅在当前对话明确授权环境、节点或槽、命令范围与维护窗口且已有运维流程可核对影响、恢复及结果时执行
 
 ## 工作流

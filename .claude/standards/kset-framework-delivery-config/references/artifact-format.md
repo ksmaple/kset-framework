@@ -3,7 +3,7 @@
 > project-init 生成。本文件定义四份 Markdown 交付文档及两份 JSON 内部记录；实际项目路径差异只写入 `document-delivery-config.json`。
 
 R001: 同一交付使用稳定的 `delivery_key`，格式为小写 kebab-case 单个路径片段；不同交付不得复用同一键，修订原交付时保持原键。
-R002: 场景、产品、UI/UX 和技术正文统一以 Markdown 交付；`feedback.json` 和 `manifest.json` 仅用于内部事件与追踪，不作为面向人阅读的交付文档。六类文件默认位于 `.claude/design/document-delivery/{delivery_key}/`，只有实际生成时才创建文件，不预建空目录。
+R002: 场景、产品、UI/UX 和技术正文统一以 Markdown 交付；`feedback.json` 和 `manifest.json` 仅用于内部事件与追踪，不作为面向人阅读的交付文档。四份正文与两份内部记录按下表分别进入 `docs/overview/requirements/`、`docs/overview/design/` 与 `docs/overview/reports/` 的 `{delivery_key}/`，跨模块主题默认使用 `overview`；模块专属路径可按 R003 配置。只有实际生成时才创建文件，不预建空目录。
 R003: 项目配置可用 `project_overrides` 中 `skill_id=delivery-config`、`key=document_paths` 的对象覆盖下表单个文件路径；键只能是下表类型，值须为含 `{delivery_key}` 的项目内相对路径，四份文档保留 `.md`、两份内部记录保留 `.json`，不能含 `..` 或与其他产物重名。
 R003a: 每份 Markdown 文档首个非空行须为带非空标题的一级标题（`# 标题`），标题后至少有一行非空正文；格式检查不代替内容与证据验收。
 R004: 每个已保存的核心交付产物（不含清单自身）须在 `manifest.json` 登记路径、正整数修订号、来源 ID、上游产物修订、状态及验证结果；附属素材与本地数据在所属产物条目中登记。内容修改时仅递增该产物修订号并递增清单修订号，不重置其他产物历史。
@@ -17,12 +17,12 @@ R009: 静态前端标为 `ready` 前须按产品验收 ID 和项目配置视口�
 
 | 类型 | 默认路径 | 用途与格式 |
 |---|---|---|
-| `scenarios` | `.claude/design/document-delivery/{delivery_key}/scenarios.md` | 场景交付文档，Markdown |
-| `product` | `.claude/design/document-delivery/{delivery_key}/product.md` | 产品交付文档，Markdown |
-| `ui_ux` | `.claude/design/document-delivery/{delivery_key}/ui-ux.md` | UI/UX 交付文档，Markdown；素材另按项目路径定位 |
-| `technical` | `.claude/design/document-delivery/{delivery_key}/technical.md` | 技术交付文档，Markdown |
-| `feedback` | `.claude/design/document-delivery/{delivery_key}/feedback.json` | 内部反馈事件记录，JSON |
-| `manifest` | `.claude/design/document-delivery/{delivery_key}/manifest.json` | 内部追踪清单，JSON |
+| `scenarios` | `docs/overview/requirements/{delivery_key}/scenarios.md` | 场景交付文档，Markdown |
+| `product` | `docs/overview/requirements/{delivery_key}/product.md` | 产品交付文档，Markdown |
+| `ui_ux` | `docs/overview/design/{delivery_key}/ui-ux.md` | UI/UX 交付文档，Markdown；素材另按项目路径定位 |
+| `technical` | `docs/overview/design/{delivery_key}/technical.md` | 技术交付文档，Markdown |
+| `feedback` | `docs/overview/reports/{delivery_key}/feedback.json` | 内部反馈事件记录，JSON |
+| `manifest` | `docs/overview/reports/{delivery_key}/manifest.json` | 内部追踪清单，JSON |
 
 ## 清单 Schema
 

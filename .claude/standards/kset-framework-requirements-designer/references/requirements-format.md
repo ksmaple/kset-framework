@@ -1,10 +1,10 @@
 # 项目逻辑与需求设计 HTML 成稿结构
 
-> 本文件是项目规范的内部格式说明；现状说明交付为 `.claude/design/logic/{feature-key}.html`，需求设计交付为 `.claude/design/requirements/{feature-key}.html`。同一功能沿用项目规则 R140 的稳定文件键；每次成稿须填入目标项目的实际信息，不保留示例或占位符。
+> 本文件是项目规范的内部格式说明；现状说明交付为 `docs/{module}/reports/logic-{feature-key}.html`，需求设计交付为 `docs/{module}/requirements/{feature-key}.html`。同一功能沿用项目规则 R140 的稳定文件键；每次成稿须填入目标项目的实际信息，不保留示例或占位符。
 
 ## 设计主页面与导航
 
-`.claude/design/index.html` 是默认统一入口，以 `design-index.html` 为底稿并保留 `kaka-requirements-designer:index` 归属标记；若已有不带标记的同名页面，保留原内容并使用 `.claude/design/requirements-index.html`。新详情页保留 `sequence-page.html` 中的 `kaka-requirements-designer:detail` 标记。生成、修订或移除详情页后扫描 `logic/**/*.html`、`requirements/**/*.html`，只自动收录带详情页标记的文件，并核对本次明确由本规范生成的自定义输出；旧索引中的无标记页面先核实归属，未核实时保留原索引并报告待确认，不自动增删入口。仅保留实际存在的 HTML，按文档类型列出页面，标题取实际主题。默认目录与主页面同盘时使用相对 `href`，详情页按主页面真实位置计算返回路径；跨盘时双向使用 `file:///` 本地绝对 URL，并标明仅在当前机器有效。无页面的分组可省略，不得展示失效链接。离线打开主页面后逐项核对进入和返回，不用 `history.back()` 代替返回链接。
+`docs/overview/design/requirements-index.html` 是默认统一入口，以 `design-index.html` 为底稿并保留 `kaka-requirements-designer:index` 归属标记；若已有不带标记的同名页面，保留原内容并使用 `docs/overview/design/requirements-catalog.html`。新详情页保留 `sequence-page.html` 中的 `kaka-requirements-designer:detail` 标记。生成、修订或移除详情页后从仓库根扫描 `docs/*/reports/logic-*.html`、`docs/*/requirements/*.html`，只自动收录带详情页标记的文件，并核对本次明确由本规范生成的自定义输出；旧索引中的无标记页面先核实归属，未核实时保留原索引并报告待确认，不自动增删入口。仅保留实际存在的 HTML，按文档类型列出页面，标题取实际主题。默认目录与主页面同盘时使用相对 `href`，详情页按主页面真实位置计算返回路径；跨盘时双向使用 `file:///` 本地绝对 URL，并标明仅在当前机器有效。无页面的分组可省略，不得展示失效链接。离线打开主页面后逐项核对进入和返回，不用 `history.back()` 代替返回链接。
 
 ## 页面顶部
 

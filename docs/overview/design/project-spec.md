@@ -1,6 +1,6 @@
 # kset-framework 项目专属规范
 
-> 本文件由历史项目配置恢复；有明确源码或文档来源的事实以当前版本核对，自动探测的默认值须标为待核实。单个功能的迭代历史写入对应需求文档或 `.claude/design/changes/{feature-key}.md`，本文件最多保留定位索引。执行约束以 [项目规则](../../../rules/kset-framework-project-rules.md) 为准；适用的 Kset 全局技能见 [项目主索引](../../../AGENTS.md)。
+> 本文件由历史项目配置恢复；有明确源码或文档来源的事实以当前版本核对，自动探测的默认值须标为待核实。单个功能的迭代历史写入对应需求文档或 `docs/{module}/changes/{feature-key}.md`，本文件最多保留定位索引。执行约束以 [项目规则](../../../.claude/rules/kset-framework-project-rules.md) 为准；适用的 Kset 全局技能见 [项目主索引](../../../.claude/AGENTS.md)。
 
 **proj**：`kset-framework` · **backend** · 生成：2026-08-27 17:51:27
 

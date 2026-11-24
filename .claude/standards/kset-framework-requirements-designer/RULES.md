@@ -6,7 +6,7 @@ description: "面向 kset-framework（kset-framework）的现状说明与需求�
 
 # kset-framework-requirements-designer
 
-> 执行约束以 [项目规则](../../rules/kset-framework-project-rules.md) 为准；项目事实与已确认差异见 [project-spec.md](../kset-framework-coder/references/project-spec.md)。本规范不得覆盖或放宽项目规则。
+> 执行约束以 [项目规则](../../rules/kset-framework-project-rules.md) 为准；项目事实与已确认差异见 [project-spec.md](../../../docs/overview/design/project-spec.md)。本规范不得覆盖或放宽项目规则。
 
 ## 触发条件
 
@@ -26,7 +26,7 @@ R006: 涉及跨角色、跨系统或定时处理时须写明责任方、触发�
 R007: 需求设计模式的验收条件须可观察、可判定，并覆盖主流程、关键边界和失败场景
 R008: 缺少会改变说明范围或验收结果的信息时须向用户提出具体问题；未获答复的事项标为待确认，禁止猜测成已确认事实
 R009: 不得把技术实现方案、数据表、接口字段或部署步骤当作用户已确认的业务需求
-R010: 须按 references/requirements-format.md 将现状说明写入 `.claude/design/logic/{feature-key}.html`、需求设计写入 `.claude/design/requirements/{feature-key}.html`；同一功能共用项目规则 R140 的稳定 `feature-key`，写入前核对现有文件归属；用户指定位置时遵从用户要求，交付格式仍为 HTML
+R010: 须按 references/requirements-format.md 将现状说明写入 `docs/{module}/reports/logic-{feature-key}.html`、需求设计写入 `docs/{module}/requirements/{feature-key}.html`；同一功能共用项目规则 R140 的稳定 `feature-key`，写入前核对现有文件归属；用户指定位置时遵从用户要求，交付格式仍为 HTML
 R011: 更新已有说明文档时须保留已核实的现有行为；需求设计模式须另行标出本轮变化及其影响的验收条件
 R012: 本规范只读取任务相关源码、配置、项目文档与用户提供的信息，禁止读取构建产物、生成源码或运行日志
 R013: 本规范只做文档逻辑与项目事实静态核对，不修改业务源码或执行编译、测试、启动和部署
@@ -127,14 +127,14 @@ R107: 文档中的旧版、新版节点仅用于项目已确认的正式线上�
 R108: 本次范围确有需要展示的类、组件或状态关系时，须按实际问题绘制对应 UML 类图、组件图或状态图，呈现对象、职责、关系方向及边界；无相关关系或图无助于理解时省略，不为凑图虚构类型或状态
 R109: 本次范围确有需要展示的表关系时，须绘制 SQL 表关系图，标明实际或拟议表、主键、关联业务键或外键、关系基数及关键约束；无相关表关系或图无助于理解时省略，未建立物理外键时不得将业务关联标为外键
 R110: 已绘制的 UML 或 SQL 表关系图须以稳定编号关联主时序消息及图下依据，区分现状与拟议变更；输出前核对名称、方向、键、基数和版本与源码、迁移 SQL、项目文档及正文一致，无法核实的关系标为待确认
-R111: 每次生成、修订或移除现状说明或需求设计 HTML 后，须以 `references/design-index.html` 为底稿更新 `.claude/design/index.html`；若该路径已有不带 `kaka-requirements-designer:index` 标记的页面，保留原文件并改用 `.claude/design/requirements-index.html`，备用路径同样被非规范页面占用时须先报告冲突，不得覆盖。新详情页须保留 `kaka-requirements-designer:detail` 归属标记；扫描两个默认输出目录时只自动收录带该标记的页面，并收录本次明确由本规范生成的自定义输出。旧索引中的无标记页面先核实归属，未核实时保留原索引并报告待确认，不得自动增删其入口；仅为实际存在的 HTML 建立按文档类型分组的入口，不保留失效链接或覆盖非本规范内容
+R111: 每次生成、修订或移除现状说明或需求设计 HTML 后，须以 `references/design-index.html` 为底稿更新 `docs/overview/design/requirements-index.html`；若该路径已有不带 `kaka-requirements-designer:index` 标记的页面，保留原文件并改用 `docs/overview/design/requirements-catalog.html`，备用路径同样被非规范页面占用时须先报告冲突，不得覆盖。新详情页须保留 `kaka-requirements-designer:detail` 归属标记；扫描各模块默认输出目录时只自动收录带该标记的页面，并收录本次明确由本规范生成的自定义输出。旧索引中的无标记页面先核实归属，未核实时保留原索引并报告待确认，不得自动增删其入口；仅为实际存在的 HTML 建立按文档类型分组的入口，不保留失效链接或覆盖非本规范内容
 R112: 每个设计详情页须提供返回实际主页面的可点击链接；同一磁盘内双向链接使用相对路径，跨盘自定义页面使用 `file:///` 本地绝对 URL 并注明仅在当前机器有效；主页面与详情页须在离线打开时可双向跳转，不能仅依赖浏览器历史记录
 R113: 需求设计须在同一 HTML 展示与本次流程和变更范围对应的设计类图；确无类级设计时须在类图区说明不适用及依据，不得虚构类填图
 R114: 设计类图须按项目与模块列出相关类或接口的职责、关键属性与方法，并区分现有、拟议及新增、修改、沿用状态；现有成员须有源码依据，拟议成员须有关联需求或设计依据
 R115: 设计类图须显示类间实际或拟议的依赖、关联、继承、实现或组合关系，标明方向、关系类型及已知多重性；不得从调用关系臆造继承、组合或字段
 R116: 类和关系须使用稳定编号，与涉及的时序消息、图下实现映射及验收条件双向定位；修订时同步核对类名、成员、关系端点和编号引用
 R117: 现状说明仅在范围内存在可核实类结构时展示现有类图，不得把拟议类混入现状；两种模式的类图在桌面和移动端均须可读且离线可用
-R118: 用户另行要求保存 UI 线框、原型、界面规范或评审材料时，按项目规则 R141 分别归入 `.claude/design/ui/wireframes/`、`ui/prototypes/`、`ui/specs/` 或 `ui/reviews/`；需求说明仍归 `.claude/design/requirements/`，正式前端源码与资源仍由项目正常版本管理，不将 UI 分类视为自动生成或实现授权
+R118: 用户另行要求保存 UI 线框、原型、界面规范或评审材料时，按项目规则 R141 分别归入 `docs/{module}/design/ui/wireframes/`、`docs/{module}/design/ui/prototypes/`、`docs/{module}/design/ui/specs/` 或 `docs/{module}/design/ui/reviews/`；需求说明仍归 `docs/{module}/requirements/`，正式前端源码与资源仍由项目正常版本管理，不将 UI 分类视为自动生成或实现授权
 R119: 需求设计须按 [项目文档与功能状态规范](references/project-documentation.md) 区分需求结论、界面与技术文档及功能实现证据；在同一 HTML 汇总功能或验收项的代码、测试和发布状态，不能以源码存在推断测试通过或线上使用。现状说明无交付目标时不虚构完成状态
 
 ## 工作流
@@ -152,7 +152,7 @@ Step 5: 按 R105 核对范围覆盖，逐项打开主页面与详情页验证跳
 
 | 文件 | 说明 |
 |------|------|
-| [project-spec.md](../kset-framework-coder/references/project-spec.md) | 本项目事实与约定 |
+| [project-spec.md](../../../docs/overview/design/project-spec.md) | 本项目事实与约定 |
 | [requirements-format.md](references/requirements-format.md) | 现状说明与需求设计共用的单页多视图 HTML 结构及设计类图格式 |
 | [project-documentation.md](references/project-documentation.md) | 需求、UI/UX、技术文档及功能实现状态的共同口径 |
 | [sequence-page.html](references/sequence-page.html) | 用 HTML/CSS 呈现时序图、设计类图、其他 UML 与表关系图的离线页面结构参考 |

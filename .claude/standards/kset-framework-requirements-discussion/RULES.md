@@ -8,7 +8,7 @@ description: "与 kset-framework 业务方讨论商业价值、用户场景、�
 
 > project-init 生成。
 
-> 仅适用于当前项目；[项目规则](../../rules/kset-framework-project-rules.md) 与 [project-spec](../kset-framework-coder/references/project-spec.md) 分别是执行约束和项目事实来源。
+> 仅适用于当前项目；[项目规则](../../rules/kset-framework-project-rules.md) 与 [project-spec](../../../docs/overview/design/project-spec.md) 分别是执行约束和项目事实来源。
 
 ## 触发条件
 
@@ -62,7 +62,7 @@ Step 5: 回顾多轮反馈，将通用规则缺口按项目规范维护流程处
 | 文件 | 用途 |
 |------|------|
 | [项目规则](../../rules/kset-framework-project-rules.md) | 项目执行约束与需求基线约定 |
-| [project-spec](../kset-framework-coder/references/project-spec.md) | 已确认项目事实与差异 |
+| [project-spec](../../../docs/overview/design/project-spec.md) | 已确认项目事实与差异 |
 
 ## Collaboration
 

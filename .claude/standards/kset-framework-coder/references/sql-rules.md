@@ -19,7 +19,7 @@ R099: 初始化 SQL 与增量 SQL 的文件头须使用同一个中文功能名�
 R100: 初始化 SQL 与增量 SQL 的目录须按 project-spec、项目现有 SQL 根目录及同类脚本布局确定，禁止硬编码固定目录
 R100a: 编写或修改 CREATE TABLE、ALTER TABLE 时不得写表级 DEFAULT CHARSET、CHARACTER SET 或 COLLATE，须继承数据库默认值；仅当 project-spec 明确记录项目例外时按其约定执行
 R100b: 修改当前有效的初始化或建表 SQL 时须检查并迁移已有表级字符设置；确认目标数据库默认字符集和排序规则与原预期一致后删除显式声明，不一致时先明确数据库默认配置或在 project-spec 记录例外；禁止为此回写已发布增量 SQL
-R100c: 正式 SQL、迁移和数据脚本须按项目规则 R142 保留在项目既有可执行目录并正常版本管理；用户要求另存 SQL 设计材料时，结构、迁移和数据草案分别按项目规则 R142 归入 `.claude/design/sql/schema/`、`sql/migration/`、`sql/data/`，不得以草案替代正式脚本
+R100c: 正式 SQL、迁移和数据脚本须按项目规则 R142 保留在项目既有可执行目录并正常版本管理；用户要求另存 SQL 设计材料时，结构、迁移和数据草案分别按项目规则 R142 归入 `tmp/drafts/sql/schema/`、`tmp/drafts/sql/migration/`、`tmp/drafts/sql/data/`，不得以草案替代正式脚本
 R105: 新增索引前须明确其服务的稳定业务唯一性约束或实际 WHERE、JOIN、ORDER BY、GROUP BY 访问路径，禁止仅因字段或参数存在而建索引
 R106: 稳定业务唯一键须优先建立唯一约束或唯一索引
 R107: 多租户数据的业务唯一键须把租户隔离维度纳入唯一键

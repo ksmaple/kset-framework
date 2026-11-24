@@ -8,7 +8,7 @@ description: "为 kset-framework 的六项文档交付规范维护项目配置�
 
 > project-init 生成。
 >
-> 可编辑配置见 [document-delivery-config.json](references/document-delivery-config.json)，Markdown 文档与 JSON 内部记录格式见 [artifact-format.md](references/artifact-format.md)，项目事实见 [project-spec](../kset-framework-coder/references/project-spec.md)。
+> 可编辑配置见 [document-delivery-config.json](references/document-delivery-config.json)，Markdown 文档与 JSON 内部记录格式见 [artifact-format.md](references/artifact-format.md)，项目事实见 [project-spec](../../../docs/overview/design/project-spec.md)。
 
 ## 触发条件
 

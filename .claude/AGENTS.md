@@ -1,18 +1,16 @@
 # kset-framework AI 协作配置
 
-> 本文件是项目 AI 协作主索引。项目规范与 project-spec 维护在 `.claude/standards/`，项目规则维护在 `.claude/rules/`；适用的 Kset 全局技能按下文接入。
+> 本文件是项目 AI 协作主索引。项目规范维护在 `.claude/standards/`，项目规则维护在 `.claude/rules/`，项目事实维护在 `docs/overview/design/project-spec.md`；适用的 Kset 全局技能按下文接入。
 
 ## 规则
 
 - 项目规则：[kset-framework-project-rules.md](rules/kset-framework-project-rules.md)
-- 项目事实：[project-spec.md](standards/kset-framework-coder/references/project-spec.md)
+- 项目事实：[project-spec.md](../docs/overview/design/project-spec.md)
 - Git 工作流：[docs/git-workflow.md](../docs/git-workflow.md)。直接在主工作树 `main` 修改、提交并推送；不创建任务分支或 worktree。
 
-## AI 规则产物
+## 文档与过程产物
 
-- 先读项目根 `artifacts/INDEX.json` 的摘要与适用路径，按当前文件和作用域筛选；命中后才加载全文。
-- 只引用 `published/<rule-id>/<version>/rule.yaml` 的固定版本及内容 hash。`staged/` 供评审，`generated/` 不得作为生效规则，`latest` 只供发现。
-- 项目根 `artifacts/` 被本地 Git 忽略；新工作区从完整备份恢复并校验。空索引表示尚无已发布规则。
+目录与生命周期以 [项目规则 R106、R140–R142、R176、R178–R180](rules/kset-framework-project-rules.md) 为准；正式文档入口见 [文档中心](../docs/README.md)。
 
 ## 文档规范
 
@@ -50,7 +48,13 @@
 | Codex | `.claude/standards/` | `AGENTS.md` |
 | Cursor | `.claude/standards/` | `.cursor/rules/kset-framework-project-rules.mdc` |
 
-各平台直接读取项目内的 `.claude/standards/`，不依赖本地目录链接。
+各平台直接读取项目内的 `.claude/standards/`，不依赖本地目录链接。技能正文仍以各角色 `RULES.md` 为唯一内容源；三个发现目录中的 `SKILL.md` 只作薄入口。
+
+| 平台 | 项目技能发现入口 |
+| --- | --- |
+| Codex / Agents | [.agents/skills/](../.agents/skills/) |
+| Claude | [.claude/skills/](skills/) |
+| Cursor | [.cursor/skills/](../.cursor/skills/) |
 
 ## Kset 全局规范接入
 
@@ -63,6 +67,7 @@
 | 修复与测试 | `kset-project-fixer`、`kset-project-tester` | `kset-framework-fixer`、`kset-framework-tester` |
 | 需求、接口和页面关联 | `kset-project-requirements-designer`、`kset-project-api-doc`、`kset-project-file-relations` | 同名 `kset-framework-*` 规范 |
 | 环境与文档交付 | `kset-project-environment`、`kset-project-document-delivery` | 同名 `kset-framework-*` 规范及交付配置 |
+| 需求讨论 | `kset-util-requirements-discussion` | `kset-framework-requirements-discussion` |
 | Git 协作 | `kset-util-git-commit` | `docs/git-workflow.md` 与 `kset-framework-git-commit` |
 
 ## 使用指引

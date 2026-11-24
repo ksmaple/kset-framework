@@ -15,6 +15,14 @@
 
 现有模块 README 继续承载紧邻源码的接入与构建说明；下方 `usage/` 和 `design/` 文档保持原有入口，按内容变化更新。仅在实际形成文档时创建对应目录。
 
+## 跨模块协作与项目事实
+
+| 模块 | 文档类型 | 权威入口 | 职责 |
+| --- | --- | --- | --- |
+| `overview` | `design` | [project-spec](overview/design/project-spec.md) | 有来源的技术基线、模块、环境和已确认差异 |
+
+项目规范正文仍在 `.claude/standards/`，执行规则正文仍在 `.claude/rules/`，由 [AI 协作主索引](../.claude/AGENTS.md) 导航。新增正式产物按 `docs/{module}/{type}/` 登记实际入口；跨模块使用 `overview`，过程计划与未定稿草稿分别进入 `tmp/plans/`、`tmp/drafts/`，不预建业务文档或空目录。
+
 ## 场景使用文档
 
 | 我要做的事 | 文档 |

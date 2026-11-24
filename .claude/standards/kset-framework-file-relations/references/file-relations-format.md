@@ -1,6 +1,6 @@
 # 前端页面文件关联 HTML 报告格式
 
-> 默认输出 `.claude/design/file-relations/{page-key}.html`。`page-key` 由目标页面在所属项目内的完整相对路径生成，须遵守项目规则 R140 的单文件名片段与同名保护；用户指定其他路径时按项目规则判断本地协作或正式交付。
+> 默认输出 `docs/{module}/reports/file-relations-{page-key}.html`。`page-key` 由目标页面在所属项目内的完整相对路径生成，须遵守项目规则 R140 的单文件名片段与同名保护；用户指定其他路径时按项目规则判断本地协作或正式交付。
 
 ## 输入与范围
 

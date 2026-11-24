@@ -1,6 +1,6 @@
 # kset-framework 产品 PRD 规范
 
-> project-init 生成。本文件是项目作用域的产品文档规范，不是独立规范。执行约束以 [项目规则](../rules/kset-framework-project-rules.md) 为准，项目事实以 [project-spec](../standards/kset-framework-coder/references/project-spec.md) 为准；文档状态与证据按 [项目文档规范](../standards/kset-framework-requirements-designer/references/project-documentation.md) 处理。
+> project-init 生成。本文件是项目作用域的产品文档规范，不是独立规范。执行约束以 [项目规则](../rules/kset-framework-project-rules.md) 为准，项目事实以 [project-spec](../../docs/overview/design/project-spec.md) 为准；文档状态与证据按 [项目文档规范](../standards/kset-framework-requirements-designer/references/project-documentation.md) 处理。
 
 ## 适用范围
 
