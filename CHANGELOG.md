@@ -2,7 +2,7 @@
 
 本文档记录 kset-framework 各版本的变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
-## [Unreleased] - v1.0.17-SNAPSHOT
+## [v1.0.17] - 2026-11-24
 
 ### 新增
 
@@ -22,6 +22,12 @@
 
 - **网关与规则加载**：清理客户端伪造的身份请求头，改进 Gateway 路由更新的失败处理，并在注册 Nacos 监听器时加载初始规则。
 - **事件与监控**：共享 Topic 的通配消费者默认跳过缺少事件类型的消息；异步 MQ 回调恢复发布时 Trace，HTTP 4xx/5xx 记录为失败状态。
+
+### 图片模块接入说明
+
+- `kset-starter-image` 默认使用 OpenAI；配置 `kset.image.api-key` 后装配客户端，未配置或为空白时仅告警。
+- 参考图编辑要求目标服务支持 `/images/edits` 的 JSON `images[].image_url` 请求；万相原生异步接口不属于本模块的兼容范围。
+- 发布前已执行全仓 `mvn -B verify`：20 个模块构建成功，图片模块 16 项测试及 2 项架构测试通过；未调用真实图片供应商。
 
 ## [v1.0.16] - 2026-08-30
 

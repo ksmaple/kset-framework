@@ -2,11 +2,11 @@
 
 - feature-key：`image-client`
 - change-id：`image-openai-protocol-validation`
-- 状态：`active`，代码已调整，最小主源码编译及质量检查通过；未运行测试或供应商调用。
+- 状态：`active`，代码已提交，全仓 verify 通过；准备发布 1.0.17，未调用真实供应商。
 - 日期与判定时间：2026-11-24，Asia/Shanghai。
 - 基线 Git ref：`a592b394544267b2d14e79b794f01e61cfb94c31`；此提交不包含图片模块，修复前实现来自本次未跟踪工作区文件。
-- 结果 Git ref：提交与发布流程收尾时登记。
-- 上线状态：本次新增模块尚未纳入当前 HEAD；未取得发布、部署或生产调用证据，不推定其他环境状态。
+- 结果 Git ref：`adb78de0966e451a73e808649298c1c94c7cfe1d`。
+- 上线状态：源码已推送 main；1.0.17 构件待发布，未取得业务应用部署或生产调用证据。
 
 ## 当前入口与替代关系
 
@@ -32,9 +32,11 @@
 | 非正、亚毫秒或超范围 timeout | 创建客户端时明确拒绝，不转换为无限等待或溢出 | 静态核对；回归 NOT_RUN |
 | PNG、JPEG、GIF、WebP 的 base64 或本地文件 | data URL MIME 根据图片字节签名确定 | 静态核对；回归 NOT_RUN |
 | 空响应、非法 JSON、非对象响应、全空图片项 | 抛 ImageException，不伪造成功图片 | 静态核对；回归 NOT_RUN |
-| 编译依赖、架构测试加载 | SLF4J 为主依赖，image 加入架构测试类路径 | POM 静态核对；图片模块主源码编译通过，架构测试 NOT_RUN |
+| 编译依赖、架构测试加载 | SLF4J 为主依赖，image 加入架构测试类路径 | 全仓 verify PASSED；图片模块 16 项测试及架构 2 项测试通过 |
 
 2026-11-24 收到提交、推送与发布要求后，按发布前检查执行 `mvn -B -pl kset-starter-image -am -Dmaven.test.skip=true compile`，父 POM 与图片模块均 BUILD SUCCESS，Checkstyle、PMD 无违规。保留现有测试代码，未新增或运行测试；真实供应商调用及计费结果未验证。
+
+随后用户明确授权验证，执行 `mvn -B verify`，全部 20 个模块 SUCCESS，退出码 0。图片模块现有 16 项测试及框架 2 项架构测试均无失败、错误或跳过。上述专项回归点尚未逐项增加独立测试，不将现有用例结果扩大为未覆盖场景或真实供应商调用通过。
 
 ## 回滚与清理
 

@@ -8,7 +8,7 @@
 <parent>
     <groupId>com.kset</groupId>
     <artifactId>kset-boot-parent</artifactId>
-    <version>1.0.17-SNAPSHOT</version>
+    <version>1.0.17</version>
 </parent>
 ```
 
